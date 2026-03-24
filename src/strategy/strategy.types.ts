@@ -41,6 +41,7 @@ export type StrategySummary = {
   tier: StrategyTier;
   description: string;
   marketKey: MarketKey | null;
+  comboCode?: string;
   weight: number;
   isEnabled: boolean;
   totalResolved: number;
@@ -48,6 +49,8 @@ export type StrategySummary = {
   losses: number;
   voids: number;
   hitRate: number;
+  cumulativePnlProxy: number;
+  averagePnlProxy: number;
   averageSignedEdge: number;
   averageCalibrationError: number;
   recentStreak: number;
@@ -61,6 +64,8 @@ export type StrategyMetricsRecord = {
   losses: number;
   voids: number;
   hitRate: number;
+  cumulativePnlProxy: number;
+  averagePnlProxy: number;
   averageSignedEdge: number;
   averageCalibrationError: number;
   recentStreak: number;
@@ -68,11 +73,19 @@ export type StrategyMetricsRecord = {
   lastParticipatedAt: number | null;
   weight: number;
 };
+export type StrategyBoard = {
+  marketKey: MarketKey;
+  strategies: StrategySummary[];
+};
 export type StrategyEvaluationResult = {
   marketKey: MarketKey;
   finalDirection: PredictionDirection;
   finalConfidence: number;
   weightedScore: number;
+  baseWeightedScore: number;
+  adjustedWeightedScore: number;
+  baseConfidence: number;
+  adjustedConfidence: number;
   strategyBreakdown: StrategySignal[];
   qualityScore: number;
   escalatedToMedium: boolean;

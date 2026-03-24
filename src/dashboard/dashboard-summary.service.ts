@@ -2,6 +2,7 @@
  * @section imports:internals
  */
 
+import type { ComboSummary, MarketComboBoard } from "../combo/combo.types.ts";
 import config from "../config.ts";
 import type {
   MarketExecutionSummary,
@@ -15,7 +16,7 @@ import type { MarketStateService } from "../market/market-state.service.ts";
 import type { MarketSummary } from "../market/market.types.ts";
 import type { PredictionEngineService } from "../prediction/prediction-engine.service.ts";
 import type { PredictionResponse } from "../prediction/prediction.types.ts";
-import type { StrategySummary } from "../strategy/strategy.types.ts";
+import type { StrategyBoard, StrategySummary } from "../strategy/strategy.types.ts";
 
 /**
  * @section types
@@ -45,10 +46,16 @@ export type DashboardSummaryPayload = {
   markets: MarketSummary[];
   latestPredictions: PredictionResponse[];
   strategies: StrategySummary[];
+  strategyBoards: StrategyBoard[];
+  selectedStrategyMarketKey: string;
   executionNow: MarketExecutionSummary[];
   openPositions: OpenPositionSummary[];
   recentTrades: PaperTrade[];
   marketPerformance: MarketPerformanceSummary[];
+  marketPnlTable: MarketPerformanceSummary[];
+  comboBoards: MarketComboBoard[];
+  comboLeaders: ComboSummary[];
+  latestComboInfluence: PredictionResponse[];
   paperExecutionPerformance: PortfolioExecutionSummary;
   makerTakerStats: {
     makerFillRate: number;
@@ -88,6 +95,44 @@ export class DashboardSummaryService {
   }
 
   /**
+   * @section private:methods
+   */
+
+  private buildStrategyBoards(): StrategyBoard[] {
+    const strategyBoards: StrategyBoard[] = [];
+    const marketKeys = this.marketStateService.getMarketSummaries(Date.now()).map((market) => market.marketKey);
+    for (const marketKey of marketKeys) {
+      strategyBoards.push({
+        marketKey,
+        strategies: this.predictionEngineService.getStrategySummaries(marketKey),
+      });
+    }
+    return strategyBoards;
+  }
+
+  private selectStrategyMarketKey(executionNow: MarketExecutionSummary[], marketPerformance: MarketPerformanceSummary[]): string {
+    let selectedStrategyMarketKey = "btc:5m";
+    const executableMarket = executionNow.find((marketExecution) => marketExecution.decision.isEntryAllowed);
+    if (executableMarket) {
+      selectedStrategyMarketKey = executableMarket.marketKey;
+    } else {
+      const bestMarketPerformance = [...marketPerformance].sort((leftMarketPerformance, rightMarketPerformance) => {
+        return rightMarketPerformance.score - leftMarketPerformance.score;
+      })[0];
+      if (bestMarketPerformance) {
+        selectedStrategyMarketKey = bestMarketPerformance.marketKey;
+      }
+    }
+    return selectedStrategyMarketKey;
+  }
+
+  private buildComboBoards(marketPerformance: MarketPerformanceSummary[]): MarketComboBoard[] {
+    const marketKeys = marketPerformance.map((marketPerformanceSummary) => marketPerformanceSummary.marketKey);
+    const comboBoards = this.predictionEngineService.getMarketComboBoards(marketKeys);
+    return comboBoards;
+  }
+
+  /**
    * @section public:methods
    */
 
@@ -109,10 +154,18 @@ export class DashboardSummaryService {
     const markets = this.marketStateService.getMarketSummaries(nowTimestamp);
     const latestPredictions = this.predictionEngineService.getRecentPredictions(20);
     const strategies = this.predictionEngineService.getStrategySummaries();
+    const strategyBoards = this.buildStrategyBoards();
     const executionNow = this.paperExecutionService.getExecutionSummaries();
     const openPositions = this.paperExecutionService.getOpenPositions();
     const recentTrades = this.paperExecutionService.getRecentTrades(20);
     const marketPerformance = this.paperExecutionService.getMarketPerformanceSummaries();
+    const marketPnlTable = [...marketPerformance].sort((leftMarketPerformance, rightMarketPerformance) => {
+      return rightMarketPerformance.cumulativeNetPnl - leftMarketPerformance.cumulativeNetPnl;
+    });
+    const comboSummaries = this.predictionEngineService.getComboSummaries();
+    const comboBoards = comboSummaries.length === 0 ? [] : this.buildComboBoards(marketPerformance);
+    const comboLeaders = comboSummaries.slice(0, 12);
+    const latestComboInfluence = latestPredictions.filter((prediction) => prediction.comboBreakdown.activeCombos.length > 0).slice(0, 12);
     const paperExecutionPerformance = this.paperExecutionService.getPortfolioSummary();
     const resolvedPredictions = latestPredictions.filter((prediction) => prediction.result.status !== "pending");
     const okPredictions = resolvedPredictions.filter((prediction) => prediction.result.status === "ok");
@@ -135,10 +188,16 @@ export class DashboardSummaryService {
       markets,
       latestPredictions,
       strategies,
+      strategyBoards,
+      selectedStrategyMarketKey: this.selectStrategyMarketKey(executionNow, marketPerformance),
       executionNow,
       openPositions,
       recentTrades,
       marketPerformance,
+      marketPnlTable,
+      comboBoards,
+      comboLeaders,
+      latestComboInfluence,
       paperExecutionPerformance,
       makerTakerStats: {
         makerFillRate: paperExecutionPerformance.makerFillRate,

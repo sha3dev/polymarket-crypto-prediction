@@ -170,6 +170,17 @@ Returns all strategies with rolling metrics and adaptive weights.
 
 - status: `200`
 
+When `asset` and `window` are provided together, this returns the local market board for that market instead of the global aggregate.
+
+### `GET /v1/combos?asset={btc|eth|sol|xrp}&window={5m|15m}&limit=N`
+
+Returns recent pair and trio combo summaries.
+
+- status: `200`
+- validation failure: `400`
+
+Without `asset` and `window`, the endpoint returns the global recent combo leaderboard across markets.
+
 ### `GET /v1/markets`
 
 Returns current market summaries for the eight supported markets.
@@ -188,7 +199,12 @@ Includes:
 - KPI strip data
 - market summaries
 - latest predictions
-- strategy summaries
+- global strategy summaries
+- per-market strategy boards
+- market PnL table
+- combo boards
+- combo leaders
+- recent combo influence
 - execution decisions now
 - open paper positions
 - recent paper trades
@@ -283,7 +299,11 @@ Contains the top-level dashboard sections including:
 
 - market state
 - predictions
-- strategy ranking
+- global strategy ranking
+- per-market strategy board
+- market PnL table
+- combo boards and combo leaders
+- combo influence on recent predictions
 - execution decisions
 - open positions
 - recent trades
@@ -308,9 +328,11 @@ Includes:
 
 - direction
 - confidence
+- base and adjusted score/confidence
 - trigger origin
 - resolution status
 - full strategy breakdown
+- full combo breakdown
 
 ### `StrategySummary`
 
@@ -321,8 +343,57 @@ Includes:
 - adaptive weight
 - hit rate
 - calibration
+- cumulative and average PnL proxy
 - streak
 - recent participation
+
+### `ComboSummary`
+
+Public type used by `GET /v1/combos`.
+
+Includes:
+
+- combo key and member strategies
+- size (`2` for pair, `3` for trio)
+- combo score
+- hit rate and PnL proxy
+- lift versus the best member
+- combo status
+
+### `ComboUsage`
+
+Public type used inside prediction combo breakdowns.
+
+Includes:
+
+- combo identity and size
+- agreement or disagreement mode
+- applied boost or confidence penalty
+- whether the combo affected score or confidence
+
+### `ComboBreakdown`
+
+Public type embedded in `PredictionResponse`.
+
+Includes:
+
+- active combos seen for that prediction
+- boost combos that changed the weighted score
+- disagreement combos that reduced confidence
+- total boost and total confidence-penalty amounts
+
+### `MarketComboBoard`
+
+Dashboard-facing public type for one market.
+
+Includes:
+
+- top pairs
+- top trios
+- currently active combos
+- latest applied combos
+- combo boost share
+- combo confidence-penalty share
 
 ### `ExecutionDecision`
 
@@ -442,6 +513,20 @@ Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-c
 - `ENSEMBLE_HIGH_CONFIDENCE_THRESHOLD`: high-confidence reference threshold for ensemble interpretation.
 - `ENSEMBLE_SCORE_ESCALATION_THRESHOLD`: absolute weighted-score threshold for ambiguity escalation.
 - `STRATEGY_ROLLING_WINDOW_SECONDS`: rolling time window in seconds used to score each strategy from recent outcomes only.
+- `COMBO_ROLLING_WINDOW_SECONDS`: rolling time window in seconds used to score pair and trio combos from recent outcomes only.
+- `COMBO_TOP_STRATEGIES_FOR_PAIRS`: number of highest-weight local strategies considered when generating combo pairs.
+- `COMBO_TOP_STRATEGIES_FOR_TRIOS`: number of highest-weight local strategies considered when generating combo trios.
+- `MIN_COMBO_SAMPLES_PAIR`: minimum pair sample count required before a pair can leave warm-up.
+- `MIN_COMBO_SAMPLES_TRIO`: minimum trio sample count required before a trio can leave warm-up.
+- `MIN_COMBO_LIFT_PNL`: minimum PnL lift over the best member required before a combo can boost the ensemble.
+- `MIN_COMBO_LIFT_HIT`: minimum hit-rate lift over the best member required before a combo can boost the ensemble.
+- `MIN_COMBO_SCORE_FOR_BOOST`: minimum combo score required before a combo becomes actionable.
+- `MIN_COMBO_AGREEMENT_PURITY_FOR_PENALTY`: minimum historical agreement purity required before disagreement can reduce confidence.
+- `MAX_PAIR_BOOST_ABS`: maximum absolute score boost contributed by one pair.
+- `MAX_TRIO_BOOST_ABS`: maximum absolute score boost contributed by one trio.
+- `MAX_TOTAL_COMBO_BOOST_ABS`: maximum total absolute score boost all combos together can add to one prediction.
+- `MAX_TOTAL_COMBO_CONFIDENCE_PENALTY`: maximum total confidence penalty all disagreeing combos together can apply to one prediction.
+- `ENABLE_COMBO_BOOST`: enables or disables agreement boosts while keeping combo analytics available.
 - `DASHBOARD_POLL_INTERVAL_MS`: dashboard polling interval.
 - `MARKET_SCORE_WINDOW_SECONDS`: rolling time window in seconds used to score each market from recent paper trades.
 - `MIN_MARKET_TRADES_FOR_SCORING`: minimum recent trade count before a market score is considered actionable.
@@ -481,6 +566,7 @@ Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-c
 - `src/app/`: runtime composition
 - `src/market/`: market normalization and rolling state
 - `src/strategy/`: strategy execution and weighting
+- `src/combo/`: pair/trio combo intelligence and rolling combo scoring
 - `src/prediction/`: prediction lifecycle and history
 - `src/execution/`: maker/taker policy and paper execution overlay
 - `src/dashboard/`: dashboard summary and HTML view

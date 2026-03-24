@@ -1,5 +1,11 @@
 export { ServiceRuntime } from "./app/service-runtime.service.ts";
 export type {
+  ComboBreakdown,
+  ComboSummary,
+  ComboUsage,
+  MarketComboBoard,
+} from "./combo/combo.types.ts";
+export type {
   DashboardSummaryPayload,
   HealthPayload,
 } from "./dashboard/dashboard-summary.service.ts";

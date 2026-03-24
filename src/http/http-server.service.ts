@@ -114,6 +114,21 @@ export class HttpServerService {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
       return context.json(this.predictionEngineService.getStrategySummaries(asset && window ? `${asset}:${window}` : undefined), 200);
     });
+    app.get("/v1/combos", (context) => {
+      const asset = this.parseAsset(context.req.query("asset"));
+      const window = this.parseWindow(context.req.query("window"));
+      const limit = this.parseLimit(context.req.query("limit"));
+      const hasAsset = context.req.query("asset") !== undefined;
+      const hasWindow = context.req.query("window") !== undefined;
+      if ((hasAsset || hasWindow) && (!asset || !window)) {
+        return context.json({ code: "invalid_request", message: "asset and window must be provided together." }, 400);
+      }
+      if (limit === null) {
+        return context.json({ code: "invalid_request", message: "a valid limit is required." }, 400);
+      }
+      context.header("content-type", config.RESPONSE_CONTENT_TYPE);
+      return context.json(this.predictionEngineService.getComboSummaries(asset && window ? `${asset}:${window}` : undefined).slice(0, limit), 200);
+    });
     app.get("/v1/execution", (context) => {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
       return context.json(

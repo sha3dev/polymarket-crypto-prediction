@@ -120,6 +120,11 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves outcomes, 
   assert.equal(latestPredictionJson.asset, "btc");
   assert.equal(latestPredictionJson.window, "5m");
   assert.ok(latestPredictionJson.strategyBreakdown.length >= 8);
+  assert.equal(typeof latestPredictionJson.baseWeightedScore, "number");
+  assert.equal(typeof latestPredictionJson.adjustedWeightedScore, "number");
+  assert.equal(typeof latestPredictionJson.baseConfidence, "number");
+  assert.equal(typeof latestPredictionJson.adjustedConfidence, "number");
+  assert.equal(Array.isArray(latestPredictionJson.comboBreakdown.activeCombos), true);
 
   const cooldownPredictionsResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=10`);
   const cooldownPredictionsJson = await cooldownPredictionsResponse.json();
@@ -205,6 +210,20 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves outcomes, 
   assert.equal(solStrategiesJson[0]?.marketKey, "sol:5m");
   assert.ok(solStrategiesJson.every((strategy) => strategy.totalResolved === 0));
 
+  const combosResponse = await fetch(`http://127.0.0.1:${address.port}/v1/combos`);
+  const combosJson = await combosResponse.json();
+  assert.equal(combosResponse.status, 200);
+  assert.equal(Array.isArray(combosJson), true);
+
+  const btcCombosResponse = await fetch(`http://127.0.0.1:${address.port}/v1/combos?asset=btc&window=5m&limit=5`);
+  const btcCombosJson = await btcCombosResponse.json();
+  assert.equal(btcCombosResponse.status, 200);
+  assert.equal(Array.isArray(btcCombosJson), true);
+  assert.equal(
+    btcCombosJson.every((comboSummary: { marketKey: string }) => comboSummary.marketKey === "btc:5m"),
+    true,
+  );
+
   const executionResponse = await fetch(`http://127.0.0.1:${address.port}/v1/execution`);
   const executionJson = await executionResponse.json();
   assert.equal(executionResponse.status, 200);
@@ -229,6 +248,12 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves outcomes, 
   assert.equal(summaryJson.markets.length, 8);
   assert.ok(summaryJson.executionNow.length === 8);
   assert.equal(summaryJson.marketPerformance.length, 8);
+  assert.equal(summaryJson.strategyBoards.length, 8);
+  assert.equal(summaryJson.marketPnlTable.length, 8);
+  assert.equal(Array.isArray(summaryJson.comboBoards), true);
+  assert.equal(Array.isArray(summaryJson.comboLeaders), true);
+  assert.equal(Array.isArray(summaryJson.latestComboInfluence), true);
+  assert.equal(typeof summaryJson.selectedStrategyMarketKey, "string");
   assert.equal(typeof summaryJson.paperExecutionPerformance.tradeCount, "number");
 
   const invalidLimitResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=999`);

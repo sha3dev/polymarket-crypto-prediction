@@ -2,6 +2,7 @@
  * @section imports:internals
  */
 
+import type { ComboBreakdown } from "../combo/combo.types.ts";
 import type { AssetSymbol, MarketKey, MarketTrigger, MarketWindow, PredictionDirection } from "../market/market.types.ts";
 import type { StrategySignal } from "../strategy/strategy.types.ts";
 
@@ -27,12 +28,17 @@ export type PredictionRecord = {
   direction: PredictionDirection;
   confidence: number;
   weightedScore: number;
+  baseWeightedScore: number;
+  adjustedWeightedScore: number;
+  baseConfidence: number;
+  adjustedConfidence: number;
   trigger: MarketTrigger;
   createdAt: number;
   evaluationDueAt: number;
   baselineUpPrice: number | null;
   baselineUpMidpoint: number | null;
   strategyBreakdown: StrategySignal[];
+  comboBreakdown: ComboBreakdown;
   isResolved: boolean;
   outcome: PredictionOutcome;
 };
@@ -43,10 +49,15 @@ export type PredictionResponse = {
   direction: PredictionDirection;
   confidence: number;
   weightedScore: number;
+  baseWeightedScore: number;
+  adjustedWeightedScore: number;
+  baseConfidence: number;
+  adjustedConfidence: number;
   timestamp: number;
   trigger: MarketTrigger;
   evaluationDueAt: number;
   isResolved: boolean;
   result: PredictionOutcome;
   strategyBreakdown: StrategySignal[];
+  comboBreakdown: ComboBreakdown;
 };

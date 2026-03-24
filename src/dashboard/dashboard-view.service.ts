@@ -260,11 +260,23 @@ export class DashboardViewService {
             <h2><span class="label-with-hint"><span class="hint-text" title="Newest ensemble calls with their trigger, confidence, and realized outcome when available.">Latest Predictions</span></span></h2>
             <div id="predictions" class="loading panel-scroll">Loading prediction history…</div>
           </article>
+          <article class="panel panel-medium">
+            <h2><span class="label-with-hint"><span class="hint-text" title="How much recent predictions changed after combo boosts or combo disagreement penalties.">Combo Influence</span></span></h2>
+            <div id="combo-influence" class="loading panel-scroll">Loading combo influence…</div>
+          </article>
         </div>
         <div class="stack">
           <article class="panel panel-tall">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Rolling ranking of strategies by adaptive weight and recent online performance.">Strategies</span></span></h2>
+            <h2><span class="label-with-hint"><span class="hint-text" title="Per-market strategy board. The selected market uses local weights and local rolling performance, not the global aggregate.">Strategies</span></span></h2>
             <div id="strategies" class="loading panel-scroll">Loading strategy ranking…</div>
+          </article>
+          <article class="panel panel-medium">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Per-market paper trading PnL, hit rate, and drawdown so you can see which markets are actually worth trading.">Market PnL</span></span></h2>
+            <div id="market-pnl" class="loading panel-scroll">Loading market pnl…</div>
+          </article>
+          <article class="panel panel-medium">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Best current pairs and trios by market, ranked by combo score and lift over their best member.">Top Combos</span></span></h2>
+            <div id="combos" class="loading panel-scroll">Loading combo ranking…</div>
           </article>
           <article class="panel panel-medium">
             <h2><span class="label-with-hint"><span class="hint-text" title="Most recent closed paper trades, including maker/taker styles and exit reasons.">Recent Trades</span></span></h2>
@@ -457,37 +469,40 @@ export class DashboardViewService {
       function renderReasonCode(reasonCode) {
         let reasonShortCode = reasonCode;
         if (reasonCode === 'ready to trade') {
-          reasonShortCode = 'READY';
+          reasonShortCode = 'RDY';
         }
         if (reasonCode === 'no valid prediction') {
-          reasonShortCode = 'NP';
+          reasonShortCode = 'NPR';
         }
         if (reasonCode === 'position already open') {
-          reasonShortCode = 'OPEN';
+          reasonShortCode = 'OPN';
         }
         if (reasonCode === 'invalid direction') {
           reasonShortCode = 'DIR';
         }
         if (reasonCode === 'missing reference price') {
-          reasonShortCode = 'NOREF';
+          reasonShortCode = 'REF';
         }
         if (reasonCode === 'market not live') {
-          reasonShortCode = 'LIVE';
+          reasonShortCode = 'LIV';
         }
         if (reasonCode === 'data quality too low') {
-          reasonShortCode = 'QUAL';
+          reasonShortCode = 'QLT';
         }
         if (reasonCode === 'prediction too weak') {
-          reasonShortCode = 'CONF';
+          reasonShortCode = 'CNF';
         }
         if (reasonCode === 'price too far from 0.5') {
-          reasonShortCode = 'BAND';
+          reasonShortCode = 'BND';
         }
         if (reasonCode === 'spread too wide') {
           reasonShortCode = 'SPR';
         }
         if (reasonCode === 'market score too low') {
-          reasonShortCode = 'MS';
+          reasonShortCode = 'MSC';
+        }
+        if (reasonCode === 'market still warming up') {
+          reasonShortCode = 'WRM';
         }
         if (reasonCode === 'order below $1 minimum') {
           reasonShortCode = 'MIN$';
@@ -496,19 +511,19 @@ export class DashboardViewService {
           reasonShortCode = 'MIN5';
         }
         if (reasonCode === 'passive entry preferred') {
-          reasonShortCode = 'M';
+          reasonShortCode = 'MAK';
         }
         if (reasonCode === 'tight spread, cross now') {
-          reasonShortCode = 'T-SPR';
+          reasonShortCode = 'TSP';
         }
         if (reasonCode === 'urgent move, do not wait') {
-          reasonShortCode = 'T-URG';
+          reasonShortCode = 'URG';
         }
         if (reasonCode === 'maker fill unlikely') {
-          reasonShortCode = 'T-FILL';
+          reasonShortCode = 'FIL';
         }
         if (reasonCode === 'book moving away') {
-          reasonShortCode = 'T-DRIFT';
+          reasonShortCode = 'DRF';
         }
         if (reasonCode === 'take_profit_hit') {
           reasonShortCode = 'TP';
@@ -517,6 +532,30 @@ export class DashboardViewService {
           reasonShortCode = 'SL';
         }
         return reasonShortCode;
+      }
+
+      function renderMarketStatusCode(status) {
+        let marketStatusCode = 'WRM';
+        if (status === 'good') {
+          marketStatusCode = 'GOOD';
+        }
+        if (status === 'neutral') {
+          marketStatusCode = 'NEU';
+        }
+        if (status === 'avoid') {
+          marketStatusCode = 'AVD';
+        }
+        return marketStatusCode;
+      }
+
+      function buildLatestPredictionMap(summary) {
+        const latestPredictionMap = {};
+        for (const prediction of summary.latestPredictions) {
+          if (latestPredictionMap[prediction.marketKey] === undefined) {
+            latestPredictionMap[prediction.marketKey] = prediction;
+          }
+        }
+        return latestPredictionMap;
       }
 
       function createMarketPerformanceMap(summary) {
@@ -590,22 +629,56 @@ export class DashboardViewService {
       }
 
       function renderStrategies(summary) {
-        const rows = summary.strategies.map((strategy) => {
+        const selectedBoard = summary.strategyBoards.find((strategyBoard) => strategyBoard.marketKey === summary.selectedStrategyMarketKey) ?? summary.strategyBoards[0];
+        const comboBoard = summary.comboBoards.find((marketComboBoard) => marketComboBoard.marketKey === selectedBoard?.marketKey);
+        const comboMemberMap = {};
+        if (comboBoard) {
+          for (const comboSummary of [...comboBoard.topPairs, ...comboBoard.topTrios]) {
+            if (comboSummary.status === 'good') {
+              for (const memberStrategyId of comboSummary.memberStrategyIds) {
+                comboMemberMap[memberStrategyId] = comboSummary.size === 2 ? 'C2' : 'C3';
+              }
+            }
+          }
+        }
+        const rows = (selectedBoard?.strategies ?? []).map((strategy) => {
+          const comboCode = comboMemberMap[strategy.strategyId] ?? '—';
           return '<tr>' +
             '<td><strong title="' + strategy.description + '">' + strategy.name + '</strong><div class="tiny"><span class="hint-text" title="' + strategy.description + '">' + strategy.strategyId + ' · ' + strategy.tier + '</span></div></td>' +
             '<td>' + formatNumber(strategy.weight) + '</td>' +
             '<td>' + formatNumber(strategy.hitRate) + '</td>' +
+            '<td>' + formatNumber(strategy.cumulativePnlProxy) + '</td>' +
+            '<td>' + formatNumber(strategy.averagePnlProxy) + '</td>' +
             '<td>' + strategy.recentStreak + '</td>' +
+            '<td><span title="' + (comboCode === '—' ? 'no current strong combo' : 'member of a strong combo on this market') + '">' + comboCode + '</span></td>' +
             '</tr>';
         }).join("");
         document.getElementById("strategies").classList.remove("loading");
-        document.getElementById("strategies").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Strategy', 'Strategy name, internal id, cost tier, and hover hint with its role in the ensemble.') + '</th><th>' + renderHintLabel('Weight', 'Current adaptive ensemble weight after rolling online evaluation.') + '</th><th>' + renderHintLabel('Hit rate', 'Share of resolved predictions this strategy got right inside the rolling window.') + '</th><th>' + renderHintLabel('Streak', 'Positive for consecutive wins, negative for consecutive losses.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        document.getElementById("strategies").innerHTML = '<div class="tiny" style="margin-bottom:8px">' + renderHintLabel('Selected market', 'This strategy board uses local weights and local rolling performance for one market only.') + ': ' + (selectedBoard?.marketKey ?? '—') + '</div>' + renderTableShell('<table><thead><tr><th>' + renderHintLabel('Str', 'Strategy name, internal id, cost tier, and hover hint with its role in the ensemble.') + '</th><th>' + renderHintLabel('Wgt', 'Current market-local adaptive ensemble weight.') + '</th><th>' + renderHintLabel('Hit', 'Share of resolved predictions this strategy got right inside the rolling time window for the selected market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative strategy PnL proxy for the selected market.') + '</th><th>' + renderHintLabel('Avg', 'Average strategy PnL proxy per resolved prediction on the selected market.') + '</th><th>' + renderHintLabel('Stk', 'Positive for consecutive wins, negative for consecutive losses.') + '</th><th>' + renderHintLabel('Cx', 'Combo marker. C2 means the strategy belongs to a strong pair, C3 to a strong trio.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderExecution(summary) {
+        const latestPredictionMap = buildLatestPredictionMap(summary);
         const rows = summary.executionNow.map((marketExecution) => {
           const whyNot = renderWhyNot(marketExecution.decision);
           const reasonCodes = renderReasonCodes(marketExecution.decision);
+          const latestPrediction = latestPredictionMap[marketExecution.marketKey];
+          const comboCode =
+            latestPrediction === undefined
+              ? '—'
+              : latestPrediction.comboBreakdown.appliedBoostCombos.length > 0
+                ? 'B' + latestPrediction.comboBreakdown.appliedBoostCombos[0].size
+                : latestPrediction.comboBreakdown.appliedDisagreementCombos.length > 0
+                  ? 'P' + latestPrediction.comboBreakdown.appliedDisagreementCombos[0].size
+                  : '—';
+          const comboHover =
+            latestPrediction === undefined
+              ? 'no recent combo effect'
+              : latestPrediction.comboBreakdown.appliedBoostCombos.length > 0
+                ? latestPrediction.comboBreakdown.appliedBoostCombos.map((comboUsage) => comboUsage.comboKey).join(', ')
+                : latestPrediction.comboBreakdown.appliedDisagreementCombos.length > 0
+                  ? latestPrediction.comboBreakdown.appliedDisagreementCombos.map((comboUsage) => comboUsage.comboKey).join(', ')
+                  : 'no recent combo effect';
           const marketScoreLabel =
             marketExecution.decision.marketScore === null
               ? '—'
@@ -618,13 +691,74 @@ export class DashboardViewService {
             '<td>' + formatNumber(marketExecution.decision.takeProfitPrice) + '</td>' +
             '<td>' + formatNumber(marketExecution.decision.stopLossPrice) + '</td>' +
             '<td><span title="' + (marketExecution.decision.executionStyle === null ? 'no execution style' : marketExecution.decision.executionStyle) + '">' + renderExecutionStyleCode(marketExecution.decision.executionStyle) + '</span></td>' +
+            '<td><span title="' + comboHover + '">' + comboCode + '</span></td>' +
             '<td>' + marketScoreLabel + '</td>' +
             '<td>' + renderConvictionLabel(marketExecution.decision.positionSizeSuggestion) + '</td>' +
             '<td><span class="truncate-cell" title="' + whyNot + '">' + reasonCodes + '</span></td>' +
             '</tr>';
         }).join("");
         document.getElementById("execution").classList.remove("loading");
-        document.getElementById("execution").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Action', 'Clear action right now: BUY UP, BUY DOWN, or NO TRADE.') + '</th><th>' + renderHintLabel('Ref px', 'Current token price the execution overlay uses as the reference entry level.') + '</th><th>' + renderHintLabel('Size', 'Planned order size in shares and notional. Polymarket minimums require at least 5 shares and at least $1.') + '</th><th>' + renderHintLabel('Target', 'Take-profit price for this potential trade.') + '</th><th>' + renderHintLabel('Risk', 'Stop-loss price for this potential trade.') + '</th><th>' + renderHintLabel('Exec', 'Compact execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent market-only score followed by recent trade count. Low scored markets can be blocked even if the signal is valid.') + '</th><th>' + renderHintLabel('Conviction', 'Simplified trade strength derived from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        document.getElementById("execution").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Action', 'Clear action right now: BUY UP, BUY DOWN, or NO TRADE.') + '</th><th>' + renderHintLabel('Ref px', 'Current token price the execution overlay uses as the reference entry level.') + '</th><th>' + renderHintLabel('Size', 'Planned order size in shares and notional. Polymarket minimums require at least 5 shares and at least $1.') + '</th><th>' + renderHintLabel('Target', 'Take-profit price for this potential trade.') + '</th><th>' + renderHintLabel('Risk', 'Stop-loss price for this potential trade.') + '</th><th>' + renderHintLabel('Exec', 'Compact execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Cx', 'Combo effect code. B2 or B3 means boost from a pair or trio, P2 or P3 means disagreement penalty.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent market-only score followed by recent trade count. Low scored markets can be blocked even if the signal is valid.') + '</th><th>' + renderHintLabel('Conviction', 'Simplified trade strength derived from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+      }
+
+      function renderMarketPnl(summary) {
+        const rows = summary.marketPnlTable.map((marketPerformance) => {
+          return '<tr>' +
+            '<td><strong>' + marketPerformance.marketKey.replace(':', ' ') + '</strong></td>' +
+            '<td>' + marketPerformance.tradeCount + '</td>' +
+            '<td>' + formatNumber(marketPerformance.winRate, 2) + '</td>' +
+            '<td>' + formatNumber(marketPerformance.cumulativeNetPnl) + '</td>' +
+            '<td>' + formatNumber(marketPerformance.averageNetPnlPerTrade) + '</td>' +
+            '<td>' + formatNumber(marketPerformance.maxDrawdown) + '</td>' +
+            '<td>' + formatNumber(marketPerformance.score, 2) + '</td>' +
+            '<td><span title="' + marketPerformance.status.replace('_', ' ') + '">' + renderMarketStatusCode(marketPerformance.status) + '</span></td>' +
+            '</tr>';
+        }).join('');
+        document.getElementById('market-pnl').classList.remove('loading');
+        document.getElementById('market-pnl').innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key.') + '</th><th>' + renderHintLabel('Trd', 'Number of recent closed paper trades in this market.') + '</th><th>' + renderHintLabel('Hit', 'Recent paper trade hit rate in this market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative recent paper net PnL for this market.') + '</th><th>' + renderHintLabel('Avg', 'Average net PnL per trade in this market.') + '</th><th>' + renderHintLabel('DD', 'Maximum rolling drawdown proxy for this market.') + '</th><th>' + renderHintLabel('Scr', 'Market score used by the execution gate.') + '</th><th>' + renderHintLabel('St', 'Market status. WRM = warming up, GOOD = tradable, NEU = neutral, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+      }
+
+      function renderCombos(summary) {
+        const rows = summary.comboLeaders.map((comboSummary) => {
+          return '<tr>' +
+            '<td><strong>' + comboSummary.marketKey.replace(':', ' ') + '</strong></td>' +
+            '<td><span title="' + comboSummary.memberStrategyIds.join(', ') + '">' + comboSummary.comboKey + '</span></td>' +
+            '<td>' + comboSummary.size + '</td>' +
+            '<td>' + formatNumber(comboSummary.comboScore, 2) + '</td>' +
+            '<td>' + formatNumber(comboSummary.liftVsBestMemberPnl, 2) + '</td>' +
+            '<td>' + formatNumber(comboSummary.cumulativePnlProxy) + '</td>' +
+            '<td>' + formatNumber(comboSummary.hitRate, 2) + '</td>' +
+            '<td>' + comboSummary.sampleCount + '</td>' +
+            '<td><span title="' + comboSummary.status + '">' + renderMarketStatusCode(comboSummary.status) + '</span></td>' +
+            '</tr>';
+        }).join('');
+        document.getElementById('combos').classList.remove('loading');
+        document.getElementById('combos').innerHTML = summary.comboLeaders.length === 0
+          ? '<div class="tiny">No combo history yet.</div>'
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the combo.') + '</th><th>' + renderHintLabel('Combo', 'Pair or trio of strategies tracked together.') + '</th><th>' + renderHintLabel('Sz', 'Combo size: 2 or 3.') + '</th><th>' + renderHintLabel('Score', 'Rolling combo score from pnl lift, hit lift, stability, and sample trust.') + '</th><th>' + renderHintLabel('Lift', 'Average PnL lift over the best member of the combo.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative combo PnL proxy in the rolling window.') + '</th><th>' + renderHintLabel('Hit', 'Combo hit rate in the rolling window.') + '</th><th>' + renderHintLabel('N', 'Number of combo observations in the rolling window.') + '</th><th>' + renderHintLabel('St', 'Combo status. WRM = warming up, GOOD = actionable, NEU = neutral, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+      }
+
+      function renderComboInfluence(summary) {
+        const rows = summary.latestComboInfluence.map((prediction) => {
+          const comboLabel =
+            prediction.comboBreakdown.appliedBoostCombos[0]?.comboKey ??
+            prediction.comboBreakdown.appliedDisagreementCombos[0]?.comboKey ??
+            prediction.comboBreakdown.activeCombos[0]?.comboKey ??
+            '—';
+          return '<tr>' +
+            '<td><strong>' + prediction.marketKey.replace(':', ' ') + '</strong></td>' +
+            '<td>' + formatNumber(prediction.baseWeightedScore) + '</td>' +
+            '<td>' + formatNumber(prediction.adjustedWeightedScore) + '</td>' +
+            '<td>' + formatNumber(prediction.comboBreakdown.totalBoostApplied) + '</td>' +
+            '<td>' + formatNumber(prediction.comboBreakdown.totalConfidencePenaltyApplied) + '</td>' +
+            '<td><span title="' + comboLabel + '">' + comboLabel + '</span></td>' +
+            '<td>' + prediction.direction + '</td>' +
+            '</tr>';
+        }).join('');
+        document.getElementById('combo-influence').classList.remove('loading');
+        document.getElementById('combo-influence').innerHTML = summary.latestComboInfluence.length === 0
+          ? '<div class="tiny">No combo-influenced predictions yet.</div>'
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Base', 'Weighted score before combo logic.') + '</th><th>' + renderHintLabel('Adj', 'Weighted score after combo logic.') + '</th><th>' + renderHintLabel('Bst', 'Total score boost from agreeing combos.') + '</th><th>' + renderHintLabel('Pen', 'Total confidence penalty from disagreeing combos.') + '</th><th>' + renderHintLabel('Combo', 'Combo with the strongest visible effect on this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final post-combo prediction direction.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderPositions(summary) {
@@ -687,6 +821,9 @@ export class DashboardViewService {
         renderPredictions(summary);
         renderExecution(summary);
         renderStrategies(summary);
+        renderMarketPnl(summary);
+        renderCombos(summary);
+        renderComboInfluence(summary);
         renderPositions(summary);
         renderTrades(summary);
         renderHealth(summary);

@@ -9,6 +9,7 @@ import { SnapshotService } from "@sha3/polymarket-snapshot";
  * @section imports:internals
  */
 
+import { ComboMetricsService } from "../combo/combo-metrics.service.ts";
 import config from "../config.ts";
 import { DashboardSummaryService } from "../dashboard/dashboard-summary.service.ts";
 import { DashboardViewService } from "../dashboard/dashboard-view.service.ts";
@@ -73,11 +74,13 @@ export class ServiceRuntime {
     const marketStateService = new MarketStateService();
     const strategyMetricsService = new StrategyMetricsService(ServiceRuntime.buildStrategyDefinitions());
     const strategyEngineService = new StrategyEngineService(strategyMetricsService);
+    const comboMetricsService = new ComboMetricsService();
     const predictionEngineService = new PredictionEngineService(
       marketStateService,
       strategyEngineService,
       strategyMetricsService,
       new PredictionStoreService(),
+      comboMetricsService,
     );
     const paperExecutionService = new PaperExecutionService(marketStateService, predictionEngineService, new ExecutionPolicyService());
     const httpServerService = new HttpServerService(

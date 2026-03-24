@@ -98,6 +98,8 @@ export class StrategyMetricsService {
       losses: strategyRecord.losses,
       voids: strategyRecord.voids,
       hitRate: strategyRecord.hitRate,
+      cumulativePnlProxy: strategyRecord.cumulativePnlProxy,
+      averagePnlProxy: strategyRecord.averagePnlProxy,
       averageSignedEdge: strategyRecord.averageSignedEdge,
       averageCalibrationError: strategyRecord.averageCalibrationError,
       recentStreak: strategyRecord.recentStreak,
@@ -123,6 +125,8 @@ export class StrategyMetricsService {
     const voids = windowedOutcomes.length - resolvedOutcomes.length;
     const totalResolved = resolvedOutcomes.length;
     const hitRate = totalResolved === 0 ? 0.5 : wins / totalResolved;
+    const cumulativePnlProxy = resolvedOutcomes.reduce((totalPnlProxy, outcome) => totalPnlProxy + outcome.signedEdge, 0);
+    const averagePnlProxy = totalResolved === 0 ? 0 : cumulativePnlProxy / totalResolved;
     const averageSignedEdge = totalResolved === 0 ? 0 : resolvedOutcomes.reduce((totalEdge, outcome) => totalEdge + outcome.signedEdge, 0) / totalResolved;
     const averageCalibrationError =
       windowedOutcomes.length === 0
@@ -141,6 +145,8 @@ export class StrategyMetricsService {
       losses,
       voids,
       hitRate,
+      cumulativePnlProxy,
+      averagePnlProxy,
       averageSignedEdge,
       averageCalibrationError,
       recentStreak,
