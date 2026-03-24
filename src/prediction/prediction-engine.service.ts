@@ -9,6 +9,7 @@ import config from "../config.ts";
 import type { ComboSource, PositionSide, TradeExitReason } from "../execution/execution.types.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketKey, MarketSnapshotSlice, MarketTrigger, MarketWindow, PredictionDirection } from "../market/market.types.ts";
+import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
 import type { StrategyEngineService } from "../strategy/strategy-engine.service.ts";
 import type { StrategyMetricsService } from "../strategy/strategy-metrics.service.ts";
 import type { StrategySummary } from "../strategy/strategy.types.ts";
@@ -29,6 +30,7 @@ export class PredictionEngineService {
   private readonly strategyMetricsService: StrategyMetricsService;
   private readonly predictionStoreService: PredictionStoreService;
   private readonly comboMetricsService: ComboMetricsService;
+  private readonly pendingTriggers: Map<MarketKey, MarketTrigger>;
 
   /**
    * @section constructor
@@ -46,6 +48,7 @@ export class PredictionEngineService {
     this.strategyMetricsService = strategyMetricsService;
     this.predictionStoreService = predictionStoreService;
     this.comboMetricsService = comboMetricsService;
+    this.pendingTriggers = new Map<MarketKey, MarketTrigger>();
   }
 
   /**
@@ -144,9 +147,83 @@ export class PredictionEngineService {
     }
   }
 
-  private maybeCreatePrediction(marketTrigger: MarketTrigger): void {
+  private resolveSignedDirection(positionSide: PositionSide): number {
+    const signedDirection = positionSide === "up" ? 1 : -1;
+    return signedDirection;
+  }
+
+  private resolveConfirmationTokenPrice(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number | null {
+    const tokenPrice = positionSide === "up" ? (marketSlice.up.midpoint ?? marketSlice.up.price) : (marketSlice.down.midpoint ?? marketSlice.down.price);
+    return tokenPrice;
+  }
+
+  private hasMomentumConfirmation(marketKey: MarketKey, marketSlice: MarketSnapshotSlice, positionSide: PositionSide): boolean {
+    const predictionContext = this.marketStateService.getPredictionContext(marketKey);
+    const previousSlice = predictionContext?.previous ?? null;
+    const previousTokenPrice =
+      previousSlice === null
+        ? null
+        : positionSide === "up"
+          ? (previousSlice.up.midpoint ?? previousSlice.up.price)
+          : (previousSlice.down.midpoint ?? previousSlice.down.price);
+    const currentTokenPrice = this.resolveConfirmationTokenPrice(marketSlice, positionSide);
+    const signedDirection = this.resolveSignedDirection(positionSide);
+    const signedMomentum =
+      previousTokenPrice === null || currentTokenPrice === null || previousTokenPrice === 0
+        ? 0
+        : signedDirection * ((currentTokenPrice - previousTokenPrice) / previousTokenPrice);
+    const hasMomentumConfirmation = signedMomentum >= config.MIN_TRIGGER_SPOT_MOMENTUM;
+    return hasMomentumConfirmation;
+  }
+
+  private hasBreadthConfirmation(marketKey: MarketKey): boolean {
+    const predictionContext = this.marketStateService.getPredictionContext(marketKey);
+    let hasBreadthConfirmation = false;
+    if (predictionContext !== null) {
+      const crossAssetRegime = predictionContext.crossAssetRegime;
+      hasBreadthConfirmation =
+        crossAssetRegime.breadthDirection === "NEUTRAL" || crossAssetRegime.breadthStrength >= config.MIN_WEAK_BREADTH_STRENGTH_FOR_PREDICTION;
+    }
+    return hasBreadthConfirmation;
+  }
+
+  private hasPendingTriggerConfirmed(marketTrigger: MarketTrigger, nowTimestamp: number): boolean {
+    const marketSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
+    let hasPendingTriggerConfirmed = false;
+    if (marketSlice !== null) {
+      const ageMs = nowTimestamp - marketTrigger.triggeredAt;
+      const positionSide: PositionSide = marketTrigger.triggeredToken;
+      const signedDirection = this.resolveSignedDirection(positionSide);
+      const tokenPrice = this.resolveConfirmationTokenPrice(marketSlice, positionSide);
+      const signedDistanceFromHalf = tokenPrice === null ? 0 : signedDirection * (tokenPrice - 0.5);
+      const isPastDelay = ageMs >= config.TRIGGER_CONFIRMATION_DELAY_MS;
+      const hasMovedAwayFromHalf = signedDistanceFromHalf >= config.MIN_TRIGGER_DISTANCE_FROM_HALF;
+      const hasMomentumConfirmation = this.hasMomentumConfirmation(marketTrigger.marketKey, marketSlice, positionSide);
+      const hasQualityConfirmation = marketSlice.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
+      const hasBreadthConfirmation = this.hasBreadthConfirmation(marketTrigger.marketKey);
+      hasPendingTriggerConfirmed = isPastDelay && hasMovedAwayFromHalf && hasMomentumConfirmation && hasQualityConfirmation && hasBreadthConfirmation;
+    }
+    return hasPendingTriggerConfirmed;
+  }
+
+  private shouldDropPendingTrigger(marketTrigger: MarketTrigger, nowTimestamp: number): boolean {
+    const marketSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
+    let shouldDropPendingTrigger = false;
+    if (marketSlice === null) {
+      shouldDropPendingTrigger = true;
+    } else {
+      const ageMs = nowTimestamp - marketTrigger.triggeredAt;
+      const tokenPrice = this.resolveConfirmationTokenPrice(marketSlice, marketTrigger.triggeredToken);
+      const signedDirection = this.resolveSignedDirection(marketTrigger.triggeredToken);
+      const signedDistanceFromHalf = tokenPrice === null ? 0 : signedDirection * (tokenPrice - 0.5);
+      shouldDropPendingTrigger = ageMs > config.TRIGGER_CONFIRMATION_DELAY_MS * 4 || signedDistanceFromHalf <= 0;
+    }
+    return shouldDropPendingTrigger;
+  }
+
+  private maybeCreatePrediction(marketTrigger: MarketTrigger, createdAt: number): void {
     const lastPredictionTimestamp = this.marketStateService.getLastPredictionTimestamp(marketTrigger.marketKey);
-    const isCoolingDown = lastPredictionTimestamp !== null && marketTrigger.triggeredAt - lastPredictionTimestamp < config.MARKET_COOLDOWN_MS;
+    const isCoolingDown = lastPredictionTimestamp !== null && createdAt - lastPredictionTimestamp < config.MARKET_COOLDOWN_MS;
     if (!isCoolingDown) {
       const predictionContext = this.marketStateService.getPredictionContext(marketTrigger.marketKey);
       if (predictionContext) {
@@ -179,6 +256,7 @@ export class PredictionEngineService {
           comboApplicationResult.comboBreakdown,
           comboApplicationResult.comboGate,
           predictionContext.crossAssetRegime,
+          createdAt,
           positionSide,
           entryReferencePrice,
           takeProfitPrice,
@@ -187,7 +265,7 @@ export class PredictionEngineService {
           baselineSlice?.up.midpoint ?? null,
         );
         this.predictionStoreService.addPrediction(predictionRecord);
-        this.marketStateService.markPredictionCreated(marketTrigger.marketKey, marketTrigger.triggeredAt);
+        this.marketStateService.markPredictionCreated(marketTrigger.marketKey, createdAt);
         this.strategyMetricsService.markParticipated(predictionRecord.marketKey, evaluationResult.strategyBreakdown, predictionRecord.createdAt);
       }
     }
@@ -205,6 +283,7 @@ export class PredictionEngineService {
     comboBreakdown: PredictionRecord["comboBreakdown"],
     comboGate: PredictionRecord["comboGate"],
     crossAssetRegime: PredictionRecord["crossAssetRegime"],
+    createdAt: number,
     positionSide: PositionSide,
     entryReferencePrice: number | null,
     takeProfitPrice: number | null,
@@ -225,7 +304,7 @@ export class PredictionEngineService {
       baseConfidence,
       adjustedConfidence: confidence,
       trigger: marketTrigger,
-      createdAt: marketTrigger.triggeredAt,
+      createdAt,
       evaluationDueAt: marketTrigger.triggeredAt + config.PREDICTION_HORIZON_MS,
       positionSide,
       entryReferencePrice,
@@ -313,7 +392,23 @@ export class PredictionEngineService {
   public handleSnapshot(_generatedAt: number, triggeredMarkets: MarketTrigger[]): void {
     this.maybeResolveResearchPredictions();
     for (const marketTrigger of triggeredMarkets) {
-      this.maybeCreatePrediction(marketTrigger);
+      this.pendingTriggers.set(marketTrigger.marketKey, marketTrigger);
+    }
+    for (const asset of SUPPORTED_ASSETS) {
+      for (const window of SUPPORTED_WINDOWS) {
+        const marketKey: MarketKey = `${asset}:${window}`;
+        const pendingTrigger = this.pendingTriggers.get(marketKey) ?? null;
+        if (pendingTrigger !== null) {
+          if (this.hasPendingTriggerConfirmed(pendingTrigger, _generatedAt)) {
+            this.maybeCreatePrediction(pendingTrigger, _generatedAt);
+            this.pendingTriggers.delete(marketKey);
+          } else {
+            if (this.shouldDropPendingTrigger(pendingTrigger, _generatedAt)) {
+              this.pendingTriggers.delete(marketKey);
+            }
+          }
+        }
+      }
     }
   }
 

@@ -974,6 +974,11 @@ Configuration lives in [src/config.ts](/Users/jc/Documents/GitHub/polymarket-cry
 - `SNAPSHOT_INTERVAL_MS`: polling interval passed to `SnapshotService`.
 - `CROSS_THRESHOLD`: legacy tolerance around `0.5`, retained for compatibility. Prediction creation now triggers only on real half-crosses.
 - `MARKET_COOLDOWN_MS`: minimum time between raw predictions on the same market. Default is `30_000 ms`.
+- `TRIGGER_CONFIRMATION_DELAY_MS`: minimum delay between the half-cross and prediction creation. The market must still look valid after this wait.
+- `MIN_TRIGGER_DISTANCE_FROM_HALF`: minimum confirmed distance from `0.5` after the delay. This prevents firing on tiny post-cross noise.
+- `MIN_TRIGGER_SPOT_MOMENTUM`: minimum signed token momentum required after the delay, aligned with the crossed side.
+- `MIN_RESEARCH_MARKET_QUALITY`: minimum market-quality score required before a research prediction can be emitted.
+- `MIN_WEAK_BREADTH_STRENGTH_FOR_PREDICTION`: minimum weak breadth strength accepted for non-neutral cross-asset confirmation during prediction creation.
 - `PREDICTION_HORIZON_MS`: legacy prediction horizon field kept in the payload shape.
 - `SHORT_HISTORY_SECONDS`: short rolling history used by feature extraction.
 - `LONG_HISTORY_SECONDS`: long rolling history used by market memory.

@@ -113,6 +113,16 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
       btc5m: { slug: "btc-5m", upPrice: 0.49, downPrice: 0.51, upMidpoint: 0.49, downMidpoint: 0.51 },
     }),
   );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(5_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.55, downPrice: 0.45, upMidpoint: 0.55, downMidpoint: 0.45 },
+    }),
+  );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(8_500, {
+      btc5m: { slug: "btc-5m", upPrice: 0.56, downPrice: 0.44, upMidpoint: 0.56, downMidpoint: 0.44 },
+    }),
+  );
 
   const latestPredictionResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predict?asset=btc&window=5m`);
   const latestPredictionJson = await latestPredictionResponse.json();
@@ -137,11 +147,6 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(warmupExecutionResponse.status, 200);
   assert.equal(btcWarmupDecision.decision.gateFailures.includes("market_warming_up"), true);
 
-  serviceRuntime.ingestSnapshot(
-    buildSnapshot(8_000, {
-      btc5m: { slug: "btc-5m", upPrice: 0.52, downPrice: 0.48, upMidpoint: 0.52, downMidpoint: 0.48 },
-    }),
-  );
   serviceRuntime.ingestSnapshot(
     buildSnapshot(33_000, {
       btc5m: { slug: "btc-5m", upPrice: 0.62, downPrice: 0.38, upMidpoint: 0.62, downMidpoint: 0.38 },
@@ -169,8 +174,8 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
     }),
   );
   serviceRuntime.ingestSnapshot(
-    buildSnapshot(43_000, {
-      btc5m: { slug: "btc-5m", upPrice: 0.73, downPrice: 0.27, upMidpoint: 0.73, downMidpoint: 0.27 },
+    buildSnapshot(44_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.54, downPrice: 0.46, upMidpoint: 0.54, downMidpoint: 0.46 },
     }),
   );
   serviceRuntime.ingestSnapshot(
