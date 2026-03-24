@@ -3,6 +3,8 @@
  */
 
 import config from "../config.ts";
+import type { MarketExecutionSummary, OpenPositionSummary, PaperTrade, PortfolioExecutionSummary } from "../execution/execution.types.ts";
+import type { PaperExecutionService } from "../execution/paper-execution.service.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { MarketSummary } from "../market/market.types.ts";
 import type { PredictionEngineService } from "../prediction/prediction-engine.service.ts";
@@ -37,6 +39,16 @@ export type DashboardSummaryPayload = {
   markets: MarketSummary[];
   latestPredictions: PredictionResponse[];
   strategies: StrategySummary[];
+  executionNow: MarketExecutionSummary[];
+  openPositions: OpenPositionSummary[];
+  recentTrades: PaperTrade[];
+  paperExecutionPerformance: PortfolioExecutionSummary;
+  makerTakerStats: {
+    makerFillRate: number;
+    makerUsageRatio: number;
+    takerUsageRatio: number;
+    forcedFlattenRate: number;
+  };
 };
 
 /**
@@ -50,15 +62,22 @@ export class DashboardSummaryService {
 
   private readonly marketStateService: MarketStateService;
   private readonly predictionEngineService: PredictionEngineService;
+  private readonly paperExecutionService: PaperExecutionService;
   private readonly startedAt: number;
 
   /**
    * @section constructor
    */
 
-  public constructor(marketStateService: MarketStateService, predictionEngineService: PredictionEngineService, startedAt: number) {
+  public constructor(
+    marketStateService: MarketStateService,
+    predictionEngineService: PredictionEngineService,
+    paperExecutionService: PaperExecutionService,
+    startedAt: number,
+  ) {
     this.marketStateService = marketStateService;
     this.predictionEngineService = predictionEngineService;
+    this.paperExecutionService = paperExecutionService;
     this.startedAt = startedAt;
   }
 
@@ -84,9 +103,13 @@ export class DashboardSummaryService {
     const markets = this.marketStateService.getMarketSummaries(nowTimestamp);
     const latestPredictions = this.predictionEngineService.getRecentPredictions(20);
     const strategies = this.predictionEngineService.getStrategySummaries();
+    const executionNow = this.paperExecutionService.getExecutionSummaries();
+    const openPositions = this.paperExecutionService.getOpenPositions();
+    const recentTrades = this.paperExecutionService.getRecentTrades(20);
+    const paperExecutionPerformance = this.paperExecutionService.getPortfolioSummary();
     const resolvedPredictions = latestPredictions.filter((prediction) => prediction.result.status !== "pending");
-    const correctPredictions = resolvedPredictions.filter((prediction) => prediction.result.status === "correct");
-    const resolvedAccuracy = resolvedPredictions.length === 0 ? 0 : correctPredictions.length / resolvedPredictions.length;
+    const okPredictions = resolvedPredictions.filter((prediction) => prediction.result.status === "ok");
+    const resolvedAccuracy = resolvedPredictions.length === 0 ? 0 : okPredictions.length / resolvedPredictions.length;
     const averageConfidence =
       latestPredictions.length === 0
         ? 0
@@ -105,6 +128,16 @@ export class DashboardSummaryService {
       markets,
       latestPredictions,
       strategies,
+      executionNow,
+      openPositions,
+      recentTrades,
+      paperExecutionPerformance,
+      makerTakerStats: {
+        makerFillRate: paperExecutionPerformance.makerFillRate,
+        makerUsageRatio: paperExecutionPerformance.makerUsageRatio,
+        takerUsageRatio: paperExecutionPerformance.takerUsageRatio,
+        forcedFlattenRate: paperExecutionPerformance.forcedFlattenRate,
+      },
     };
   }
 }

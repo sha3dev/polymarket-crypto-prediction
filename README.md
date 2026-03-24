@@ -1,6 +1,10 @@
 # @sha3/polymarket-crypto-prediction
 
-Real-time Node.js service for monitoring Polymarket crypto Up/Down markets, generating event-driven 30-second predictions around the `0.5` zone, adapting strategy weights online, and exposing both a compact dashboard and REST API from a single Hono process.
+Real-time Node.js service for Polymarket crypto Up/Down markets with three layers in one process:
+
+- market monitoring from `@sha3/polymarket-snapshot`
+- event-driven 30-second prediction and rolling strategy scoring
+- paper execution overlay for near-`0.5` entries, TP/SL exits, maker-vs-taker choice, and forced flatten before expiry
 
 ## TL;DR
 
@@ -12,27 +16,26 @@ npm run start
 
 Open:
 
-- `http://localhost:3000/` for the dashboard
-- `http://localhost:3000/v1/healthz` for service health
+- `http://localhost:3300/` dashboard
+- `http://localhost:3300/v1/healthz` health
+- `http://localhost:3300/v1/execution` current paper execution state
 
 ## Why
 
-Use this package when you want one process that:
+Use this package when you want one service that can answer both:
 
-- subscribes to one live `SnapshotService` stream from `@sha3/polymarket-snapshot`
-- watches BTC, ETH, SOL, and XRP on `5m` and `15m` markets
-- triggers predictions only when token pricing reaches or crosses the `0.5` area
-- evaluates every prediction automatically after 30 seconds
-- tracks rolling strategy quality and adjusts ensemble weights in memory
-- exposes a dense operator dashboard without a separate frontend build
+- “what does the ensemble predict around the 0.5 zone?”
+- “if I only wanted to trade those signals near 0.5, would I enter now, with TP/SL, as maker or taker, and how would that policy have performed recently?”
 
 ## Main Capabilities
 
-- Event-driven trigger engine with per-market cooldowns.
-- Rolling in-memory market history and strategy performance windows.
-- Twenty ensemble strategies with per-strategy attribution on every prediction.
-- REST endpoints for current prediction state, market summaries, strategy rankings, and dashboard summary data.
-- Single-screen HTML dashboard served directly by Hono with polling-based live refresh.
+- Watches BTC, ETH, SOL, and XRP on `5m` and `15m` Polymarket markets.
+- Triggers predictions only on proximity or crosses around `0.5`.
+- Scores twenty strategies and adapts ensemble weights online.
+- Simulates execution for token entries near `0.5` with token-price TP/SL.
+- Decides `maker` vs `taker` from order-book conditions and urgency.
+- Forces flattening before market expiry to avoid ending with inventory.
+- Exposes REST APIs plus a single-screen Hono dashboard with hover hints.
 
 ## Installation
 
@@ -42,14 +45,16 @@ npm install
 
 ## Setup
 
-Create a `.env` file only if you need to override defaults:
+Minimal example:
 
 ```bash
-PORT=3000
+PORT=3300
 SNAPSHOT_INTERVAL_MS=500
-CROSS_THRESHOLD=0.02
-MARKET_COOLDOWN_MS=5000
-PREDICTION_HORIZON_MS=30000
+ENTRY_TARGET_PRICE=0.5
+ENTRY_BAND_HALF_WIDTH=0.02
+TAKE_PROFIT_DELTA=0.2
+STOP_LOSS_DELTA=0.2
+FORCE_FLATTEN_LEAD_MS=30000
 ```
 
 ## Running Locally
@@ -58,7 +63,7 @@ PREDICTION_HORIZON_MS=30000
 npm run start
 ```
 
-The default runtime serves the dashboard and API on `http://localhost:3000`.
+The default runtime serves the dashboard and APIs on `http://localhost:3300`.
 
 ## Usage
 
@@ -71,7 +76,7 @@ const serviceRuntime = ServiceRuntime.createDefault();
 serviceRuntime.startServer();
 ```
 
-### Build the server without binding
+### Build the server without listening
 
 ```ts
 import { ServiceRuntime } from "@sha3/polymarket-crypto-prediction";
@@ -80,7 +85,7 @@ const serviceRuntime = ServiceRuntime.createDefault();
 const server = serviceRuntime.buildServer();
 ```
 
-### Feed deterministic snapshots during tests or local simulation
+### Inject deterministic snapshots
 
 ```ts
 import { ServiceRuntime } from "@sha3/polymarket-crypto-prediction";
@@ -95,7 +100,7 @@ serviceRuntime.ingestSnapshot({
 });
 ```
 
-### Stop the runtime cleanly
+### Stop the runtime
 
 ```ts
 await serviceRuntime.stop();
@@ -103,29 +108,35 @@ await serviceRuntime.stop();
 
 ## Examples
 
-Fetch the latest BTC 5m prediction:
+Latest prediction:
 
 ```bash
-curl "http://localhost:3000/v1/predict?asset=btc&window=5m"
+curl "http://localhost:3300/v1/predict?asset=btc&window=5m"
 ```
 
-Fetch recent ETH 15m predictions:
+Current execution decisions and open positions:
 
 ```bash
-curl "http://localhost:3000/v1/predictions?asset=eth&window=15m&limit=5"
+curl "http://localhost:3300/v1/execution"
 ```
 
-Fetch strategy ranking data for the dashboard:
+Recent paper trades:
 
 ```bash
-curl "http://localhost:3000/v1/strategies"
+curl "http://localhost:3300/v1/trades?limit=10"
+```
+
+Dashboard summary payload:
+
+```bash
+curl "http://localhost:3300/v1/dashboard/summary"
 ```
 
 ## HTTP API
 
 ### `GET /`
 
-Serves the single-screen HTML dashboard.
+Returns the single-screen HTML dashboard.
 
 - status: `200`
 - response: `text/html`
@@ -134,138 +145,72 @@ Serves the single-screen HTML dashboard.
 
 Returns runtime and ingestion health.
 
-Response shape:
-
-```json
-{
-  "ok": true,
-  "serviceName": "@sha3/polymarket-crypto-prediction",
-  "snapshotAgeMs": 120,
-  "isSnapshotHealthy": true,
-  "pendingEvaluationCount": 2,
-  "monitoredMarketCount": 8,
-  "startedAt": 1735689600000
-}
-```
-
 ### `GET /v1/predict?asset={btc|eth|sol|xrp}&window={5m|15m}`
 
 Returns the latest prediction for one market.
 
-- success status: `200`
-- not found: `404`
+- status: `200`
 - validation failure: `400`
+- not found: `404`
 
-Response shape:
-
-```json
-{
-  "asset": "btc",
-  "window": "5m",
-  "marketKey": "btc:5m",
-  "direction": "UP",
-  "confidence": 0.71,
-  "weightedScore": 0.21,
-  "timestamp": 1735689600000,
-  "trigger": {
-    "marketKey": "btc:5m",
-    "asset": "btc",
-    "window": "5m",
-    "triggeredToken": "up",
-    "triggerType": "crossed_half",
-    "previousPrice": 0.49,
-    "currentPrice": 0.51,
-    "distanceToHalf": 0.01,
-    "triggeredAt": 1735689600000
-  },
-  "evaluationDueAt": 1735689630000,
-  "isResolved": false,
-  "result": {
-    "status": "pending",
-    "resolvedAt": null,
-    "resolvedDirection": null,
-    "evaluationPrice": null,
-    "baselinePrice": 0.51,
-    "isFallbackPriceUsed": false,
-    "reason": null
-  },
-  "strategyBreakdown": []
-}
-```
+Response is `PredictionResponse`.
 
 ### `GET /v1/predictions?asset={btc|eth|sol|xrp}&window={5m|15m}&limit=N`
 
-Returns recent prediction history for one market, newest first.
+Returns recent prediction history for one market.
 
-- success status: `200`
+- status: `200`
 - validation failure: `400`
-- `limit` must be an integer between `1` and `MAX_PREDICTION_QUERY_LIMIT`
-
-Each entry is a full `PredictionResponse`, including whether the result is `pending`, `correct`, `incorrect`, or `void`.
 
 ### `GET /v1/strategies`
 
-Returns the current strategy ranking and rolling metrics.
+Returns all strategies with rolling metrics and adaptive weights.
 
-- success status: `200`
-
-Each item includes:
-
-- `strategyId`
-- `name`
-- `tier`
-- `weight`
-- `isEnabled`
-- `totalResolved`
-- `wins`
-- `losses`
-- `voids`
-- `hitRate`
-- `averageSignedEdge`
-- `averageCalibrationError`
-- `recentStreak`
-- `lastResolvedAt`
-- `lastParticipatedAt`
+- status: `200`
 
 ### `GET /v1/markets`
 
-Returns the current status for all eight monitored markets.
+Returns current market summaries for the eight supported markets.
 
-- success status: `200`
-
-Each item includes:
-
-- `asset`
-- `window`
-- `marketKey`
-- `isLive`
-- `latestUpPrice`
-- `latestDownPrice`
-- `latestUpMidpoint`
-- `latestDownMidpoint`
-- `upDistanceToHalf`
-- `downDistanceToHalf`
-- `lastTrigger`
-- `lastPredictionTimestamp`
-- `cooldownRemainingMs`
-- `snapshotAgeMs`
-- `quality`
+- status: `200`
 
 ### `GET /v1/dashboard/summary`
 
 Returns the aggregate payload used by the dashboard.
 
-- success status: `200`
+- status: `200`
 
 Includes:
 
-- `generatedAt`
-- `pollIntervalMs`
-- `health`
-- `kpis`
-- `markets`
-- `latestPredictions`
-- `strategies`
+- health
+- KPI strip data
+- market summaries
+- latest predictions
+- strategy summaries
+- execution decisions now
+- open paper positions
+- recent paper trades
+- paper execution performance
+- maker/taker usage stats
+
+### `GET /v1/execution`
+
+Returns the current paper execution state.
+
+- status: `200`
+
+Includes:
+
+- `executionNow`
+- `openPositions`
+- `paperExecutionPerformance`
+
+### `GET /v1/trades?limit=N`
+
+Returns recent closed paper trades.
+
+- status: `200`
+- validation failure: `400`
 
 ### Error shape
 
@@ -282,233 +227,302 @@ Validation and not-found responses use:
 
 ### `ServiceRuntime`
 
-The public runtime entrypoint for composing, booting, feeding, and stopping the service.
+Public runtime entrypoint.
 
 #### `createDefault()`
 
-Creates a fully wired runtime with:
-
-- one `SnapshotService`
-- one in-memory market state service
-- one strategy metrics service
-- one strategy engine service
-- one prediction store
-- one prediction engine
-- one dashboard summary service
-- one Hono HTTP server service
+Creates the fully wired service runtime with snapshot ingestion, prediction engine, paper execution overlay, dashboard summary service, and HTTP server.
 
 Returns:
 
-- a ready-to-use `ServiceRuntime`
+- `ServiceRuntime`
 
 #### `buildServer()`
 
-Builds the Hono-backed `ServerType` without binding to a port.
+Builds the Node `ServerType` without binding a port.
 
 Returns:
 
-- a Node `ServerType`
-
-Behavior notes:
-
-- useful for tests or external process orchestration
-- does not attach a listening socket
+- `ServerType`
 
 #### `startServer()`
 
-Attaches the live snapshot listener and starts listening on `config.DEFAULT_PORT`.
+Starts snapshot ingestion and binds the HTTP server on `config.DEFAULT_PORT`.
 
 Returns:
 
-- the listening Node `ServerType`
-
-Behavior notes:
-
-- starts real-time ingestion before binding the HTTP server
-- logs the listening address through the package logger
+- `ServerType`
 
 #### `ingestSnapshot()`
 
-Injects one snapshot object into the runtime.
-
-Parameters:
-
-- one flat snapshot object with `generated_at` and the market columns you want to simulate
+Injects a flat snapshot into the runtime for deterministic tests or local simulation.
 
 Returns:
 
 - `void`
 
-Behavior notes:
-
-- intended for tests, deterministic simulations, and local dry runs
-- runs market updates, trigger detection, prediction creation, and pending-evaluation resolution
-
 #### `stop()`
 
-Stops the HTTP server if it was started and disconnects the live `SnapshotService`.
+Stops the HTTP server and disconnects the underlying snapshot service.
 
 Returns:
 
 - `Promise<void>`
 
-Behavior notes:
-
-- safe to call during shutdown hooks or tests
-- resets the internal snapshot listener state
-
 ### `HealthPayload`
 
-Public type for `GET /v1/healthz`.
-
-```ts
-type HealthPayload = {
-  ok: true;
-  serviceName: string;
-  snapshotAgeMs: number | null;
-  isSnapshotHealthy: boolean;
-  pendingEvaluationCount: number;
-  monitoredMarketCount: number;
-  startedAt: number;
-};
-```
+Public type used by `GET /v1/healthz`.
 
 ### `DashboardSummaryPayload`
 
-Public type for `GET /v1/dashboard/summary`.
+Public type used by `GET /v1/dashboard/summary`.
 
-```ts
-type DashboardSummaryPayload = {
-  generatedAt: number;
-  pollIntervalMs: number;
-  health: HealthPayload;
-  kpis: {
-    liveMarkets: number;
-    pendingEvaluations: number;
-    totalPredictions: number;
-    resolvedAccuracy: number;
-    averageConfidence: number;
-  };
-  markets: MarketSummary[];
-  latestPredictions: PredictionResponse[];
-  strategies: StrategySummary[];
-};
-```
+Contains the top-level dashboard sections including:
+
+- market state
+- predictions
+- strategy ranking
+- execution decisions
+- open positions
+- recent trades
+- paper execution performance
 
 ### `MarketSummary`
 
-Public type for entries returned by `GET /v1/markets`.
+Public type used by `GET /v1/markets`.
 
-Behavior notes:
+Represents one `(asset, window)` market with:
 
-- represents one of the eight monitored `(asset, window)` markets
-- includes live token prices, proximity to `0.5`, cooldown, and quality diagnostics
+- live token prices and midpoints
+- trigger proximity to `0.5`
+- cooldown state
+- quality diagnostics
 
 ### `PredictionResponse`
 
-Public type for `GET /v1/predict` and `GET /v1/predictions`.
+Public type used by `GET /v1/predict` and `GET /v1/predictions`.
 
-Behavior notes:
+Includes:
 
-- includes final ensemble direction and confidence
-- includes the exact trigger that created the prediction
-- includes resolution status and full per-strategy breakdown
+- direction
+- confidence
+- trigger origin
+- resolution status
+- full strategy breakdown
 
 ### `StrategySummary`
 
-Public type for `GET /v1/strategies`.
+Public type used by `GET /v1/strategies`.
 
-Behavior notes:
+Includes:
 
-- exposes rolling online performance and adaptive weight state for each strategy
-- intended for dashboards, debugging, and strategy ranking views
+- adaptive weight
+- hit rate
+- calibration
+- streak
+- recent participation
+
+### `ExecutionDecision`
+
+Public type describing whether a paper entry is currently allowed for a market.
+
+Includes:
+
+- buy side (`up` or `down`)
+- entry reference near `0.5`
+- TP and SL prices
+- chosen `maker` or `taker` style
+- urgency score
+- maker fill probability
+- gate failures when blocked
+
+### `MarketExecutionSummary`
+
+Public type for one market’s execution state.
+
+Includes:
+
+- current `ExecutionDecision`
+- current `OpenPositionSummary` if a position is open
+
+### `OpenPositionSummary`
+
+Public type for simulated live positions.
+
+Includes:
+
+- side held
+- lifecycle status
+- entry fill
+- live token price
+- unrealized token-price PnL
+- TP / SL
+- time remaining until forced flatten
+
+### `PaperPosition`
+
+Public type representing the full internal paper position lifecycle.
+
+Includes:
+
+- entry and exit style
+- posted and filled prices
+- TP / SL
+- flatten deadline
+- realized PnL
+- maker attempts
+- taker fallback flag
+
+### `PaperTrade`
+
+Public type representing a closed paper trade.
+
+Includes:
+
+- market and side
+- maker/taker on entry and exit
+- exit reason
+- hold time
+- realized PnL
+
+### `PortfolioExecutionSummary`
+
+Public type summarizing the rolling paper execution overlay.
+
+Includes:
+
+- open position count
+- executable entry count
+- cumulative net PnL
+- average net PnL per trade
+- max drawdown
+- maker fill rate
+- forced flatten rate
+- maker/taker usage ratios
+- trade count
 
 ## Dashboard
 
-The dashboard is served directly from `GET /` and uses polling against `/v1/dashboard/summary`.
+The dashboard is served directly from `GET /` and polls `/v1/dashboard/summary`.
 
-It is designed to keep the main operating picture on one screen:
+Main sections:
 
-- KPI strip for live markets, pending evaluations, prediction count, accuracy, and mean confidence
-- market table for current UP/DOWN midpoint state and cooldowns
-- recent predictions table
-- strategy ranking table
-- health panel
+- top execution KPI strip
+- market state table
+- latest predictions
+- current execution decisions
+- strategy ranking
+- open positions
+- recent trades
+- health and maker/taker usage
 
-No WebSocket or SSE transport is required in this version.
+Every operational label shown in the dashboard includes a hover hint.
 
 ## Configuration
 
-Configuration lives in [`src/config.ts`](./src/config.ts).
+Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-crypto-prediction/src/config.ts).
 
-- `RESPONSE_CONTENT_TYPE`: JSON response content-type used for REST endpoints.
-- `DEFAULT_PORT`: port used by `startServer()`.
-- `SERVICE_NAME`: service label exposed in health payloads and dashboard chrome.
-- `SNAPSHOT_INTERVAL_MS`: polling interval passed to `SnapshotService`.
-- `CROSS_THRESHOLD`: tolerance band around `0.5` for trigger detection.
-- `MARKET_COOLDOWN_MS`: minimum time between predictions for the same market.
-- `PREDICTION_HORIZON_MS`: delay between prediction creation and automatic evaluation.
-- `SHORT_HISTORY_SECONDS`: short rolling horizon for recent features and diagnostics.
-- `LONG_HISTORY_SECONDS`: long rolling horizon retained in market memory.
-- `MAX_PREDICTION_HISTORY_PER_MARKET`: maximum in-memory history length per market.
-- `MAX_PREDICTION_QUERY_LIMIT`: hard cap for the `limit` query parameter on history endpoints.
-- `TOKEN_MAX_AGE_MS`: freshness cutoff for UP/DOWN token events.
-- `SPOT_MAX_AGE_MS`: freshness cutoff for spot venue updates.
+- `RESPONSE_CONTENT_TYPE`: JSON content type used for REST responses.
+- `DEFAULT_PORT`: local port used by `startServer()`.
+- `SERVICE_NAME`: service name shown in health and dashboard payloads.
+- `SNAPSHOT_INTERVAL_MS`: snapshot interval passed to `SnapshotService`.
+- `CROSS_THRESHOLD`: tolerance around `0.5` for trigger detection.
+- `MARKET_COOLDOWN_MS`: minimum time between raw predictions for the same market.
+- `PREDICTION_HORIZON_MS`: delay before prediction resolution.
+- `SHORT_HISTORY_SECONDS`: short rolling horizon for recent feature context.
+- `LONG_HISTORY_SECONDS`: long rolling horizon for market memory.
+- `MAX_PREDICTION_HISTORY_PER_MARKET`: max stored prediction history per market.
+- `MAX_PREDICTION_QUERY_LIMIT`: max `limit` accepted on history endpoints.
+- `TOKEN_MAX_AGE_MS`: freshness cutoff for market token events.
+- `SPOT_MAX_AGE_MS`: freshness cutoff for spot venue events.
 - `CHAINLINK_MAX_AGE_MS`: freshness cutoff for Chainlink values.
-- `ENSEMBLE_MEDIUM_CONFIDENCE_THRESHOLD`: confidence threshold below which the engine escalates beyond low-cost strategies.
-- `ENSEMBLE_HIGH_CONFIDENCE_THRESHOLD`: reserved high-confidence threshold for ensemble interpretation and docs alignment.
+- `ENSEMBLE_MEDIUM_CONFIDENCE_THRESHOLD`: confidence threshold for escalating beyond low-cost strategies.
+- `ENSEMBLE_HIGH_CONFIDENCE_THRESHOLD`: high-confidence reference threshold for ensemble interpretation.
 - `ENSEMBLE_SCORE_ESCALATION_THRESHOLD`: absolute weighted-score threshold for ambiguity escalation.
-- `STRATEGY_ROLLING_WINDOW_SIZE`: number of resolved outcomes retained per strategy.
-- `DASHBOARD_POLL_INTERVAL_MS`: browser polling interval for `/v1/dashboard/summary`.
+- `STRATEGY_ROLLING_WINDOW_SIZE`: rolling outcome window size per strategy.
+- `DASHBOARD_POLL_INTERVAL_MS`: dashboard polling interval.
+- `ENTRY_TARGET_PRICE`: preferred entry anchor for the paper execution overlay.
+- `ENTRY_BAND_HALF_WIDTH`: allowed deviation around `ENTRY_TARGET_PRICE`.
+- `TAKE_PROFIT_DELTA`: token-price distance from entry to TP.
+- `STOP_LOSS_DELTA`: token-price distance from entry to SL.
+- `FORCE_FLATTEN_LEAD_MS`: milliseconds before market end when all positions must be closed.
+- `MIN_ENTRY_CONFIDENCE`: minimum ensemble confidence required for a paper entry.
+- `MIN_MARKET_QUALITY_FOR_ENTRY`: minimum market-quality score required for a paper entry.
+- `MIN_SPREAD_FOR_MAKER`: minimum spread where maker posting is preferred.
+- `MAX_SPREAD_FOR_ENTRY`: maximum spread tolerated for a new paper entry.
+- `MAKER_ENTRY_TIMEOUT_MS`: max time a maker entry may wait before fallback/cancel.
+- `MAKER_EXIT_TIMEOUT_MS`: max time a maker exit may wait before taker fallback.
+- `MIN_TIME_TO_END_FOR_NEW_ENTRY_MS`: minimum time-to-expiry required to open a new position.
+- `MIN_DEPTH_FOR_MAKER`: minimum top-of-book depth required to prefer maker.
+- `MAKER_DRIFT_LIMIT`: maximum tolerated drift before maker becomes unattractive.
+- `TAKER_URGENCY_THRESHOLD`: urgency threshold where taker execution becomes preferred.
+- `ENTRY_COST_PROXY_BPS`: proxy entry cost used in paper PnL.
+- `EXIT_COST_PROXY_BPS`: proxy exit cost used in paper PnL.
+- `LOW_DEPTH_SLIPPAGE_PROXY`: extra proxy slippage used in thin books.
+- `MAX_OPEN_POSITIONS_GLOBAL`: portfolio-wide cap for simultaneous open paper positions.
 
 ## Scripts
 
-- `npm run start`: start the live service with `tsx`
-- `npm run build`: compile TypeScript to `dist/`
-- `npm run standards:check`: run project contract verification
-- `npm run lint`: run Biome checks
-- `npm run format:check`: verify formatter output
-- `npm run typecheck`: run TypeScript without emit
-- `npm run test`: run the Node test suite
-- `npm run check`: run the full blocking validation pipeline
+- `npm run start`: start the service with `tsx`
+- `npm run build`: compile the package to `dist/`
+- `npm run standards:check`: contract verification
+- `npm run lint`: Biome checks
+- `npm run format:check`: formatter verification
+- `npm run typecheck`: TypeScript verification
+- `npm run test`: Node test suite
+- `npm run check`: full blocking validation pipeline
 
 ## Structure
 
 - `src/app/`: runtime composition
-- `src/market/`: snapshot normalization, rolling market state, and trigger detection inputs
-- `src/strategy/`: strategy execution and adaptive weighting
-- `src/prediction/`: prediction history, cooldowns, and automatic evaluation
-- `src/dashboard/`: dashboard summary shaping and HTML view
-- `src/http/`: Hono transport and route validation
-- `test/`: deterministic runtime and API tests
+- `src/market/`: market normalization and rolling state
+- `src/strategy/`: strategy execution and weighting
+- `src/prediction/`: prediction lifecycle and history
+- `src/execution/`: maker/taker policy and paper execution overlay
+- `src/dashboard/`: dashboard summary and HTML view
+- `src/http/`: Hono transport layer
+- `test/`: deterministic runtime tests
 
 ## Compatibility
 
 - Node.js `20+`
-- ESM package consumers
-- Strict TypeScript projects
+- ESM consumers
+- strict TypeScript projects
 
 ## Troubleshooting
 
-### `GET /v1/predict` returns `404`
+### No execution decisions are tradable
 
-No prediction has been generated yet for that market. Wait for a real trigger around the `0.5` band or inject a deterministic snapshot in tests.
+Check:
 
-### Dashboard looks stale
+- `MIN_ENTRY_CONFIDENCE`
+- `MIN_MARKET_QUALITY_FOR_ENTRY`
+- `ENTRY_BAND_HALF_WIDTH`
+- `MAX_SPREAD_FOR_ENTRY`
+- `MIN_TIME_TO_END_FOR_NEW_ENTRY_MS`
 
-Check `GET /v1/healthz`. A large `snapshotAgeMs` or `isSnapshotHealthy: false` means the live snapshot stream is not updating within freshness thresholds.
+### Positions never close
 
-### Predictions are not being generated often enough
+Check whether TP/SL levels are reachable under your chosen deltas and whether the market is entering the force-flatten window:
+
+- `TAKE_PROFIT_DELTA`
+- `STOP_LOSS_DELTA`
+- `FORCE_FLATTEN_LEAD_MS`
+- maker exit timeout values
+
+### Maker usage is too high or too low
 
 Review:
 
-- `CROSS_THRESHOLD`
-- `MARKET_COOLDOWN_MS`
-- current market quality in `/v1/markets`
+- `MIN_SPREAD_FOR_MAKER`
+- `MIN_DEPTH_FOR_MAKER`
+- `MAKER_DRIFT_LIMIT`
+- `TAKER_URGENCY_THRESHOLD`
+- maker timeout values
 
 ### `npm run check` fails
 
-Run the individual steps to isolate the failure:
+Run the stages separately:
 
 ```bash
 npm run standards:check
@@ -520,7 +534,7 @@ npm run test
 
 ## AI Workflow
 
-- Read `AGENTS.md`, `ai/contract.json`, and the active adapter before modifying source.
-- Keep managed files under `ai/`, `prompts/`, and `skills/` read-only during normal feature work.
-- Update tests, README, public exports, and HTTP documentation in the same change whenever behavior changes.
+- Read `AGENTS.md`, `ai/contract.json`, and the active adapter before editing code.
+- Keep managed files under `ai/`, `prompts/`, and `skills/` read-only during feature work.
+- Update tests, docs, public exports, and HTTP notes in the same change whenever behavior changes.
 - Finish with `npm run check`.

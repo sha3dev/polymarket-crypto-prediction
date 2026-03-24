@@ -150,7 +150,7 @@ export class PredictionEngineService {
     if (resolvedDirection !== null) {
       const wasCorrect = predictedDirection === resolvedDirection;
       outcome = {
-        status: wasCorrect ? "correct" : "incorrect",
+        status: wasCorrect ? "ok" : "ko",
         resolvedAt: observedAt,
         resolvedDirection,
         evaluationPrice,

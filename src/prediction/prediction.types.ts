@@ -9,7 +9,7 @@ import type { StrategySignal } from "../strategy/strategy.types.ts";
  * @section types
  */
 
-export type PredictionOutcomeStatus = "pending" | "correct" | "incorrect" | "void";
+export type PredictionOutcomeStatus = "pending" | "ok" | "ko" | "void";
 export type PredictionOutcome = {
   status: PredictionOutcomeStatus;
   resolvedAt: number | null;

@@ -167,6 +167,23 @@ export class StrategyMetricsService {
     return baseWeight;
   }
 
+  private compareSummaries(leftSummary: StrategySummary, rightSummary: StrategySummary): number {
+    let comparison = rightSummary.weight - leftSummary.weight;
+    if (comparison === 0) {
+      comparison = rightSummary.hitRate - leftSummary.hitRate;
+    }
+    if (comparison === 0) {
+      comparison = rightSummary.averageSignedEdge - leftSummary.averageSignedEdge;
+    }
+    if (comparison === 0) {
+      comparison = leftSummary.averageCalibrationError - rightSummary.averageCalibrationError;
+    }
+    if (comparison === 0) {
+      comparison = rightSummary.recentStreak - leftSummary.recentStreak;
+    }
+    return comparison;
+  }
+
   /**
    * @section public:methods
    */
@@ -206,7 +223,11 @@ export class StrategyMetricsService {
   }
 
   public getSummaries(): StrategySummary[] {
-    const strategySummaries = this.definitions.map((definition) => this.getSummary(definition.strategyId));
+    const strategySummaries = this.definitions
+      .map((definition) => this.getSummary(definition.strategyId))
+      .sort((leftSummary, rightSummary) => {
+        return this.compareSummaries(leftSummary, rightSummary);
+      });
     return strategySummaries;
   }
 }

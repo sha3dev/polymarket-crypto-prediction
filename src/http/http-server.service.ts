@@ -13,6 +13,7 @@ import { Hono } from "hono";
 import config from "../config.ts";
 import type { DashboardSummaryService } from "../dashboard/dashboard-summary.service.ts";
 import type { DashboardViewService } from "../dashboard/dashboard-view.service.ts";
+import type { PaperExecutionService } from "../execution/paper-execution.service.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketWindow } from "../market/market.types.ts";
 import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
@@ -28,6 +29,7 @@ export class HttpServerService {
    */
 
   private readonly predictionEngineService: PredictionEngineService;
+  private readonly paperExecutionService: PaperExecutionService;
   private readonly marketStateService: MarketStateService;
   private readonly dashboardSummaryService: DashboardSummaryService;
   private readonly dashboardViewService: DashboardViewService;
@@ -38,11 +40,13 @@ export class HttpServerService {
 
   public constructor(
     predictionEngineService: PredictionEngineService,
+    paperExecutionService: PaperExecutionService,
     marketStateService: MarketStateService,
     dashboardSummaryService: DashboardSummaryService,
     dashboardViewService: DashboardViewService,
   ) {
     this.predictionEngineService = predictionEngineService;
+    this.paperExecutionService = paperExecutionService;
     this.marketStateService = marketStateService;
     this.dashboardSummaryService = dashboardSummaryService;
     this.dashboardViewService = dashboardViewService;
@@ -102,6 +106,25 @@ export class HttpServerService {
     app.get("/v1/strategies", (context) => {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
       return context.json(this.predictionEngineService.getStrategySummaries(), 200);
+    });
+    app.get("/v1/execution", (context) => {
+      context.header("content-type", config.RESPONSE_CONTENT_TYPE);
+      return context.json(
+        {
+          executionNow: this.paperExecutionService.getExecutionSummaries(),
+          openPositions: this.paperExecutionService.getOpenPositions(),
+          paperExecutionPerformance: this.paperExecutionService.getPortfolioSummary(),
+        },
+        200,
+      );
+    });
+    app.get("/v1/trades", (context) => {
+      const limit = this.parseLimit(context.req.query("limit"));
+      if (limit === null) {
+        return context.json({ code: "invalid_request", message: "a valid limit is required." }, 400);
+      }
+      context.header("content-type", config.RESPONSE_CONTENT_TYPE);
+      return context.json(this.paperExecutionService.getRecentTrades(limit), 200);
     });
     app.get("/v1/markets", (context) => {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);

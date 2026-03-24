@@ -136,6 +136,16 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves outcomes, 
       eth5m: { slug: "eth-5m", upPrice: 0.44, downPrice: 0.56, upMidpoint: null, downMidpoint: null },
     }),
   );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(34_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.73, downPrice: 0.27, upMidpoint: 0.73, downMidpoint: 0.27 },
+    }),
+  );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(35_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.75, downPrice: 0.25, upMidpoint: 0.75, downMidpoint: 0.25 },
+    }),
+  );
 
   const limitedPredictionsResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=2`);
   const limitedPredictionsJson = await limitedPredictionsResponse.json();
@@ -155,14 +165,29 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves outcomes, 
   assert.equal(strategiesJson.length, 20);
   assert.ok(strategiesJson.some((strategy) => strategy.totalResolved > 0));
 
+  const executionResponse = await fetch(`http://127.0.0.1:${address.port}/v1/execution`);
+  const executionJson = await executionResponse.json();
+  assert.equal(executionResponse.status, 200);
+  assert.equal(executionJson.executionNow.length, 8);
+
+  const tradesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/trades?limit=10`);
+  const tradesJson = await tradesResponse.json();
+  assert.equal(tradesResponse.status, 200);
+  assert.ok(tradesJson.length >= 1);
+  assert.equal(tradesJson[0].exitReason, "take_profit_hit");
+
   const summaryResponse = await fetch(`http://127.0.0.1:${address.port}/v1/dashboard/summary`);
   const summaryJson = await summaryResponse.json();
   assert.equal(summaryResponse.status, 200);
   assert.ok(summaryJson.kpis.totalPredictions >= 2);
   assert.equal(summaryJson.markets.length, 8);
+  assert.ok(summaryJson.executionNow.length === 8);
+  assert.ok(summaryJson.paperExecutionPerformance.tradeCount >= 1);
 
   const invalidLimitResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=999`);
   assert.equal(invalidLimitResponse.status, 400);
+  const invalidTradeLimitResponse = await fetch(`http://127.0.0.1:${address.port}/v1/trades?limit=999`);
+  assert.equal(invalidTradeLimitResponse.status, 400);
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
