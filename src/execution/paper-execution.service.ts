@@ -313,6 +313,13 @@ export class PaperExecutionService {
         this.recentTrades.splice(config.MAX_PREDICTION_HISTORY_PER_MARKET * 4);
       }
       this.openPositions.delete(paperPosition.marketKey);
+      this.predictionEngineService.resolvePredictionFromTrade(
+        paperPosition.marketKey,
+        paperPosition.signalTimestamp,
+        exitReason,
+        exitFillPrice,
+        marketSlice.generatedAt,
+      );
     }
   }
 
@@ -542,6 +549,10 @@ export class PaperExecutionService {
       }
     }
     return executionSummaries;
+  }
+
+  public getOpenPositionCount(): number {
+    return this.openPositions.size;
   }
 
   public getOpenPositions(): OpenPositionSummary[] {

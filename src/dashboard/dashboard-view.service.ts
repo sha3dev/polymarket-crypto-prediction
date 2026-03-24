@@ -257,8 +257,8 @@ export class DashboardViewService {
             <div id="execution" class="loading panel-scroll">Loading execution decisions…</div>
           </article>
           <article class="panel panel-tall">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Newest ensemble calls with their trigger, confidence, and realized outcome when available.">Latest Predictions</span></span></h2>
-            <div id="predictions" class="loading panel-scroll">Loading prediction history…</div>
+            <h2><span class="label-with-hint"><span class="hint-text" title="Most recent predictions that completed through a paper-trade TP or SL exit.">Resolved Predictions</span></span></h2>
+            <div id="predictions" class="loading panel-scroll">Loading resolved predictions…</div>
           </article>
           <article class="panel panel-medium">
             <h2><span class="label-with-hint"><span class="hint-text" title="How much recent predictions changed after combo boosts or combo disagreement penalties.">Combo Influence</span></span></h2>
@@ -625,7 +625,7 @@ export class DashboardViewService {
             '</tr>';
         }).join("");
         document.getElementById("predictions").classList.remove("loading");
-        document.getElementById("predictions").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final ensemble direction predicted for the next 30 seconds.') + '</th><th>' + renderHintLabel('Conf', 'Normalized ensemble confidence between 0 and 1.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. NH = near half, XH = crossed half.') + '</th><th>' + renderHintLabel('Result', 'Pending until resolved, then OK for a win, KO for a loss, or VOID if data was insufficient.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        document.getElementById("predictions").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final ensemble direction that was traded.') + '</th><th>' + renderHintLabel('Conf', 'Normalized ensemble confidence between 0 and 1.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. NH = near half, XH = crossed half.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderStrategies(summary) {
@@ -807,7 +807,7 @@ export class DashboardViewService {
             '<div class="health-item"><strong>' + summary.health.serviceName + '</strong><div class="tiny">' + renderHintLabel('Started', 'Timestamp when the current service runtime booted.') + ': ' + formatTimestamp(summary.health.startedAt) + '</div></div>' +
             '<div class="health-item"><strong>' + formatNumber(summary.health.snapshotAgeMs, 0) + ' ms</strong><div class="tiny">' + renderHintLabel('Snapshot age', 'Milliseconds since the last snapshot was processed by the service.') + '</div></div>' +
             '<div class="health-item"><strong>' + summary.health.isSnapshotHealthy + '</strong><div class="tiny">' + renderHintLabel('Healthy', 'True when the latest snapshot is fresh enough according to configured freshness thresholds.') + '</div></div>' +
-            '<div class="health-item"><strong>' + summary.health.pendingEvaluationCount + '</strong><div class="tiny">' + renderHintLabel('Pending evals', 'Number of predictions still waiting for automatic 30-second resolution.') + '</div></div>' +
+            '<div class="health-item"><strong>' + summary.health.pendingEvaluationCount + '</strong><div class="tiny">' + renderHintLabel('Active trades', 'Number of paper positions still open or waiting on maker fills before TP or SL resolution.') + '</div></div>' +
             '<div class="health-item"><strong>' + (summary.makerTakerStats.makerUsageRatio * 100).toFixed(1) + '%</strong><div class="tiny">' + renderHintLabel('Maker usage', 'Share of recent trades opened as maker.') + '</div></div>' +
             '<div class="health-item"><strong>' + (summary.makerTakerStats.takerUsageRatio * 100).toFixed(1) + '%</strong><div class="tiny">' + renderHintLabel('Taker usage', 'Share of recent trades opened as taker.') + '</div></div>' +
           '</div>';

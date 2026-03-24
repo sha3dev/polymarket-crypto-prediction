@@ -98,11 +98,26 @@ export class PredictionStoreService {
     return pendingCount;
   }
 
+  public getPrediction(marketKey: MarketKey, createdAt: number): PredictionRecord | null {
+    const marketPredictions = this.requireHistory(marketKey);
+    const predictionRecord = marketPredictions.find((currentPredictionRecord) => currentPredictionRecord.createdAt === createdAt) ?? null;
+    return predictionRecord;
+  }
+
   public getRecentPredictions(limit: number): PredictionRecord[] {
     const recentPredictions = [...this.predictionHistory.values()]
       .flat()
       .sort((leftRecord, rightRecord) => rightRecord.createdAt - leftRecord.createdAt)
       .slice(0, limit);
     return recentPredictions;
+  }
+
+  public getRecentResolvedPredictions(limit: number): PredictionRecord[] {
+    const recentResolvedPredictions = [...this.predictionHistory.values()]
+      .flat()
+      .filter((predictionRecord) => predictionRecord.isResolved)
+      .sort((leftRecord, rightRecord) => rightRecord.createdAt - leftRecord.createdAt)
+      .slice(0, limit);
+    return recentResolvedPredictions;
   }
 }

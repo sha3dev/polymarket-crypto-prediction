@@ -144,7 +144,7 @@ export class DashboardSummaryService {
       serviceName: config.SERVICE_NAME,
       snapshotAgeMs,
       isSnapshotHealthy,
-      pendingEvaluationCount: this.predictionEngineService.getPendingCount(),
+      pendingEvaluationCount: this.paperExecutionService.getOpenPositionCount(),
       monitoredMarketCount: 8,
       startedAt: this.startedAt,
     };
@@ -152,7 +152,7 @@ export class DashboardSummaryService {
 
   public buildDashboardSummary(nowTimestamp: number): DashboardSummaryPayload {
     const markets = this.marketStateService.getMarketSummaries(nowTimestamp);
-    const latestPredictions = this.predictionEngineService.getRecentPredictions(20);
+    const latestPredictions = this.predictionEngineService.getRecentResolvedPredictions(20);
     const strategies = this.predictionEngineService.getStrategySummaries();
     const strategyBoards = this.buildStrategyBoards();
     const executionNow = this.paperExecutionService.getExecutionSummaries();
@@ -180,7 +180,7 @@ export class DashboardSummaryService {
       health: this.buildHealthPayload(nowTimestamp),
       kpis: {
         liveMarkets: markets.filter((market) => market.isLive).length,
-        pendingEvaluations: this.predictionEngineService.getPendingCount(),
+        pendingEvaluations: this.paperExecutionService.getOpenPositionCount(),
         totalPredictions: latestPredictions.length,
         resolvedAccuracy,
         averageConfidence,

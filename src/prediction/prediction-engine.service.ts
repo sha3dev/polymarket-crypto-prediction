@@ -7,6 +7,7 @@ import type { ComboMetricsService } from "../combo/combo-metrics.service.ts";
 import type { ComboSummary, MarketComboBoard } from "../combo/combo.types.ts";
 
 import config from "../config.ts";
+import type { TradeExitReason } from "../execution/execution.types.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketKey, MarketTrigger, MarketWindow, PredictionDirection } from "../market/market.types.ts";
 import type { StrategyEngineService } from "../strategy/strategy-engine.service.ts";
@@ -136,65 +137,23 @@ export class PredictionEngineService {
     };
   }
 
-  private resolveDuePredictions(generatedAt: number): void {
-    const pendingPredictions = this.predictionStoreService.getPendingPredictions(generatedAt);
-    for (const pendingPrediction of pendingPredictions) {
-      const marketEvaluationPrice = this.marketStateService.getEvaluationPrice(pendingPrediction.marketKey);
-      const baselinePrice = pendingPrediction.baselineUpMidpoint ?? pendingPrediction.baselineUpPrice;
-      const resolvedPrice = marketEvaluationPrice.midpoint ?? marketEvaluationPrice.fallbackPrice;
-      const resolvedDirection = baselinePrice === null || resolvedPrice === null ? null : resolvedPrice > baselinePrice + 0.001 ? "UP" : "DOWN";
-      const outcome = this.buildOutcome(
-        pendingPrediction.direction,
-        resolvedDirection,
-        baselinePrice,
-        resolvedPrice,
-        marketEvaluationPrice.isFallbackPriceUsed,
-        marketEvaluationPrice.observedAt,
-      );
-      pendingPrediction.isResolved = true;
-      pendingPrediction.outcome = outcome;
-      this.strategyMetricsService.recordResolution(pendingPrediction.marketKey, pendingPrediction.strategyBreakdown, resolvedDirection, outcome.resolvedAt);
-      this.comboMetricsService.recordResolution(
-        pendingPrediction.marketKey,
-        pendingPrediction.predictionId,
-        pendingPrediction.comboBreakdown.activeCombos,
-        pendingPrediction.strategyBreakdown,
-        this.strategyMetricsService.getSummaries(pendingPrediction.marketKey),
-        resolvedDirection,
-        outcome.resolvedAt,
-      );
-    }
-  }
-
-  private buildOutcome(
+  private buildTradeOutcome(
     predictedDirection: PredictionDirection,
-    resolvedDirection: PredictionDirection | null,
+    exitReason: TradeExitReason,
     baselinePrice: number | null,
     evaluationPrice: number | null,
-    isFallbackPriceUsed: boolean,
-    observedAt: number | null,
+    resolvedAt: number,
   ): PredictionOutcome {
-    let outcome: PredictionOutcome = {
-      status: "void",
-      resolvedAt: observedAt,
+    const resolvedDirection = exitReason === "take_profit_hit" ? predictedDirection : predictedDirection === "UP" ? "DOWN" : "UP";
+    const outcome: PredictionOutcome = {
+      status: exitReason === "take_profit_hit" ? "ok" : "ko",
+      resolvedAt,
       resolvedDirection,
       evaluationPrice,
       baselinePrice,
-      isFallbackPriceUsed,
-      reason: "unresolved_due_to_data_gap",
+      isFallbackPriceUsed: false,
+      reason: exitReason,
     };
-    if (resolvedDirection !== null) {
-      const wasCorrect = predictedDirection === resolvedDirection;
-      outcome = {
-        status: wasCorrect ? "ok" : "ko",
-        resolvedAt: observedAt,
-        resolvedDirection,
-        evaluationPrice,
-        baselinePrice,
-        isFallbackPriceUsed,
-        reason: null,
-      };
-    }
     return outcome;
   }
 
@@ -224,10 +183,40 @@ export class PredictionEngineService {
    * @section public:methods
    */
 
-  public handleSnapshot(generatedAt: number, triggeredMarkets: MarketTrigger[]): void {
-    this.resolveDuePredictions(generatedAt);
+  public handleSnapshot(_generatedAt: number, triggeredMarkets: MarketTrigger[]): void {
     for (const marketTrigger of triggeredMarkets) {
       this.maybeCreatePrediction(marketTrigger);
+    }
+  }
+
+  public resolvePredictionFromTrade(
+    marketKey: MarketKey,
+    predictionTimestamp: number,
+    exitReason: TradeExitReason,
+    exitFillPrice: number,
+    resolvedAt: number,
+  ): void {
+    const predictionRecord = this.predictionStoreService.getPrediction(marketKey, predictionTimestamp);
+    if (predictionRecord !== null && !predictionRecord.isResolved) {
+      const outcome = this.buildTradeOutcome(
+        predictionRecord.direction,
+        exitReason,
+        predictionRecord.baselineUpMidpoint ?? predictionRecord.baselineUpPrice,
+        exitFillPrice,
+        resolvedAt,
+      );
+      predictionRecord.isResolved = true;
+      predictionRecord.outcome = outcome;
+      this.strategyMetricsService.recordResolution(predictionRecord.marketKey, predictionRecord.strategyBreakdown, outcome.resolvedDirection, resolvedAt);
+      this.comboMetricsService.recordResolution(
+        predictionRecord.marketKey,
+        predictionRecord.predictionId,
+        predictionRecord.comboBreakdown.activeCombos,
+        predictionRecord.strategyBreakdown,
+        this.strategyMetricsService.getSummaries(predictionRecord.marketKey),
+        outcome.resolvedDirection,
+        resolvedAt,
+      );
     }
   }
 
@@ -247,6 +236,13 @@ export class PredictionEngineService {
   public getRecentPredictions(limit: number): PredictionResponse[] {
     const predictionResponses = this.predictionStoreService
       .getRecentPredictions(limit)
+      .map((predictionRecord) => this.buildPredictionResponse(predictionRecord));
+    return predictionResponses;
+  }
+
+  public getRecentResolvedPredictions(limit: number): PredictionResponse[] {
+    const predictionResponses = this.predictionStoreService
+      .getRecentResolvedPredictions(limit)
       .map((predictionRecord) => this.buildPredictionResponse(predictionRecord));
     return predictionResponses;
   }
