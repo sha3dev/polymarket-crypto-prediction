@@ -972,8 +972,8 @@ Configuration lives in [src/config.ts](/Users/jc/Documents/GitHub/polymarket-cry
 - `DEFAULT_PORT`: HTTP port used by `startServer()`.
 - `SERVICE_NAME`: service identifier shown in health and dashboard payloads.
 - `SNAPSHOT_INTERVAL_MS`: polling interval passed to `SnapshotService`.
-- `CROSS_THRESHOLD`: tolerance around `0.5` used by trigger detection.
-- `MARKET_COOLDOWN_MS`: minimum time between raw predictions on the same market.
+- `CROSS_THRESHOLD`: legacy tolerance around `0.5`, retained for compatibility. Prediction creation now triggers only on real half-crosses.
+- `MARKET_COOLDOWN_MS`: minimum time between raw predictions on the same market. Default is `30_000 ms`.
 - `PREDICTION_HORIZON_MS`: legacy prediction horizon field kept in the payload shape.
 - `SHORT_HISTORY_SECONDS`: short rolling history used by feature extraction.
 - `LONG_HISTORY_SECONDS`: long rolling history used by market memory.

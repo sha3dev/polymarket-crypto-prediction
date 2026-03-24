@@ -96,21 +96,20 @@ export class DashboardViewService {
         display: block;
         font-size: 24px;
       }
-      .grid {
+      .dashboard-grid {
         display: grid;
-        grid-template-columns: minmax(0, 1.75fr) minmax(360px, 1.05fr);
+        grid-template-columns: repeat(12, minmax(0, 1fr));
         gap: 18px;
         align-items: start;
-      }
-      .stack {
-        display: grid;
-        gap: 18px;
-        align-content: start;
       }
       .panel {
         background: var(--panel);
         padding: 18px;
       }
+      .span-12 { grid-column: span 12; }
+      .span-7 { grid-column: span 7; }
+      .span-5 { grid-column: span 5; }
+      .span-4 { grid-column: span 4; }
       .panel-tall { min-height: 420px; }
       .panel-medium { min-height: 308px; }
       .panel-compact { min-height: 132px; }
@@ -220,8 +219,10 @@ export class DashboardViewService {
         50% { opacity: 1; }
       }
       @media (max-width: 1100px) {
-        .hero-head, .grid { grid-template-columns: 1fr; }
+        .hero-head { grid-template-columns: 1fr; }
+        .dashboard-grid { grid-template-columns: 1fr; }
         .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .span-12, .span-7, .span-5, .span-4 { grid-column: auto; }
         .panel-tall, .panel-medium, .panel-compact { min-height: 0; }
         .panel-scroll { max-height: none; }
       }
@@ -251,61 +252,57 @@ export class DashboardViewService {
           </div>
         </article>
       </section>
-      <section class="grid">
-        <div class="stack">
-          <article class="panel panel-compact">
+      <section class="dashboard-grid">
+          <article class="panel panel-compact span-7">
             <h2><span class="label-with-hint"><span class="hint-text" title="Current state for all eight monitored markets, including token midpoints, cooldown, and data quality.">Markets</span></span></h2>
             <p class="tiny panel-intro">Snapshot of the monitored markets right now. It lets you check price level, data freshness, and whether the market quality is good enough to trust what comes later.</p>
             <div id="markets" class="loading panel-scroll">Loading market state…</div>
           </article>
-          <article class="panel panel-medium">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Current executable entry decision per market: side, TP, SL, and maker versus taker choice.">Execution Now</span></span></h2>
-            <p class="tiny panel-intro">This is the actual trading gate. It shows which markets are executable, what side and levels the engine prefers, and which rule is blocking entry when no trade should be taken.</p>
-            <div id="execution" class="loading panel-scroll">Loading execution decisions…</div>
-          </article>
-          <article class="panel panel-tall">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Most recent predictions that completed through a paper-trade TP or SL exit.">Resolved Predictions</span></span></h2>
-            <p class="tiny panel-intro">Recent predictions that already finished their lifecycle. Use it to judge whether the engine is reading direction well once ideas are forced to end as TP or SL outcomes.</p>
-            <div id="predictions" class="loading panel-scroll">Loading resolved predictions…</div>
-          </article>
-          <article class="panel panel-medium">
-            <h2><span class="label-with-hint"><span class="hint-text" title="How much recent predictions changed after combo boosts or combo disagreement penalties.">Combo Influence</span></span></h2>
-            <p class="tiny panel-intro">Shows how dynamic pairs and trios are altering the base signal. If confidence moves a lot here, combos are heavily shaping the final view instead of just the standalone strategies.</p>
-            <div id="combo-influence" class="loading panel-scroll">Loading combo influence…</div>
-          </article>
-        </div>
-        <div class="stack">
-          <article class="panel panel-tall">
+          <article class="panel panel-tall span-5">
             <h2><span class="label-with-hint"><span class="hint-text" title="Per-market strategy board. The selected market uses local weights and local rolling performance, not the global aggregate.">Strategies</span></span></h2>
             <p class="tiny panel-intro">Breakdown of the individual strategies behind the ensemble for the selected market. It tells you who is contributing, with what weight, and which signals are actually earning trust.</p>
             <div id="strategies" class="loading panel-scroll">Loading strategy ranking…</div>
           </article>
-          <article class="panel panel-medium">
+          <article class="panel panel-medium span-7">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Current executable entry decision per market: side, TP, SL, and maker versus taker choice.">Execution Now</span></span></h2>
+            <p class="tiny panel-intro">This is the actual trading gate. It shows which markets are executable, what side and levels the engine prefers, and which rule is blocking entry when no trade should be taken.</p>
+            <div id="execution" class="loading panel-scroll">Loading execution decisions…</div>
+          </article>
+          <article class="panel panel-medium span-5">
             <h2><span class="label-with-hint"><span class="hint-text" title="Per-market paper trading PnL, hit rate, and drawdown so you can see which markets are actually worth trading.">Market PnL</span></span></h2>
             <p class="tiny panel-intro">Performance summary by market. It helps separate markets that look interesting for research from markets that are actually proving they deserve execution capital.</p>
             <div id="market-pnl" class="loading panel-scroll">Loading market pnl…</div>
           </article>
-          <article class="panel panel-medium">
+          <article class="panel panel-tall span-7">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Most recent predictions that completed through a paper-trade TP or SL exit.">Resolved Predictions</span></span></h2>
+            <p class="tiny panel-intro">Recent predictions that already finished their lifecycle. Use it to judge whether the engine is reading direction well once ideas are forced to end as TP or SL outcomes.</p>
+            <div id="predictions" class="loading panel-scroll">Loading resolved predictions…</div>
+          </article>
+          <article class="panel panel-medium span-5">
             <h2><span class="label-with-hint"><span class="hint-text" title="Best current pairs and trios by market, ranked by combo score and lift over their best member.">Top Combos</span></span></h2>
             <p class="tiny panel-intro">Best dynamic pairs and trios discovered by the engine. This is the fast way to see which combinations are strong enough to open the combo gate and support a real execution decision.</p>
             <div id="combos" class="loading panel-scroll">Loading combo ranking…</div>
           </article>
-          <article class="panel panel-medium">
+          <article class="panel panel-medium span-4">
+            <h2><span class="label-with-hint"><span class="hint-text" title="How much recent predictions changed after combo boosts or combo disagreement penalties.">Combo Influence</span></span></h2>
+            <p class="tiny panel-intro">Shows how dynamic pairs and trios are altering the base signal. If confidence moves a lot here, combos are heavily shaping the final view instead of just the standalone strategies.</p>
+            <div id="combo-influence" class="loading panel-scroll">Loading combo influence…</div>
+          </article>
+          <article class="panel panel-medium span-4">
             <h2><span class="label-with-hint"><span class="hint-text" title="Most recent closed paper trades, including maker/taker styles and exit reasons.">Recent Trades</span></span></h2>
             <p class="tiny panel-intro">Closed paper trades only. It shows what the system really executed, how those trades ended, and whether execution quality is matching what the research layer suggests.</p>
             <div id="trades" class="loading panel-scroll">Loading recent trades…</div>
           </article>
-          <article class="panel panel-compact">
+          <article class="panel panel-medium span-4">
             <h2><span class="label-with-hint"><span class="hint-text" title="Simulated open positions with their TP/SL levels and current marked value.">Open Positions</span></span></h2>
             <p class="tiny panel-intro">Current paper positions that are still alive. Use this panel to understand active exposure, where TP and SL sit, and what risk is still on the table right now.</p>
             <div id="positions" class="loading panel-scroll">Loading open positions…</div>
           </article>
-          <article class="panel panel-compact">
+          <article class="panel panel-compact span-12">
             <h2><span class="label-with-hint"><span class="hint-text" title="Ingestion freshness and service runtime health indicators.">Health</span></span></h2>
             <p class="tiny panel-intro">Operational status of the feed and the service itself. If another panel looks suspicious, check here first to confirm the data is fresh and the runtime is behaving normally.</p>
             <div id="health" class="loading">Loading service health…</div>
           </article>
-        </div>
       </section>
     </div>
     <script>
@@ -476,9 +473,6 @@ export class DashboardViewService {
         let triggerCode = triggerType;
         if (triggerType === 'crossed_half') {
           triggerCode = 'XH';
-        }
-        if (triggerType === 'near_half') {
-          triggerCode = 'NH';
         }
         return triggerCode;
       }

@@ -330,12 +330,7 @@ export class MarketStateService {
   }
 
   private detectTriggerType(previousPrice: number | null, currentPrice: number | null): TriggerType | null {
-    const isCurrentNearHalf = currentPrice !== null && Math.abs(currentPrice - 0.5) <= config.CROSS_THRESHOLD;
-    const wasPreviousNearHalf = previousPrice !== null && Math.abs(previousPrice - 0.5) <= config.CROSS_THRESHOLD;
     let triggerType: TriggerType | null = null;
-    if (isCurrentNearHalf && !wasPreviousNearHalf) {
-      triggerType = "near_half";
-    }
     if (previousPrice !== null && currentPrice !== null && ((previousPrice < 0.5 && currentPrice >= 0.5) || (previousPrice > 0.5 && currentPrice <= 0.5))) {
       triggerType = "crossed_half";
     }

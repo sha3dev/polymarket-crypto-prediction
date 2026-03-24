@@ -337,7 +337,7 @@ function buildLivePredictionResponse(): PredictionResponse {
       asset: "btc",
       window: "5m",
       triggeredToken: "up",
-      triggerType: "near_half",
+      triggerType: "crossed_half",
       previousPrice: 0.49,
       currentPrice: 0.5,
       distanceToHalf: 0,
