@@ -49,6 +49,10 @@ export type DashboardSummaryPayload = {
   };
   markets: MarketSummary[];
   globalRegime: CrossAssetRegime | null;
+  globalRegimes: {
+    "5m": CrossAssetRegime | null;
+    "15m": CrossAssetRegime | null;
+  };
   latestPredictions: PredictionResponse[];
   strategies: StrategySummary[];
   strategyBoards: StrategyBoard[];
@@ -166,6 +170,14 @@ export class DashboardSummaryService {
     return globalRegime;
   }
 
+  private buildGlobalRegimes(): DashboardSummaryPayload["globalRegimes"] {
+    const globalRegimes: DashboardSummaryPayload["globalRegimes"] = {
+      "5m": this.marketStateService.getCrossAssetRegime("btc:5m"),
+      "15m": this.marketStateService.getCrossAssetRegime("btc:15m"),
+    };
+    return globalRegimes;
+  }
+
   private buildDiscoveryBoard(latestPredictions: PredictionResponse[]): DashboardSummaryPayload["discoveryBoard"] {
     const discoveryMap = new Map<
       string,
@@ -229,6 +241,7 @@ export class DashboardSummaryService {
   public async buildDashboardSummary(nowTimestamp: number): Promise<DashboardSummaryPayload> {
     const markets = this.marketStateService.getMarketSummaries(nowTimestamp);
     const globalRegime = this.selectGlobalRegime(markets);
+    const globalRegimes = this.buildGlobalRegimes();
     const latestPredictions = this.predictionEngineService.getRecentResolvedPredictions(20);
     const strategies = this.predictionEngineService.getStrategySummaries();
     const strategyBoards = this.buildStrategyBoards();
@@ -271,6 +284,7 @@ export class DashboardSummaryService {
       },
       markets,
       globalRegime,
+      globalRegimes,
       latestPredictions,
       strategies,
       strategyBoards,

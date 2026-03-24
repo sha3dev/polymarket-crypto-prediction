@@ -243,9 +243,9 @@ export class DashboardViewService {
       }
       .engine-matrix-table {
         width: 100%;
-        min-width: 720px;
+        min-width: 640px;
         border-collapse: separate;
-        border-spacing: 4px;
+        border-spacing: 6px;
       }
       .engine-matrix-table th,
       .engine-matrix-table td {
@@ -254,19 +254,19 @@ export class DashboardViewService {
         white-space: nowrap;
       }
       .engine-matrix-market {
-        min-width: 76px;
+        min-width: 86px;
         padding: 8px 6px;
       }
       .engine-matrix-cell {
         display: grid;
         place-items: center;
-        min-width: 44px;
-        min-height: 36px;
+        min-width: 54px;
+        min-height: 42px;
         border: 1px solid rgba(13, 27, 42, 0.12);
         border-radius: 12px;
         background: rgba(13, 27, 42, 0.04);
         color: var(--text);
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 700;
         letter-spacing: 0.04em;
         cursor: pointer;
@@ -286,51 +286,24 @@ export class DashboardViewService {
       }
       .proximity-list {
         display: grid;
-        gap: 10px;
+        gap: 12px;
       }
       .proximity-row {
         display: grid;
-        grid-template-columns: 78px minmax(0, 1fr) 64px;
+        grid-template-columns: 78px minmax(0, 1fr) 84px;
         gap: 12px;
         align-items: center;
       }
-      .proximity-eq {
-        display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 8px;
-        align-items: end;
-        min-height: 78px;
+      .proximity-chart-card {
+        min-height: 92px;
         padding: 8px 10px;
-        border: 1px solid rgba(13, 27, 42, 0.08);
-        border-radius: 14px;
-        background: rgba(13, 27, 42, 0.03);
+        border: 1px solid rgba(13, 27, 42, 0.1);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(13,27,42,0.03));
       }
-      .proximity-band {
-        display: grid;
-        gap: 6px;
-        justify-items: center;
-      }
-      .proximity-bar {
+      .proximity-chart-wrap {
         position: relative;
-        width: 100%;
-        max-width: 28px;
-        height: 44px;
-        border-radius: 10px;
-        background: rgba(13, 27, 42, 0.08);
-        overflow: hidden;
-      }
-      .proximity-bar-fill {
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        border-radius: 10px;
-        background: linear-gradient(180deg, var(--accent-2), var(--accent));
-      }
-      .proximity-band-label {
-        font-size: 10px;
-        color: var(--muted);
-        letter-spacing: 0.04em;
+        height: 74px;
       }
       .proximity-score {
         text-align: right;
@@ -339,18 +312,16 @@ export class DashboardViewService {
         display: block;
         font-size: 18px;
       }
-      .proximity-trend {
-        display: inline-flex;
-        align-items: end;
-        gap: 2px;
+      .proximity-trend-card {
+        position: relative;
         margin-top: 4px;
-        min-height: 20px;
+        width: 66px;
+        height: 22px;
       }
-      .proximity-trend-bar {
-        width: 5px;
-        border-radius: 999px;
-        background: linear-gradient(180deg, rgba(31, 162, 255, 0.9), rgba(255, 122, 24, 0.85));
-        opacity: 0.9;
+      .proximity-trend-card canvas,
+      .proximity-chart-wrap canvas {
+        width: 100% !important;
+        height: 100% !important;
       }
       .tiny {
         font-size: 11px;
@@ -441,6 +412,11 @@ export class DashboardViewService {
             <p class="tiny panel-intro">The prediction layer now works by selecting a setup and a combo of engines. This panel shows that winning narrative directly instead of only the old raw strategy-level combo details.</p>
             <div id="winning-combinations" class="loading panel-scroll">Loading winning combinations…</div>
           </article>
+          <article class="panel panel-medium">
+            <h2><span class="hint-label" data-full-label="Engine Grid" data-description="Matrix view of all markets versus all engines, colored by current state and signed score." aria-label="Engine Grid. Matrix view of all markets versus all engines, colored by current state and signed score.">Engine Grid</span></h2>
+            <p class="tiny panel-intro">Market-by-engine snapshot. Each cell compresses direction, state, and strength so you can see where engines are waking up, fading out, or lining up across several markets at once.</p>
+            <div id="engine-grid" class="loading panel-scroll">Loading engine grid…</div>
+          </article>
           <article class="panel panel-tall">
             <h2><span class="hint-label" data-full-label="Resolved Predictions" data-description="Most recent predictions that completed through a paper-trade TP or SL exit." aria-label="Resolved Predictions. Most recent predictions that completed through a paper-trade TP or SL exit.">Resolved Predictions</span></h2>
             <p class="tiny panel-intro">Recent predictions that already finished their lifecycle. It now shows which setup and which engine combo produced each idea, so you can judge the mechanism, not just the final direction.</p>
@@ -464,11 +440,6 @@ export class DashboardViewService {
             <div id="engine-board" class="loading panel-scroll">Loading engine board…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="hint-label" data-full-label="Engine Grid" data-description="Matrix view of all markets versus all engines, colored by current state and signed score." aria-label="Engine Grid. Matrix view of all markets versus all engines, colored by current state and signed score.">Engine Grid</span></h2>
-            <p class="tiny panel-intro">Market-by-engine snapshot. Each cell compresses direction, state, and strength so you can see where engines are waking up, fading out, or lining up across several markets at once.</p>
-            <div id="engine-grid" class="loading panel-scroll">Loading engine grid…</div>
-          </article>
-          <article class="panel panel-medium">
             <h2><span class="hint-label" data-full-label="Market PnL" data-description="Per-market paper trading PnL, hit rate, and drawdown so you can see which markets are actually worth trading." aria-label="Market PnL. Per-market paper trading PnL, hit rate, and drawdown so you can see which markets are actually worth trading.">Market PnL</span></h2>
             <p class="tiny panel-intro">Performance summary by market. It helps separate markets that look interesting for research from markets that are actually proving they deserve execution capital.</p>
             <div id="market-pnl" class="loading panel-scroll">Loading market pnl…</div>
@@ -486,11 +457,14 @@ export class DashboardViewService {
         </div>
       </section>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script>
       const pollIntervalMs = ${config.DASHBOARD_POLL_INTERVAL_MS};
       const maxTradeProximityHistory = 18;
       let activeInfoPopover = null;
       const tradeProximityHistory = new Map();
+      const tradeProximityBarCharts = new Map();
+      const tradeProximityTrendCharts = new Map();
 
       const typedCodeCatalog = {
         setup: {
@@ -1214,19 +1188,28 @@ export class DashboardViewService {
       }
 
       function renderGlobalRegime(summary) {
-        const globalRegime = summary.globalRegime;
-        const markup = globalRegime === null
-          ? '<div class="tiny">No global regime detected yet.</div>'
-          : '<div class="health-grid">' +
-              '<div class="health-item"><strong>' + renderInfoCode('regime', globalRegime.regimeId, renderRegimeName(globalRegime)) + '</strong><div class="tiny">' + renderHintLabel('Class', 'Regime class derived from breadth, leader/laggard structure, fragmentation, and reversal risk.') + '</div></div>' +
-              '<div class="health-item"><strong>' + renderCrossAssetLabel(globalRegime) + '</strong><div class="tiny">' + renderHintLabel('Breadth', 'Compact breadth label with weak or strong strength marker.') + '</div></div>' +
-              '<div class="health-item"><strong>' + formatNumber(globalRegime.breadthParticipation, 2) + '</strong><div class="tiny">' + renderHintLabel('Participation', 'Share of qualifying markets moving in the dominant direction.') + '</div></div>' +
-              '<div class="health-item"><strong>' + formatNumber(globalRegime.synchronyScore, 2) + '</strong><div class="tiny">' + renderHintLabel('Synchrony', 'How tightly the monitored assets are moving together right now.') + '</div></div>' +
-              '<div class="health-item"><strong>' + escapeHtml(globalRegime.leaderGroup.join(', ') || '—') + '</strong><div class="tiny">' + renderHintLabel('Leaders', 'Markets currently leading the global move.') + '</div></div>' +
-              '<div class="health-item"><strong>' + (globalRegime.laggardGroup.join(', ') || '—') + '</strong><div class="tiny">' + renderHintLabel('Laggards', 'Markets lagging behind the dominant move and therefore candidates for propagation setups.') + '</div></div>' +
-              '<div class="health-item"><strong>' + formatNumber(globalRegime.accelerationScore, 2) + '</strong><div class="tiny">' + renderHintLabel('Accel', 'Speed at which the cross-asset move is broadening or strengthening.') + '</div></div>' +
-              '<div class="health-item"><strong>' + formatNumber(globalRegime.reversalRiskScore, 2) + '</strong><div class="tiny">' + renderHintLabel('Rev risk', 'Estimated risk that continuation setups are already too stretched.') + '</div></div>' +
-            '</div>';
+        const globalRegimes = summary.globalRegimes ?? { '5m': summary.globalRegime, '15m': null };
+        const windows = ['5m', '15m'];
+        const cardsMarkup = windows.map((windowLabel) => {
+          const globalRegime = globalRegimes[windowLabel];
+          const cardMarkup = globalRegime === null
+            ? '<div class="panel" style="padding:12px;background:rgba(13,27,42,0.03)"><strong>' + windowLabel + '</strong><div class="tiny" style="margin-top:6px">No regime detected yet.</div></div>'
+            : '<div class="panel" style="padding:12px;background:rgba(13,27,42,0.03)">' +
+                '<div class="tiny" style="margin-bottom:8px"><strong>' + windowLabel + '</strong></div>' +
+                '<div class="health-grid">' +
+                  '<div class="health-item"><strong>' + renderInfoCode('regime', globalRegime.regimeId, renderRegimeName(globalRegime)) + '</strong><div class="tiny">' + renderHintLabel('Class', 'Regime class derived from breadth, leader/laggard structure, fragmentation, and reversal risk.') + '</div></div>' +
+                  '<div class="health-item"><strong>' + renderCrossAssetLabel(globalRegime) + '</strong><div class="tiny">' + renderHintLabel('Breadth', 'Compact breadth label with weak or strong strength marker.') + '</div></div>' +
+                  '<div class="health-item"><strong>' + formatNumber(globalRegime.breadthParticipation, 2) + '</strong><div class="tiny">' + renderHintLabel('Participation', 'Share of qualifying markets moving in the dominant direction.') + '</div></div>' +
+                  '<div class="health-item"><strong>' + formatNumber(globalRegime.synchronyScore, 2) + '</strong><div class="tiny">' + renderHintLabel('Synchrony', 'How tightly the monitored assets are moving together right now.') + '</div></div>' +
+                  '<div class="health-item"><strong>' + escapeHtml(globalRegime.leaderGroup.join(', ') || '—') + '</strong><div class="tiny">' + renderHintLabel('Leaders', 'Markets currently leading the global move.') + '</div></div>' +
+                  '<div class="health-item"><strong>' + (globalRegime.laggardGroup.join(', ') || '—') + '</strong><div class="tiny">' + renderHintLabel('Laggards', 'Markets lagging behind the dominant move and therefore candidates for propagation setups.') + '</div></div>' +
+                  '<div class="health-item"><strong>' + formatNumber(globalRegime.accelerationScore, 2) + '</strong><div class="tiny">' + renderHintLabel('Accel', 'Speed at which the cross-asset move is broadening or strengthening.') + '</div></div>' +
+                  '<div class="health-item"><strong>' + formatNumber(globalRegime.reversalRiskScore, 2) + '</strong><div class="tiny">' + renderHintLabel('Rev risk', 'Estimated risk that continuation setups are already too stretched.') + '</div></div>' +
+                '</div>' +
+              '</div>';
+          return cardMarkup;
+        }).join('<div style="height:8px"></div>');
+        const markup = cardsMarkup;
         replaceStaticContent("global-regime", markup);
       }
 
@@ -1461,36 +1444,162 @@ export class DashboardViewService {
         return nextHistory;
       }
 
-      function renderTradeProximityTrend(historyValues) {
-        const trendMarkup = historyValues.map((historyValue) => {
-          const barHeight = Math.max(4, Math.round(clamp01(historyValue) * 20));
-          return '<span class="proximity-trend-bar" style="height:' + barHeight + 'px"></span>';
-        }).join('');
-        return '<div class="proximity-trend">' + trendMarkup + '</div>';
+      function buildTradeProximityDomId(prefix, marketKey) {
+        const domId = prefix + '-' + marketKey.replaceAll(':', '-');
+        return domId;
+      }
+
+      function destroyTradeProximityCharts() {
+        for (const chart of tradeProximityBarCharts.values()) {
+          chart.destroy();
+        }
+        for (const chart of tradeProximityTrendCharts.values()) {
+          chart.destroy();
+        }
+        tradeProximityBarCharts.clear();
+        tradeProximityTrendCharts.clear();
+      }
+
+      function buildTradeProximityBarColors(values) {
+        return values.map((value) => {
+          if (value >= 0.8) {
+            return 'rgba(15, 157, 88, 0.82)';
+          }
+          if (value >= 0.55) {
+            return 'rgba(31, 162, 255, 0.8)';
+          }
+          if (value >= 0.3) {
+            return 'rgba(255, 122, 24, 0.78)';
+          }
+          return 'rgba(107, 114, 128, 0.5)';
+        });
+      }
+
+      function hydrateTradeProximityCharts(chartRows) {
+        if (typeof Chart === 'undefined') {
+          return;
+        }
+        destroyTradeProximityCharts();
+        for (const chartRow of chartRows) {
+          const barCanvas = document.getElementById(chartRow.barCanvasId);
+          const trendCanvas = document.getElementById(chartRow.trendCanvasId);
+          if (barCanvas instanceof HTMLCanvasElement) {
+            const barChart = new Chart(barCanvas, {
+              type: 'bar',
+              data: {
+                labels: chartRow.labels,
+                datasets: [{
+                  data: chartRow.values,
+                  backgroundColor: buildTradeProximityBarColors(chartRow.values),
+                  borderRadius: 8,
+                  borderSkipped: false,
+                  maxBarThickness: 20,
+                }],
+              },
+              options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { enabled: false },
+                },
+                scales: {
+                  x: {
+                    grid: { display: false },
+                    ticks: {
+                      color: '#6b7280',
+                      font: { size: 10, weight: '700' },
+                    },
+                    border: { display: false },
+                  },
+                  y: {
+                    min: 0,
+                    max: 1,
+                    display: false,
+                    grid: { display: false },
+                    border: { display: false },
+                  },
+                },
+              },
+            });
+            tradeProximityBarCharts.set(chartRow.barCanvasId, barChart);
+          }
+          if (trendCanvas instanceof HTMLCanvasElement) {
+            const trendChart = new Chart(trendCanvas, {
+              type: 'line',
+              data: {
+                labels: chartRow.history.map((_, index) => index + 1),
+                datasets: [{
+                  data: chartRow.history,
+                  borderColor: 'rgba(31, 162, 255, 0.95)',
+                  backgroundColor: 'rgba(255, 122, 24, 0.18)',
+                  pointRadius: 0,
+                  pointHoverRadius: 0,
+                  tension: 0.34,
+                  fill: true,
+                  borderWidth: 2,
+                }],
+              },
+              options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { enabled: false },
+                },
+                scales: {
+                  x: { display: false },
+                  y: {
+                    min: 0,
+                    max: 1,
+                    display: false,
+                  },
+                },
+                elements: {
+                  line: { capBezierPoints: true },
+                },
+              },
+            });
+            tradeProximityTrendCharts.set(chartRow.trendCanvasId, trendChart);
+          }
+        }
       }
 
       function renderTradeProximity(summary) {
         const executionDecisionMap = createExecutionDecisionMap(summary);
         const marketSummaryMap = createMarketSummaryMap(summary);
+        const chartRows = [];
         const rows = summary.executionNow.map((marketExecution) => {
           const decision = executionDecisionMap[marketExecution.marketKey];
           const market = marketSummaryMap[marketExecution.marketKey];
           const proximity = computeTradeProximity(decision, market);
           const proximityLabel = decision.isEntryAllowed ? 'RDY' : proximity.proximity >= 0.75 ? 'HOT' : proximity.proximity >= 0.5 ? 'MID' : 'COLD';
-          const equalizerMarkup =
-            renderProximityBand('STP', proximity.setupStrength, 'How strong the active setup and winning engine combo look for this market.') +
-            renderProximityBand('CMB', proximity.comboStrength, 'Whether the combo gate is already open.') +
-            renderProximityBand('SCR', proximity.scoreStrength, 'Effective execution score contribution.') +
-            renderProximityBand('QLT', proximity.qualityStrength, 'Current market data quality contribution.') +
-            renderProximityBand('REG', proximity.regimeStrength, 'Cross-asset regime support contribution.');
           const historyValues = pushTradeProximityHistory(marketExecution.marketKey, proximity.proximity);
+          const barCanvasId = buildTradeProximityDomId('trade-proximity-bars', marketExecution.marketKey);
+          const trendCanvasId = buildTradeProximityDomId('trade-proximity-trend', marketExecution.marketKey);
+          chartRows.push({
+            barCanvasId,
+            trendCanvasId,
+            labels: ['STP', 'CMB', 'SCR', 'QLT', 'REG'],
+            values: [
+              proximity.setupStrength,
+              proximity.comboStrength,
+              proximity.scoreStrength,
+              proximity.qualityStrength,
+              proximity.regimeStrength,
+            ],
+            history: historyValues,
+          });
           return '<div class="proximity-row">' +
             '<div><strong>' + marketExecution.marketKey.replace(':', ' ') + '</strong></div>' +
-            '<div class="proximity-eq">' + equalizerMarkup + '</div>' +
-            '<div class="proximity-score"><strong>' + Math.round(proximity.proximity * 100) + '%</strong><span class="tiny">' + proximityLabel + '</span>' + renderTradeProximityTrend(historyValues) + '</div>' +
+            '<div class="proximity-chart-card"><div class="proximity-chart-wrap"><canvas id="' + barCanvasId + '"></canvas></div></div>' +
+            '<div class="proximity-score"><strong>' + Math.round(proximity.proximity * 100) + '%</strong><span class="tiny">' + proximityLabel + '</span><div class="proximity-trend-card"><canvas id="' + trendCanvasId + '"></canvas></div></div>' +
             '</div>';
         }).join('');
         replacePanelContent('trade-proximity', '<div class="proximity-list">' + rows + '</div>');
+        hydrateTradeProximityCharts(chartRows);
       }
 
       function renderMarketPnl(summary) {

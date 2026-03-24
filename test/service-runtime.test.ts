@@ -276,6 +276,8 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(summaryJson.health.pendingEvaluationCount, summaryJson.openPositions?.length ?? 0);
   assert.equal(summaryJson.markets.length, 8);
   assert.equal(summaryJson.globalRegime === null || typeof summaryJson.globalRegime.regimeId === "string", true);
+  assert.equal(summaryJson.globalRegimes === null || typeof summaryJson.globalRegimes["5m"] === "object", true);
+  assert.equal(summaryJson.globalRegimes === null || typeof summaryJson.globalRegimes["15m"] === "object", true);
   assert.ok(summaryJson.executionNow.length === 8);
   assert.equal(summaryJson.marketPerformance.length, 8);
   assert.equal(summaryJson.strategyBoards.length, 8);
