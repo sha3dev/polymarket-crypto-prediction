@@ -166,6 +166,15 @@ In practical terms:
 - if `BTC` and `ETH` are both down, the system will not allow `SOL UP` or `XRP UP`
 - breadth still matters, but this hierarchy is treated as a hard structural guardrail
 
+This guardrail is now applied at the token level too, not only at the asset level:
+
+- `ETH UP` is only allowed when the `BTC UP` token itself has supportive momentum
+- `ETH DOWN` is only allowed when the `BTC DOWN` token itself has supportive momentum
+- `SOL/XRP UP` are only allowed when both `BTC UP` and `ETH UP` tokens are supportive
+- `SOL/XRP DOWN` are only allowed when both `BTC DOWN` and `ETH DOWN` tokens are supportive
+
+That means the system is no longer satisfied with a vague "`BTC` looks bullish" read. It now asks whether the relevant Polymarket token side (`UP` or `DOWN`) is actually moving in the same direction before allowing execution on `ETH`, `SOL`, or `XRP`.
+
 For each `5m` or `15m` window, the regime engine measures:
 
 - `breadthDirection`

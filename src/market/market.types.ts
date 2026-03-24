@@ -106,6 +106,10 @@ export type CrossAssetRegime = {
   breadthDirection: CrossAssetBreadthDirection;
   btcDirection: CrossAssetBreadthDirection;
   ethDirection: CrossAssetBreadthDirection;
+  btcUpTokenMomentum: number;
+  btcDownTokenMomentum: number;
+  ethUpTokenMomentum: number;
+  ethDownTokenMomentum: number;
   anchorAsset: AssetSymbol | null;
   anchorDirection: CrossAssetBreadthDirection;
   breadthStrength: number;

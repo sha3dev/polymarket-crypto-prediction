@@ -238,6 +238,120 @@ export class DashboardViewService {
         height: 100%;
         background: linear-gradient(90deg, var(--accent), var(--accent-2));
       }
+      .engine-matrix {
+        overflow: auto;
+      }
+      .engine-matrix-table {
+        width: 100%;
+        min-width: 720px;
+        border-collapse: separate;
+        border-spacing: 4px;
+      }
+      .engine-matrix-table th,
+      .engine-matrix-table td {
+        border-bottom: 0;
+        padding: 0;
+        white-space: nowrap;
+      }
+      .engine-matrix-market {
+        min-width: 76px;
+        padding: 8px 6px;
+      }
+      .engine-matrix-cell {
+        display: grid;
+        place-items: center;
+        min-width: 44px;
+        min-height: 36px;
+        border: 1px solid rgba(13, 27, 42, 0.12);
+        border-radius: 12px;
+        background: rgba(13, 27, 42, 0.04);
+        color: var(--text);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+      }
+      .engine-matrix-cell:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 12px rgba(7, 17, 31, 0.12);
+      }
+      .engine-matrix-cell.up {
+        color: var(--success);
+      }
+      .engine-matrix-cell.down {
+        color: var(--danger);
+      }
+      .engine-matrix-cell.muted {
+        color: var(--muted);
+      }
+      .proximity-list {
+        display: grid;
+        gap: 10px;
+      }
+      .proximity-row {
+        display: grid;
+        grid-template-columns: 78px minmax(0, 1fr) 64px;
+        gap: 12px;
+        align-items: center;
+      }
+      .proximity-eq {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 8px;
+        align-items: end;
+        min-height: 78px;
+        padding: 8px 10px;
+        border: 1px solid rgba(13, 27, 42, 0.08);
+        border-radius: 14px;
+        background: rgba(13, 27, 42, 0.03);
+      }
+      .proximity-band {
+        display: grid;
+        gap: 6px;
+        justify-items: center;
+      }
+      .proximity-bar {
+        position: relative;
+        width: 100%;
+        max-width: 28px;
+        height: 44px;
+        border-radius: 10px;
+        background: rgba(13, 27, 42, 0.08);
+        overflow: hidden;
+      }
+      .proximity-bar-fill {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-radius: 10px;
+        background: linear-gradient(180deg, var(--accent-2), var(--accent));
+      }
+      .proximity-band-label {
+        font-size: 10px;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+      .proximity-score {
+        text-align: right;
+      }
+      .proximity-score strong {
+        display: block;
+        font-size: 18px;
+      }
+      .proximity-trend {
+        display: inline-flex;
+        align-items: end;
+        gap: 2px;
+        margin-top: 4px;
+        min-height: 20px;
+      }
+      .proximity-trend-bar {
+        width: 5px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, rgba(31, 162, 255, 0.9), rgba(255, 122, 24, 0.85));
+        opacity: 0.9;
+      }
       .tiny {
         font-size: 11px;
         color: var(--muted);
@@ -303,59 +417,69 @@ export class DashboardViewService {
       <section class="dashboard-layout">
         <div class="stack">
           <article class="panel panel-compact">
-            <h2>Global Regime</h2>
+            <h2><span class="hint-label" data-full-label="Global Regime" data-description="Dominant cross-asset context across the monitored markets." aria-label="Global Regime. Dominant cross-asset context across the monitored markets.">Global Regime</span></h2>
             <p class="tiny panel-intro">This panel explains the current market-wide context: whether breadth is directional, which markets are leading, which ones are lagging, and whether continuation or reversal setups should dominate.</p>
             <div id="global-regime" class="loading">Loading global regime…</div>
           </article>
           <article class="panel panel-compact">
-            <h2>Markets</h2>
+            <h2><span class="hint-label" data-full-label="Markets" data-description="Current state for all eight monitored markets, including token midpoints, cooldown, and data quality." aria-label="Markets. Current state for all eight monitored markets, including token midpoints, cooldown, and data quality.">Markets</span></h2>
             <p class="tiny panel-intro">Snapshot of the monitored markets right now. It now highlights the active regime and the dominant setup per market, so you can see which markets look structurally interesting before looking at execution.</p>
             <div id="markets" class="loading panel-scroll">Loading market state…</div>
           </article>
           <article class="panel panel-medium">
-            <h2>Execution Now</h2>
+            <h2><span class="hint-label" data-full-label="Execution Now" data-description="Current executable entry decision per market: side, TP, SL, and maker versus taker choice." aria-label="Execution Now. Current executable entry decision per market: side, TP, SL, and maker versus taker choice.">Execution Now</span></h2>
             <p class="tiny panel-intro">This is the actual trading gate. It shows the winning setup, the winning engine combo, and which setup-specific rule is blocking entry when no trade should be taken.</p>
             <div id="execution" class="loading panel-scroll">Loading execution decisions…</div>
           </article>
           <article class="panel panel-medium">
-            <h2>Winning Combination</h2>
+            <h2><span class="hint-label" data-full-label="Trade Proximity" data-description="How close each market is to becoming executable, shown as a compact equalizer of key execution ingredients." aria-label="Trade Proximity. How close each market is to becoming executable, shown as a compact equalizer of key execution ingredients.">Trade Proximity</span></h2>
+            <p class="tiny panel-intro">Equalizer view of how near each market is to a real trade. Each row compresses setup, combo, score, quality, and regime support so you can see what is almost ready and what is still structurally blocked.</p>
+            <div id="trade-proximity" class="loading panel-scroll">Loading trade proximity…</div>
+          </article>
+          <article class="panel panel-medium">
+            <h2><span class="hint-label" data-full-label="Winning Combination" data-description="Winning setup and engine combination for the latest ideas." aria-label="Winning Combination. Winning setup and engine combination for the latest ideas.">Winning Combination</span></h2>
             <p class="tiny panel-intro">The prediction layer now works by selecting a setup and a combo of engines. This panel shows that winning narrative directly instead of only the old raw strategy-level combo details.</p>
             <div id="winning-combinations" class="loading panel-scroll">Loading winning combinations…</div>
           </article>
           <article class="panel panel-tall">
-            <h2>Resolved Predictions</h2>
+            <h2><span class="hint-label" data-full-label="Resolved Predictions" data-description="Most recent predictions that completed through a paper-trade TP or SL exit." aria-label="Resolved Predictions. Most recent predictions that completed through a paper-trade TP or SL exit.">Resolved Predictions</span></h2>
             <p class="tiny panel-intro">Recent predictions that already finished their lifecycle. It now shows which setup and which engine combo produced each idea, so you can judge the mechanism, not just the final direction.</p>
             <div id="predictions" class="loading panel-scroll">Loading resolved predictions…</div>
           </article>
           <article class="panel panel-medium">
-            <h2>Recent Trades</h2>
+            <h2><span class="hint-label" data-full-label="Recent Trades" data-description="Most recent closed paper trades, including maker/taker styles and exit reasons." aria-label="Recent Trades. Most recent closed paper trades, including maker/taker styles and exit reasons.">Recent Trades</span></h2>
             <p class="tiny panel-intro">Closed paper trades only. It shows what the system really executed, how those trades ended, and whether execution quality is matching what the research layer suggests.</p>
             <div id="trades" class="loading panel-scroll">Loading recent trades…</div>
           </article>
           <article class="panel panel-medium">
-            <h2>Open Positions</h2>
+            <h2><span class="hint-label" data-full-label="Open Positions" data-description="Simulated open positions with their TP/SL levels and current marked value." aria-label="Open Positions. Simulated open positions with their TP/SL levels and current marked value.">Open Positions</span></h2>
             <p class="tiny panel-intro">Current paper positions that are still alive. Use this panel to understand active exposure, where TP and SL sit, and what risk is still on the table right now.</p>
             <div id="positions" class="loading panel-scroll">Loading open positions…</div>
           </article>
         </div>
         <div class="stack">
           <article class="panel panel-tall">
-            <h2>Engine Board</h2>
+            <h2><span class="hint-label" data-full-label="Engine Board" data-description="Active engines for the selected market, including state, score, confidence, and regime fit." aria-label="Engine Board. Active engines for the selected market, including state, score, confidence, and regime fit.">Engine Board</span></h2>
             <p class="tiny panel-intro">This is the new center of the model. Strategies now act as sensors inside engines, and this board shows which engines are active, why they are trusted, and which ones are being silenced by the current regime.</p>
             <div id="engine-board" class="loading panel-scroll">Loading engine board…</div>
           </article>
           <article class="panel panel-medium">
-            <h2>Market PnL</h2>
+            <h2><span class="hint-label" data-full-label="Engine Grid" data-description="Matrix view of all markets versus all engines, colored by current state and signed score." aria-label="Engine Grid. Matrix view of all markets versus all engines, colored by current state and signed score.">Engine Grid</span></h2>
+            <p class="tiny panel-intro">Market-by-engine snapshot. Each cell compresses direction, state, and strength so you can see where engines are waking up, fading out, or lining up across several markets at once.</p>
+            <div id="engine-grid" class="loading panel-scroll">Loading engine grid…</div>
+          </article>
+          <article class="panel panel-medium">
+            <h2><span class="hint-label" data-full-label="Market PnL" data-description="Per-market paper trading PnL, hit rate, and drawdown so you can see which markets are actually worth trading." aria-label="Market PnL. Per-market paper trading PnL, hit rate, and drawdown so you can see which markets are actually worth trading.">Market PnL</span></h2>
             <p class="tiny panel-intro">Performance summary by market. It helps separate markets that look interesting for research from markets that are actually proving they deserve execution capital.</p>
             <div id="market-pnl" class="loading panel-scroll">Loading market pnl…</div>
           </article>
           <article class="panel panel-medium">
-            <h2>Discovery Board</h2>
+            <h2><span class="hint-label" data-full-label="Discovery Board" data-description="What the system is learning about engine combos and setups from recent resolved predictions." aria-label="Discovery Board. What the system is learning about engine combos and setups from recent resolved predictions.">Discovery Board</span></h2>
             <p class="tiny panel-intro">Compact learning board for the new mechanism. It summarizes which engine combos and setup narratives are resolving well, which helps you see whether the engine discovery layer is learning anything useful.</p>
             <div id="discovery" class="loading panel-scroll">Loading discovery board…</div>
           </article>
           <article class="panel panel-compact">
-            <h2>Health</h2>
+            <h2><span class="hint-label" data-full-label="Health" data-description="Ingestion freshness and service runtime health indicators." aria-label="Health. Ingestion freshness and service runtime health indicators.">Health</span></h2>
             <p class="tiny panel-intro">Operational status of the feed and the service itself. If another panel looks suspicious, check here first to confirm the data is fresh and the runtime is behaving normally.</p>
             <div id="health" class="loading">Loading service health…</div>
           </article>
@@ -364,7 +488,9 @@ export class DashboardViewService {
     </div>
     <script>
       const pollIntervalMs = ${config.DASHBOARD_POLL_INTERVAL_MS};
+      const maxTradeProximityHistory = 18;
       let activeInfoPopover = null;
+      const tradeProximityHistory = new Map();
 
       const typedCodeCatalog = {
         setup: {
@@ -974,6 +1100,14 @@ export class DashboardViewService {
         return executionDecisionMap;
       }
 
+      function createMarketSummaryMap(summary) {
+        const marketSummaryMap = {};
+        for (const market of summary.markets) {
+          marketSummaryMap[market.marketKey] = market;
+        }
+        return marketSummaryMap;
+      }
+
       function renderCrossAssetLabel(crossAssetRegime) {
         let crossAssetLabel = 'NEU';
         if (crossAssetRegime && crossAssetRegime.breadthDirection !== 'NEUTRAL') {
@@ -1155,9 +1289,8 @@ export class DashboardViewService {
         const latestPredictionMap = buildLatestPredictionMap(summary);
         const selectedPrediction = selectedBoard ? latestPredictionMap[selectedBoard.marketKey] : null;
         const rows = (selectedBoard?.engines ?? []).map((engine) => {
-          const memberHint = engine.memberContributions.map((memberContribution) => memberContribution.strategyId + ':' + formatNumber(memberContribution.signedContribution, 2)).join(', ');
           return '<tr>' +
-            '<td><strong>' + renderInfoCode('engine', engine.engineId, engine.name) + '</strong><div class="tiny"><span class="hint-text" title="' + memberHint + '">' + engine.engineId + ' · ' + engine.sourceScope + '</span></div></td>' +
+            '<td><strong>' + renderInfoCode('engine', engine.engineId, engine.name) + '</strong></td>' +
             '<td>' + renderInfoCode('engineState', engine.state, engine.state.toUpperCase()) + '</td>' +
             '<td>' + renderDirectionPill(engine.direction) + '</td>' +
             '<td>' + formatNumber(engine.score, 2) + '</td>' +
@@ -1180,6 +1313,47 @@ export class DashboardViewService {
             (selectedPrediction?.winningSetupType ? renderInfoCode('setup', selectedPrediction.winningSetupType) : '—') +
             '</div>' +
           renderTableShell('<table><thead><tr><th>' + renderHintLabel('Engine', 'Engine name plus compact id and source scope.') + '</th><th>' + renderHintLabel('State', 'Inactive, weak, active, dominant, or avoid.') + '</th><th>' + renderHintLabel('Dir', 'Direction currently implied by the engine.') + '</th><th>' + renderHintLabel('Score', 'Signed engine score after regime fit.') + '</th><th>' + renderHintLabel('Conf', 'Engine confidence.') + '</th><th>' + renderHintLabel('Fit', 'Regime fit score for this engine.') + '</th><th>' + renderHintLabel('Role', 'Default setup/narrative attached to the engine.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+      }
+
+      function renderEngineGrid(summary) {
+        const engineOrder = ['breadth_engine', 'propagation_engine', 'local_momentum_engine', 'local_microstructure_engine', 'mispricing_engine', 'reversion_engine', 'meta_engine'];
+        const engineHeaderMarkup = engineOrder.map((engineId) => {
+          return '<th>' + renderInfoCode('engine', engineId, engineId) + '</th>';
+        }).join('');
+        const rows = summary.engineBoards.map((engineBoard) => {
+          const engineMap = {};
+          for (const engine of engineBoard.engines) {
+            engineMap[engine.engineId] = engine;
+          }
+          const cellMarkup = engineOrder.map((engineId) => {
+            const engine = engineMap[engineId] ?? null;
+            const engineStateCode = engine === null ? '—' : (lookupTypedCode('engineState', engine.state)?.code ?? engine.state.toUpperCase());
+            const directionClass = engine === null ? 'muted' : engine.direction === 'UP' ? 'up' : 'down';
+            const intensity = engine === null ? 0.08 : Math.max(0.12, Math.min(0.92, Math.abs(engine.score) * 0.55 + engine.confidence * 0.25));
+            const borderOpacity = engine === null ? 0.12 : engine.isActive ? 0.32 : 0.16;
+            const backgroundColor =
+              engine === null
+                ? 'rgba(13, 27, 42, 0.04)'
+                : engine.direction === 'UP'
+                  ? 'rgba(15, 157, 88, ' + intensity + ')'
+                  : 'rgba(192, 57, 43, ' + intensity + ')';
+            const engineDescription =
+              engine === null
+                ? 'No engine data available for this market.'
+                : 'State: ' + engine.state + '. Direction: ' + engine.direction + '. Score: ' + formatNumber(engine.score, 2) + '. Confidence: ' + formatNumber(engine.confidence, 2) + '. Regime fit: ' + formatNumber(engine.regimeFit, 2) + '. ' + (engine.activationReason ?? engine.blockingReason ?? 'No extra reason available.');
+            return '<td><button type="button" class="engine-matrix-cell ' + directionClass + '" style="background:' + backgroundColor + ';border-color:rgba(13, 27, 42, ' + borderOpacity + ')" data-full-label="' + escapeHtml((engineBoard.marketKey + ' · ' + (lookupTypedCode('engine', engineId)?.label ?? engineId))) + '" data-description="' + escapeHtml(engineDescription) + '" aria-label="' + escapeHtml((engineBoard.marketKey + '. ' + engineDescription)) + '">' + engineStateCode + '</button></td>';
+          }).join('');
+          return '<tr><td class="engine-matrix-market"><strong>' + engineBoard.marketKey.replace(':', ' ') + '</strong></td>' + cellMarkup + '</tr>';
+        }).join('');
+        const tableMarkup =
+          '<div class="engine-matrix"><table class="engine-matrix-table"><thead><tr><th class="engine-matrix-market">' +
+          renderHintLabel('Mkt', 'Market key for the row.') +
+          '</th>' +
+          engineHeaderMarkup +
+          '</tr></thead><tbody>' +
+          rows +
+          '</tbody></table></div>';
+        replacePanelContent('engine-grid', tableMarkup);
       }
 
       function renderExecution(summary) {
@@ -1217,6 +1391,106 @@ export class DashboardViewService {
             '</tr>';
         }).join("");
         replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Act', 'BU = buy UP, BD = buy DOWN, NO = no trade.') + '</th><th>' + renderHintLabel('Setup', 'Winning setup type currently driving the decision.') + '</th><th>' + renderHintLabel('Eng combo', 'Winning engine combo key for the market.') + '</th><th>' + renderHintLabel('Scores', 'Research / execution / effective execution score for this market.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window.') + '</th><th>' + renderHintLabel('Mkt score', 'Effective execution score followed by recent trade count.') + '</th><th>' + renderHintLabel('Gate', 'OPN = open, BLK = blocked for the legacy combo gate.') + '</th><th>' + renderHintLabel('Cnv', 'HI/MD/LO conviction from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+      }
+
+      function clamp01(value) {
+        return Math.max(0, Math.min(1, value));
+      }
+
+      function computeTradeProximity(decision, market) {
+        const setupStrength = decision.winningSetupType === null ? 0 : clamp01((decision.winningEngineComboScore ?? 0.35) * 1.1);
+        const comboStrength = decision.hasComboGatePassed ? 1 : 0;
+        const scoreStrength = decision.effectiveExecutionScore === null ? 0 : clamp01(decision.effectiveExecutionScore);
+        const qualityStrength = clamp01(market?.quality?.score ?? 0);
+        let regimeStrength = 0.45;
+        if (decision.regimeId !== null) {
+          regimeStrength = decision.hasBreadthAlignment ? (decision.hasStrongBreadth ? 1 : 0.72) : 0.18;
+        }
+        const weightedBase =
+          setupStrength * 0.24 +
+          comboStrength * 0.18 +
+          scoreStrength * 0.22 +
+          qualityStrength * 0.18 +
+          regimeStrength * 0.18;
+        let proximity = decision.isEntryAllowed ? 1 : weightedBase;
+        if (decision.gateFailures.includes('combo_gate_failed')) {
+          proximity *= 0.58;
+        }
+        if (decision.gateFailures.includes('cross_asset_regime_conflict')) {
+          proximity *= 0.42;
+        }
+        if (decision.gateFailures.includes('market_warming_up')) {
+          proximity *= 0.62;
+        }
+        if (decision.gateFailures.includes('bootstrap_discount_too_low') || decision.gateFailures.includes('insufficient_execution_history')) {
+          proximity *= 0.74;
+        }
+        if (decision.gateFailures.includes('quality_too_low')) {
+          proximity *= 0.68;
+        }
+        if (decision.gateFailures.includes('outside_entry_band') || decision.gateFailures.includes('spread_too_wide')) {
+          proximity *= 0.82;
+        }
+        return {
+          proximity: clamp01(proximity),
+          setupStrength,
+          comboStrength,
+          scoreStrength,
+          qualityStrength,
+          regimeStrength,
+        };
+      }
+
+      function renderProximityBand(label, value, description) {
+        return '<button type="button" class="proximity-band" data-full-label="' +
+          escapeHtml(label) +
+          '" data-description="' +
+          escapeHtml(description + ' Current value: ' + formatNumber(value, 2)) +
+          '" aria-label="' +
+          escapeHtml(label + '. ' + description) +
+          '">' +
+          '<span class="proximity-bar"><span class="proximity-bar-fill" style="height:' + Math.round(clamp01(value) * 100) + '%"></span></span>' +
+          '<span class="proximity-band-label">' + escapeHtml(label) + '</span>' +
+          '</button>';
+      }
+
+      function pushTradeProximityHistory(marketKey, proximityValue) {
+        const previousHistory = tradeProximityHistory.get(marketKey) ?? [];
+        const nextHistory = [...previousHistory, proximityValue].slice(-maxTradeProximityHistory);
+        tradeProximityHistory.set(marketKey, nextHistory);
+        return nextHistory;
+      }
+
+      function renderTradeProximityTrend(historyValues) {
+        const trendMarkup = historyValues.map((historyValue) => {
+          const barHeight = Math.max(4, Math.round(clamp01(historyValue) * 20));
+          return '<span class="proximity-trend-bar" style="height:' + barHeight + 'px"></span>';
+        }).join('');
+        return '<div class="proximity-trend">' + trendMarkup + '</div>';
+      }
+
+      function renderTradeProximity(summary) {
+        const executionDecisionMap = createExecutionDecisionMap(summary);
+        const marketSummaryMap = createMarketSummaryMap(summary);
+        const rows = summary.executionNow.map((marketExecution) => {
+          const decision = executionDecisionMap[marketExecution.marketKey];
+          const market = marketSummaryMap[marketExecution.marketKey];
+          const proximity = computeTradeProximity(decision, market);
+          const proximityLabel = decision.isEntryAllowed ? 'RDY' : proximity.proximity >= 0.75 ? 'HOT' : proximity.proximity >= 0.5 ? 'MID' : 'COLD';
+          const equalizerMarkup =
+            renderProximityBand('STP', proximity.setupStrength, 'How strong the active setup and winning engine combo look for this market.') +
+            renderProximityBand('CMB', proximity.comboStrength, 'Whether the combo gate is already open.') +
+            renderProximityBand('SCR', proximity.scoreStrength, 'Effective execution score contribution.') +
+            renderProximityBand('QLT', proximity.qualityStrength, 'Current market data quality contribution.') +
+            renderProximityBand('REG', proximity.regimeStrength, 'Cross-asset regime support contribution.');
+          const historyValues = pushTradeProximityHistory(marketExecution.marketKey, proximity.proximity);
+          return '<div class="proximity-row">' +
+            '<div><strong>' + marketExecution.marketKey.replace(':', ' ') + '</strong></div>' +
+            '<div class="proximity-eq">' + equalizerMarkup + '</div>' +
+            '<div class="proximity-score"><strong>' + Math.round(proximity.proximity * 100) + '%</strong><span class="tiny">' + proximityLabel + '</span>' + renderTradeProximityTrend(historyValues) + '</div>' +
+            '</div>';
+        }).join('');
+        replacePanelContent('trade-proximity', '<div class="proximity-list">' + rows + '</div>');
       }
 
       function renderMarketPnl(summary) {
@@ -1329,8 +1603,10 @@ export class DashboardViewService {
         renderMarkets(summary);
         renderPredictions(summary);
         renderExecution(summary);
+        renderTradeProximity(summary);
         renderWinningCombinations(summary);
         renderEngineBoard(summary);
+        renderEngineGrid(summary);
         renderMarketPnl(summary);
         renderDiscoveryBoard(summary);
         renderPositions(summary);
@@ -1339,7 +1615,7 @@ export class DashboardViewService {
       }
 
       document.addEventListener('click', (event) => {
-        const targetElement = event.target instanceof HTMLElement ? event.target.closest('.code-chip') : null;
+        const targetElement = event.target instanceof HTMLElement ? event.target.closest('.code-chip, .hint-label') : null;
         if (targetElement instanceof HTMLElement) {
           event.preventDefault();
           event.stopPropagation();

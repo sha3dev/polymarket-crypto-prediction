@@ -24,6 +24,8 @@ test("ServiceRuntime serves the dashboard HTML", async () => {
 
   assert.equal(response.status, 200);
   assert.match(html, /Polymarket 5m \/ 15m predictor/);
+  assert.match(html, /Engine Grid/);
+  assert.match(html, /Trade Proximity/);
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {

@@ -44,6 +44,20 @@ test("ExecutionPolicyService blocks ETH when BTC is clearly moving the other way
   assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
 });
 
+test("ExecutionPolicyService blocks ETH UP when BTC UP token momentum is not supportive", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "eth", "UP", "UP", {
+    btcUpTokenMomentum: 0.001,
+  });
+  const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("eth"), prediction, null, buildMarketPerformanceSummary("eth"));
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
+  assert.equal(executionDecision.isEntryAllowed, false);
+  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+});
+
 test("ExecutionPolicyService blocks SOL when BTC and ETH align against it", () => {
   const executionPolicyService = new ExecutionPolicyService();
   const prediction = buildPredictionResponse("UP", "sol", "DOWN", "DOWN");
@@ -77,6 +91,21 @@ test("ExecutionPolicyService allows SOL only when BTC and ETH align with it", ()
     throw new Error("expected execution decision");
   }
   assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), false);
+});
+
+test("ExecutionPolicyService blocks SOL UP when BTC and ETH UP tokens do not both support it", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "sol", "UP", "UP", {
+    btcUpTokenMomentum: 0.02,
+    ethUpTokenMomentum: 0.001,
+  });
+  const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("sol"), prediction, null, buildMarketPerformanceSummary("sol"));
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
+  assert.equal(executionDecision.isEntryAllowed, false);
+  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
 });
 
 function buildMarketSnapshotSlice(asset: "btc" | "eth" | "sol" | "xrp" = "btc"): MarketSnapshotSlice {
@@ -140,6 +169,12 @@ function buildPredictionResponse(
   asset: "btc" | "eth" | "sol" | "xrp" = "btc",
   btcDirection: "UP" | "DOWN" | "NEUTRAL" = "UP",
   ethDirection: "UP" | "DOWN" | "NEUTRAL" = "UP",
+  tokenMomentumOverrides: Partial<{
+    btcUpTokenMomentum: number;
+    btcDownTokenMomentum: number;
+    ethUpTokenMomentum: number;
+    ethDownTokenMomentum: number;
+  }> = {},
 ): PredictionResponse {
   const positionSide: PositionSide = direction === "UP" ? "up" : "down";
   return {
@@ -185,6 +220,10 @@ function buildPredictionResponse(
       breadthDirection: "UP",
       btcDirection,
       ethDirection,
+      btcUpTokenMomentum: tokenMomentumOverrides.btcUpTokenMomentum ?? 0.02,
+      btcDownTokenMomentum: tokenMomentumOverrides.btcDownTokenMomentum ?? 0.02,
+      ethUpTokenMomentum: tokenMomentumOverrides.ethUpTokenMomentum ?? 0.02,
+      ethDownTokenMomentum: tokenMomentumOverrides.ethDownTokenMomentum ?? 0.02,
       anchorAsset: "btc",
       anchorDirection: btcDirection === "NEUTRAL" ? ethDirection : btcDirection,
       breadthStrength: 0.91,

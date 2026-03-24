@@ -663,6 +663,14 @@ export class MarketStateService {
     return directionalMove;
   }
 
+  private resolveTokenMomentum(window: MarketWindow, asset: AssetSymbol, tokenSide: TriggeredToken): number {
+    const marketRecord = this.requireMarketRecord(this.buildMarketKey(asset, window));
+    const previousTokenPrice = marketRecord.previous === null ? null : this.resolveTriggerPrice(marketRecord.previous, tokenSide);
+    const currentTokenPrice = marketRecord.latest === null ? null : this.resolveTriggerPrice(marketRecord.latest, tokenSide);
+    const tokenMomentum = this.computeSignedChange(previousTokenPrice, currentTokenPrice);
+    return tokenMomentum;
+  }
+
   private buildCrossAssetRegime(marketKey: MarketKey, window: MarketWindow): CrossAssetRegime {
     const qualifyingMoves: Array<{ marketKey: MarketKey; signedMove: number }> = [];
     const targetMarketRecord = this.requireMarketRecord(marketKey);
@@ -698,6 +706,10 @@ export class MarketStateService {
     const anchorSignal = this.resolveAnchorSignal(window);
     const btcDirection = this.resolveDirectionalMove(window, "btc");
     const ethDirection = this.resolveDirectionalMove(window, "eth");
+    const btcUpTokenMomentum = this.resolveTokenMomentum(window, "btc", "up");
+    const btcDownTokenMomentum = this.resolveTokenMomentum(window, "btc", "down");
+    const ethUpTokenMomentum = this.resolveTokenMomentum(window, "eth", "up");
+    const ethDownTokenMomentum = this.resolveTokenMomentum(window, "eth", "down");
     const breadthParticipation = qualifyingMarketCount === 0 ? 0 : alignedMarketCount / qualifyingMarketCount;
     const averageSignedMove =
       dominantMoves.length === 0
@@ -742,6 +754,10 @@ export class MarketStateService {
       breadthDirection,
       btcDirection,
       ethDirection,
+      btcUpTokenMomentum,
+      btcDownTokenMomentum,
+      ethUpTokenMomentum,
+      ethDownTokenMomentum,
       anchorAsset: anchorSignal.anchorAsset,
       anchorDirection: anchorSignal.anchorDirection,
       breadthStrength,

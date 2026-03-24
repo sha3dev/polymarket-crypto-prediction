@@ -126,6 +126,21 @@ export class ExecutionPolicyService {
     }
   }
 
+  private hasAnchorTokenMomentumSupport(prediction: PredictionResponse, asset: MarketSnapshotSlice["asset"]): boolean {
+    const tokenMomentumThreshold = config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD;
+    const isUpPrediction = prediction.direction === "UP";
+    const btcRequiredMomentum = isUpPrediction ? prediction.crossAssetRegime.btcUpTokenMomentum : prediction.crossAssetRegime.btcDownTokenMomentum;
+    const ethRequiredMomentum = isUpPrediction ? prediction.crossAssetRegime.ethUpTokenMomentum : prediction.crossAssetRegime.ethDownTokenMomentum;
+    let hasAnchorTokenMomentumSupport = true;
+    if (asset === "eth") {
+      hasAnchorTokenMomentumSupport = btcRequiredMomentum >= tokenMomentumThreshold;
+    }
+    if (asset === "sol" || asset === "xrp") {
+      hasAnchorTokenMomentumSupport = btcRequiredMomentum >= tokenMomentumThreshold && ethRequiredMomentum >= tokenMomentumThreshold;
+    }
+    return hasAnchorTokenMomentumSupport;
+  }
+
   private appendAnchorGateFailures(gateFailures: string[], prediction: PredictionResponse, marketSlice: MarketSnapshotSlice): void {
     const btcDirection = prediction.crossAssetRegime.btcDirection;
     const ethDirection = prediction.crossAssetRegime.ethDirection;
@@ -135,11 +150,17 @@ export class ExecutionPolicyService {
       if (hasEthConflictWithBtc) {
         this.appendGateFailureIfMissing(gateFailures, "cross_asset_regime_conflict");
       }
+      if (!this.hasAnchorTokenMomentumSupport(prediction, marketSlice.asset)) {
+        this.appendGateFailureIfMissing(gateFailures, "cross_asset_regime_conflict");
+      }
     }
     if (marketSlice.asset === "sol" || marketSlice.asset === "xrp") {
       const hasMissingDirectionalAlignment = btcDirection === "NEUTRAL" || ethDirection === "NEUTRAL" || btcDirection !== ethDirection;
       const hasAltDirectionConflict = !hasMissingDirectionalAlignment && predictionDirection !== btcDirection;
       if (hasMissingDirectionalAlignment || hasAltDirectionConflict) {
+        this.appendGateFailureIfMissing(gateFailures, "cross_asset_regime_conflict");
+      }
+      if (!this.hasAnchorTokenMomentumSupport(prediction, marketSlice.asset)) {
         this.appendGateFailureIfMissing(gateFailures, "cross_asset_regime_conflict");
       }
     }
