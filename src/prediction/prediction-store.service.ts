@@ -72,6 +72,12 @@ export class PredictionStoreService {
     return predictions;
   }
 
+  public getPredictionCount(marketKey: MarketKey): number {
+    const marketPredictions = this.requireHistory(marketKey);
+    const predictionCount = marketPredictions.length;
+    return predictionCount;
+  }
+
   public getPendingPredictions(dueAtOrBefore: number): PredictionRecord[] {
     const pendingPredictions: PredictionRecord[] = [];
     for (const marketPredictions of this.predictionHistory.values()) {

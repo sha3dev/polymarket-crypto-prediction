@@ -355,6 +355,9 @@ export class DashboardViewService {
         if (reasonCode === 'market_score_too_low') {
           humanReason = 'market score too low';
         }
+        if (reasonCode === 'market_warming_up') {
+          humanReason = 'market still warming up';
+        }
         if (reasonCode === 'order_notional_too_low') {
           humanReason = 'order below $1 minimum';
         }
@@ -393,6 +396,22 @@ export class DashboardViewService {
         return whyNot;
       }
 
+      function renderReasonCodes(decision) {
+        let reasonCodes = 'READY';
+        if (decision.isEntryAllowed) {
+          if (decision.executionReason !== null) {
+            reasonCodes = renderReasonCode(humanizeReason(decision.executionReason));
+          }
+        } else {
+          if (decision.gateFailures.length > 0) {
+            reasonCodes = decision.gateFailures
+              .map((reasonCode) => renderReasonCode(humanizeReason(reasonCode)))
+              .join('+');
+          }
+        }
+        return reasonCodes;
+      }
+
       function renderTriggerCode(triggerType) {
         let triggerCode = triggerType;
         if (triggerType === 'crossed_half') {
@@ -413,6 +432,26 @@ export class DashboardViewService {
           executionStyleCode = 'T';
         }
         return executionStyleCode;
+      }
+
+      function renderStatusCode(status) {
+        let statusCode = status;
+        if (status === 'entry_pending_maker') {
+          statusCode = 'EPM';
+        }
+        if (status === 'open') {
+          statusCode = 'OPN';
+        }
+        if (status === 'exit_pending_maker') {
+          statusCode = 'XPM';
+        }
+        if (status === 'closed') {
+          statusCode = 'CLD';
+        }
+        if (status === 'idle') {
+          statusCode = 'IDL';
+        }
+        return statusCode;
       }
 
       function renderReasonCode(reasonCode) {
@@ -566,7 +605,7 @@ export class DashboardViewService {
       function renderExecution(summary) {
         const rows = summary.executionNow.map((marketExecution) => {
           const whyNot = renderWhyNot(marketExecution.decision);
-          const reasonCode = renderReasonCode(whyNot);
+          const reasonCodes = renderReasonCodes(marketExecution.decision);
           const marketScoreLabel =
             marketExecution.decision.marketScore === null
               ? '—'
@@ -581,7 +620,7 @@ export class DashboardViewService {
             '<td><span title="' + (marketExecution.decision.executionStyle === null ? 'no execution style' : marketExecution.decision.executionStyle) + '">' + renderExecutionStyleCode(marketExecution.decision.executionStyle) + '</span></td>' +
             '<td>' + marketScoreLabel + '</td>' +
             '<td>' + renderConvictionLabel(marketExecution.decision.positionSizeSuggestion) + '</td>' +
-            '<td><span class="truncate-cell" title="' + whyNot + '">' + reasonCode + '</span></td>' +
+            '<td><span class="truncate-cell" title="' + whyNot + '">' + reasonCodes + '</span></td>' +
             '</tr>';
         }).join("");
         document.getElementById("execution").classList.remove("loading");
@@ -593,7 +632,7 @@ export class DashboardViewService {
           return '<tr>' +
             '<td><strong>' + position.asset.toUpperCase() + '</strong> <span class="tiny">' + position.window + '</span></td>' +
             '<td>' + position.positionSide.toUpperCase() + '</td>' +
-            '<td>' + position.status + '</td>' +
+            '<td><span title="' + position.status.replaceAll('_', ' ') + '">' + renderStatusCode(position.status) + '</span></td>' +
             '<td>' + position.shareCount + '</td>' +
             '<td>' + formatNumber(position.entryFillPrice) + '</td>' +
             '<td>' + formatNumber(position.liveTokenPrice) + '</td>' +

@@ -224,6 +224,9 @@ export class ExecutionPolicyService {
           if (marketPerformanceSummary?.hasSufficientHistory && marketPerformanceSummary.score < config.MIN_MARKET_SCORE_FOR_ENTRY) {
             gateFailures.push("market_score_too_low");
           }
+          if (marketPerformanceSummary !== null && !marketPerformanceSummary.hasWarmupComplete) {
+            gateFailures.push("market_warming_up");
+          }
           const orderShareCount = referencePrice === null ? 0 : this.computeMinimumShareCount(referencePrice);
           const orderNotionalUsd = referencePrice === null ? null : this.computeOrderNotionalUsd(referencePrice, orderShareCount);
           if (orderNotionalUsd !== null && orderNotionalUsd < config.MIN_ORDER_USD) {

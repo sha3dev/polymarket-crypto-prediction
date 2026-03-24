@@ -215,6 +215,11 @@ export class PredictionEngineService {
     return strategySummaries;
   }
 
+  public getPredictionCount(asset: AssetSymbol, window: MarketWindow): number {
+    const predictionCount = this.predictionStoreService.getPredictionCount(`${asset}:${window}`);
+    return predictionCount;
+  }
+
   public getPendingCount(): number {
     return this.predictionStoreService.getPendingCount();
   }

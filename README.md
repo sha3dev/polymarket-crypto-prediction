@@ -35,6 +35,7 @@ Use this package when you want one service that can answer both:
 - Simulates execution for token entries near `0.5` with token-price TP/SL.
 - Decides `maker` vs `taker` from order-book conditions and urgency.
 - Sizes paper trades so they respect Polymarket minimums of `5` shares and `$1` notional.
+- Warms up each market with a few predictions before the paper execution overlay is allowed to trade it.
 - Exposes REST APIs plus a single-screen Hono dashboard with hover hints.
 
 ## Installation
@@ -445,6 +446,7 @@ Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-c
 - `MARKET_SCORE_WINDOW_SECONDS`: rolling time window in seconds used to score each market from recent paper trades.
 - `MIN_MARKET_TRADES_FOR_SCORING`: minimum recent trade count before a market score is considered actionable.
 - `MIN_MARKET_SCORE_FOR_ENTRY`: minimum market score required before new entries are allowed in that market.
+- `MIN_MARKET_PREDICTIONS_BEFORE_ENTRY`: minimum prediction count required before a market leaves warm-up and paper trading is allowed.
 - `ENTRY_TARGET_PRICE`: preferred entry anchor for the paper execution overlay.
 - `ENTRY_BAND_HALF_WIDTH`: allowed deviation around `ENTRY_TARGET_PRICE`.
 - `MIN_ORDER_USD`: minimum notional per paper trade so entries respect Polymarket sizing rules.
@@ -497,6 +499,7 @@ Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-c
 
 Check:
 
+- `MIN_MARKET_PREDICTIONS_BEFORE_ENTRY`
 - `MIN_ENTRY_CONFIDENCE`
 - `MIN_MARKET_QUALITY_FOR_ENTRY`
 - `ENTRY_BAND_HALF_WIDTH`

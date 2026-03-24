@@ -416,6 +416,7 @@ export class PaperExecutionService {
 
   private buildMarketPerformanceSummary(asset: AssetSymbol, window: MarketWindow): MarketPerformanceSummary {
     const marketKey = this.buildMarketKey(asset, window);
+    const predictionCount = this.predictionEngineService.getPredictionCount(asset, window);
     const windowedTrades = this.readWindowedTrades(marketKey).sort((leftTrade, rightTrade) => {
       return leftTrade.exitFilledAt - rightTrade.exitFilledAt;
     });
@@ -435,15 +436,17 @@ export class PaperExecutionService {
       }
     }
     const hasSufficientHistory = tradeCount >= config.MIN_MARKET_TRADES_FOR_SCORING;
+    const hasWarmupComplete = predictionCount >= config.MIN_MARKET_PREDICTIONS_BEFORE_ENTRY;
     const score = this.computeMarketScore(windowedTrades);
     let status: MarketPerformanceSummary["status"] = "warming_up";
-    if (hasSufficientHistory) {
+    if (hasWarmupComplete && hasSufficientHistory) {
       status = score >= config.MIN_MARKET_SCORE_FOR_ENTRY ? "good" : "avoid";
     }
     return {
       marketKey,
       asset,
       window,
+      predictionCount,
       score,
       tradeCount,
       winRate: tradeCount === 0 ? 0.5 : winCount / tradeCount,
@@ -451,6 +454,7 @@ export class PaperExecutionService {
       averageNetPnlPerTrade,
       maxDrawdown: marketEquityState.maxDrawdown,
       hasSufficientHistory,
+      hasWarmupComplete,
       status,
     };
   }

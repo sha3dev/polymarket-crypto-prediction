@@ -110,6 +110,7 @@ export type MarketPerformanceSummary = {
   marketKey: MarketKey;
   asset: AssetSymbol;
   window: MarketWindow;
+  predictionCount: number;
   score: number;
   tradeCount: number;
   winRate: number;
@@ -117,6 +118,7 @@ export type MarketPerformanceSummary = {
   averageNetPnlPerTrade: number;
   maxDrawdown: number;
   hasSufficientHistory: boolean;
+  hasWarmupComplete: boolean;
   status: "warming_up" | "good" | "avoid";
 };
 export type PortfolioExecutionSummary = {
