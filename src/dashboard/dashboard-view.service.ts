@@ -96,20 +96,31 @@ export class DashboardViewService {
         display: block;
         font-size: 24px;
       }
-      .dashboard-grid {
+      .overview-grid {
         display: grid;
-        grid-template-columns: repeat(12, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.95fr);
         gap: 18px;
         align-items: start;
+      }
+      .support-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+        align-items: start;
+        margin-top: 18px;
+      }
+      .health-section {
+        margin-top: 18px;
+      }
+      .stack {
+        display: grid;
+        gap: 18px;
+        align-content: start;
       }
       .panel {
         background: var(--panel);
         padding: 18px;
       }
-      .span-12 { grid-column: span 12; }
-      .span-7 { grid-column: span 7; }
-      .span-5 { grid-column: span 5; }
-      .span-4 { grid-column: span 4; }
       .panel-tall { min-height: 420px; }
       .panel-medium { min-height: 308px; }
       .panel-compact { min-height: 132px; }
@@ -220,9 +231,8 @@ export class DashboardViewService {
       }
       @media (max-width: 1100px) {
         .hero-head { grid-template-columns: 1fr; }
-        .dashboard-grid { grid-template-columns: 1fr; }
+        .overview-grid, .support-grid { grid-template-columns: 1fr; }
         .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .span-12, .span-7, .span-5, .span-4 { grid-column: auto; }
         .panel-tall, .panel-medium, .panel-compact { min-height: 0; }
         .panel-scroll { max-height: none; }
       }
@@ -252,53 +262,61 @@ export class DashboardViewService {
           </div>
         </article>
       </section>
-      <section class="dashboard-grid">
-          <article class="panel panel-compact span-7">
+      <section class="overview-grid">
+        <div class="stack">
+          <article class="panel panel-compact">
             <h2><span class="label-with-hint"><span class="hint-text" title="Current state for all eight monitored markets, including token midpoints, cooldown, and data quality.">Markets</span></span></h2>
             <p class="tiny panel-intro">Snapshot of the monitored markets right now. It lets you check price level, data freshness, and whether the market quality is good enough to trust what comes later.</p>
             <div id="markets" class="loading panel-scroll">Loading market state…</div>
           </article>
-          <article class="panel panel-tall span-5">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Per-market strategy board. The selected market uses local weights and local rolling performance, not the global aggregate.">Strategies</span></span></h2>
-            <p class="tiny panel-intro">Breakdown of the individual strategies behind the ensemble for the selected market. It tells you who is contributing, with what weight, and which signals are actually earning trust.</p>
-            <div id="strategies" class="loading panel-scroll">Loading strategy ranking…</div>
-          </article>
-          <article class="panel panel-medium span-7">
+          <article class="panel panel-medium">
             <h2><span class="label-with-hint"><span class="hint-text" title="Current executable entry decision per market: side, TP, SL, and maker versus taker choice.">Execution Now</span></span></h2>
             <p class="tiny panel-intro">This is the actual trading gate. It shows which markets are executable, what side and levels the engine prefers, and which rule is blocking entry when no trade should be taken.</p>
             <div id="execution" class="loading panel-scroll">Loading execution decisions…</div>
           </article>
-          <article class="panel panel-medium span-5">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Per-market paper trading PnL, hit rate, and drawdown so you can see which markets are actually worth trading.">Market PnL</span></span></h2>
-            <p class="tiny panel-intro">Performance summary by market. It helps separate markets that look interesting for research from markets that are actually proving they deserve execution capital.</p>
-            <div id="market-pnl" class="loading panel-scroll">Loading market pnl…</div>
-          </article>
-          <article class="panel panel-tall span-7">
+          <article class="panel panel-tall">
             <h2><span class="label-with-hint"><span class="hint-text" title="Most recent predictions that completed through a paper-trade TP or SL exit.">Resolved Predictions</span></span></h2>
             <p class="tiny panel-intro">Recent predictions that already finished their lifecycle. Use it to judge whether the engine is reading direction well once ideas are forced to end as TP or SL outcomes.</p>
             <div id="predictions" class="loading panel-scroll">Loading resolved predictions…</div>
           </article>
-          <article class="panel panel-medium span-5">
+        </div>
+        <div class="stack">
+          <article class="panel panel-tall">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Per-market strategy board. The selected market uses local weights and local rolling performance, not the global aggregate.">Strategies</span></span></h2>
+            <p class="tiny panel-intro">Breakdown of the individual strategies behind the ensemble for the selected market. It tells you who is contributing, with what weight, and which signals are actually earning trust.</p>
+            <div id="strategies" class="loading panel-scroll">Loading strategy ranking…</div>
+          </article>
+          <article class="panel panel-medium">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Per-market paper trading PnL, hit rate, and drawdown so you can see which markets are actually worth trading.">Market PnL</span></span></h2>
+            <p class="tiny panel-intro">Performance summary by market. It helps separate markets that look interesting for research from markets that are actually proving they deserve execution capital.</p>
+            <div id="market-pnl" class="loading panel-scroll">Loading market pnl…</div>
+          </article>
+          <article class="panel panel-medium">
             <h2><span class="label-with-hint"><span class="hint-text" title="Best current pairs and trios by market, ranked by combo score and lift over their best member.">Top Combos</span></span></h2>
             <p class="tiny panel-intro">Best dynamic pairs and trios discovered by the engine. This is the fast way to see which combinations are strong enough to open the combo gate and support a real execution decision.</p>
             <div id="combos" class="loading panel-scroll">Loading combo ranking…</div>
           </article>
-          <article class="panel panel-medium span-4">
+        </div>
+      </section>
+      <section class="support-grid">
+          <article class="panel panel-medium">
             <h2><span class="label-with-hint"><span class="hint-text" title="How much recent predictions changed after combo boosts or combo disagreement penalties.">Combo Influence</span></span></h2>
             <p class="tiny panel-intro">Shows how dynamic pairs and trios are altering the base signal. If confidence moves a lot here, combos are heavily shaping the final view instead of just the standalone strategies.</p>
             <div id="combo-influence" class="loading panel-scroll">Loading combo influence…</div>
           </article>
-          <article class="panel panel-medium span-4">
+          <article class="panel panel-medium">
             <h2><span class="label-with-hint"><span class="hint-text" title="Most recent closed paper trades, including maker/taker styles and exit reasons.">Recent Trades</span></span></h2>
             <p class="tiny panel-intro">Closed paper trades only. It shows what the system really executed, how those trades ended, and whether execution quality is matching what the research layer suggests.</p>
             <div id="trades" class="loading panel-scroll">Loading recent trades…</div>
           </article>
-          <article class="panel panel-medium span-4">
+          <article class="panel panel-medium">
             <h2><span class="label-with-hint"><span class="hint-text" title="Simulated open positions with their TP/SL levels and current marked value.">Open Positions</span></span></h2>
             <p class="tiny panel-intro">Current paper positions that are still alive. Use this panel to understand active exposure, where TP and SL sit, and what risk is still on the table right now.</p>
             <div id="positions" class="loading panel-scroll">Loading open positions…</div>
           </article>
-          <article class="panel panel-compact span-12">
+      </section>
+      <section class="health-section">
+          <article class="panel panel-compact">
             <h2><span class="label-with-hint"><span class="hint-text" title="Ingestion freshness and service runtime health indicators.">Health</span></span></h2>
             <p class="tiny panel-intro">Operational status of the feed and the service itself. If another panel looks suspicious, check here first to confirm the data is fresh and the runtime is behaving normally.</p>
             <div id="health" class="loading">Loading service health…</div>
@@ -651,17 +669,18 @@ export class DashboardViewService {
 
       function renderCrossAssetLabel(crossAssetRegime) {
         let crossAssetLabel = 'NEU';
-        if (crossAssetRegime && crossAssetRegime.hasStrongBreadth && crossAssetRegime.breadthDirection !== 'NEUTRAL') {
-          crossAssetLabel = crossAssetRegime.breadthDirection + ' ' + formatNumber(crossAssetRegime.breadthStrength, 2);
+        if (crossAssetRegime && crossAssetRegime.breadthDirection !== 'NEUTRAL') {
+          const strengthLabel = formatNumber(crossAssetRegime.breadthStrength, 2);
+          crossAssetLabel = crossAssetRegime.breadthDirection + (crossAssetRegime.hasStrongBreadth ? ' STR ' : ' WK ') + strengthLabel;
         }
         return crossAssetLabel;
       }
 
       function renderCrossAssetHover(crossAssetRegime) {
-        let crossAssetHover = 'no strong cross-asset breadth regime';
-        if (crossAssetRegime && crossAssetRegime.hasStrongBreadth && crossAssetRegime.breadthDirection !== 'NEUTRAL') {
+        let crossAssetHover = 'neutral cross-asset regime';
+        if (crossAssetRegime && crossAssetRegime.breadthDirection !== 'NEUTRAL') {
           crossAssetHover =
-            'strong ' +
+            (crossAssetRegime.hasStrongBreadth ? 'strong ' : 'weak ') +
             crossAssetRegime.breadthDirection.toLowerCase() +
             ' breadth, strength ' +
             formatNumber(crossAssetRegime.breadthStrength, 2) +
@@ -723,9 +742,9 @@ export class DashboardViewService {
           const regimeHover =
             executionDecision === undefined
               ? 'no execution decision yet'
-              : executionDecision.hasStrongBreadth
-                ? 'strong ' + executionDecision.breadthDirection.toLowerCase() + ' breadth, strength ' + formatNumber(executionDecision.breadthStrength, 2)
-                : 'no strong cross-asset breadth regime';
+              : executionDecision.breadthDirection === 'NEUTRAL'
+                ? 'neutral cross-asset regime'
+                : (executionDecision.hasStrongBreadth ? 'strong ' : 'weak ') + executionDecision.breadthDirection.toLowerCase() + ' breadth, strength ' + formatNumber(executionDecision.breadthStrength, 2);
           return '<tr>' +
             '<td><strong>' + market.asset.toUpperCase() + '</strong> <span class="tiny">' + market.window + '</span></td>' +
             '<td>' + formatNumber(market.latestUpMidpoint) + '</td>' +
@@ -737,7 +756,7 @@ export class DashboardViewService {
             '</tr>';
         }).join("");
         document.getElementById("markets").classList.remove("loading");
-        document.getElementById("markets").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP mid', 'Current midpoint for the UP token. Falls back to price only outside the midpoint field, not in this display.') + '</th><th>' + renderHintLabel('DOWN mid', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent trading score for this market only. It reflects local hit rate, PnL, drawdown, and sample size over the rolling market-score window.') + '</th><th>' + renderHintLabel('Regime', 'Current cross-asset breadth regime for this window. It tells you whether the whole crypto set is moving together.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        document.getElementById("markets").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP mid', 'Current midpoint for the UP token. Falls back to price only outside the midpoint field, not in this display.') + '</th><th>' + renderHintLabel('DOWN mid', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent trading score for this market only. It reflects local hit rate, PnL, drawdown, and sample size over the rolling market-score window.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset regime for this window. NEU means neutral. WK means directional but not yet strong enough to open the strong-breadth gate. STR means strong breadth.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderPredictions(summary) {
@@ -766,7 +785,7 @@ export class DashboardViewService {
             '</tr>';
         }).join("");
         document.getElementById("predictions").classList.remove("loading");
-        document.getElementById("predictions").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final ensemble direction that was traded.') + '</th><th>' + renderHintLabel('Conf', 'Normalized ensemble confidence between 0 and 1.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. NH = near half, XH = crossed half.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime attached to this prediction at creation time.') + '</th><th>' + renderHintLabel('Lead', 'Leader market or lag marker. LAG means this market looked like a catch-up candidate.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        document.getElementById("predictions").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final ensemble direction that was traded.') + '</th><th>' + renderHintLabel('Conf', 'Normalized ensemble confidence between 0 and 1.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime attached to this prediction at creation time. WK means directional but weak. STR means strong breadth.') + '</th><th>' + renderHintLabel('Lead', 'Leader market or lag marker. LAG means this market looked like a catch-up candidate.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderStrategies(summary) {
@@ -834,13 +853,13 @@ export class DashboardViewService {
               : formatNumber(marketExecution.decision.researchScore, 2) + ' / ' + formatNumber(marketExecution.decision.executionScore) + ' / ' + formatNumber(marketExecution.decision.effectiveExecutionScore, 2);
           const comboGateLabel = marketExecution.decision.hasComboGatePassed ? '<span class="pill up">OPEN</span>' : '<span class="pill down">BLOCK</span>';
           const breadthLabel =
-            !marketExecution.decision.hasStrongBreadth || marketExecution.decision.breadthDirection === 'NEUTRAL'
+            marketExecution.decision.breadthDirection === 'NEUTRAL'
               ? 'NEU'
-              : marketExecution.decision.breadthDirection + ' ' + formatNumber(marketExecution.decision.breadthStrength, 2);
+              : marketExecution.decision.breadthDirection + (marketExecution.decision.hasStrongBreadth ? ' STR ' : ' WK ') + formatNumber(marketExecution.decision.breadthStrength, 2);
           const breadthHover =
-            !marketExecution.decision.hasStrongBreadth || marketExecution.decision.breadthDirection === 'NEUTRAL'
-              ? 'no strong cross-asset breadth regime'
-              : 'strong ' + marketExecution.decision.breadthDirection.toLowerCase() + ' breadth, strength ' + formatNumber(marketExecution.decision.breadthStrength, 2);
+            marketExecution.decision.breadthDirection === 'NEUTRAL'
+              ? 'neutral cross-asset regime'
+              : (marketExecution.decision.hasStrongBreadth ? 'strong ' : 'weak ') + marketExecution.decision.breadthDirection.toLowerCase() + ' breadth, strength ' + formatNumber(marketExecution.decision.breadthStrength, 2);
           return '<tr>' +
             '<td><strong>' + marketExecution.asset.toUpperCase() + '</strong> <span class="tiny">' + marketExecution.window + '</span></td>' +
             '<td>' + renderActionLabel(marketExecution.decision) + '</td>' +
