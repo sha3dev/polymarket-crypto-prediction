@@ -193,16 +193,8 @@ export class DashboardViewService {
         gap: 4px;
         align-items: center;
         white-space: nowrap;
-        overflow-x: auto;
         max-width: 100%;
-        padding-bottom: 2px;
-      }
-      .code-chip-group::-webkit-scrollbar {
-        height: 6px;
-      }
-      .code-chip-group::-webkit-scrollbar-thumb {
-        background: rgba(13, 27, 42, 0.12);
-        border-radius: 999px;
+        overflow: hidden;
       }
       .info-popover {
         position: fixed;
@@ -497,17 +489,44 @@ export class DashboardViewService {
       }
 
       function renderEngineComboCodes(engineIds) {
-        const comboMarkup = engineIds.length === 0
-          ? '—'
-          : '<span class="code-chip-group">' + engineIds.map((engineId) => renderInfoCode('engine', engineId)).join('') + '</span>';
+        const comboMarkup = renderCodeListGroup('engine', engineIds, 3);
         return comboMarkup;
       }
 
       function renderReasonCodeGroup(reasonCodes) {
         const reasonMarkup = reasonCodes.length === 0
           ? renderInfoCode('reason', 'READY', 'RDY')
-          : '<span class="code-chip-group">' + reasonCodes.map((reasonCode) => renderInfoCode('reason', reasonCode, reasonCode)).join('') + '</span>';
+          : renderCodeListGroup('reason', reasonCodes, 4);
         return reasonMarkup;
+      }
+
+      function renderOverflowCode(hiddenCount, hiddenLabels, hiddenDescriptions) {
+        const overflowMarkup = renderInfoCode(
+          'overflow',
+          'overflow',
+          '+' + hiddenCount,
+        ).replace(
+          'data-full-label="overflow"',
+          'data-full-label="' + escapeHtml('Hidden items (' + hiddenCount + ')') + '"',
+        ).replace(
+          'data-description="No extra description available."',
+          'data-description="' + escapeHtml(hiddenLabels.join(', ') + '. ' + hiddenDescriptions.join(' ')) + '"',
+        );
+        return overflowMarkup;
+      }
+
+      function renderCodeListGroup(type, values, maxVisible) {
+        let groupMarkup = '—';
+        if (values.length > 0) {
+          const visibleValues = values.slice(0, maxVisible);
+          const hiddenValues = values.slice(maxVisible);
+          const visibleMarkup = visibleValues.map((value) => renderInfoCode(type, value, value)).join('');
+          const hiddenLabels = hiddenValues.map((value) => lookupTypedCode(type, value)?.label ?? String(value));
+          const hiddenDescriptions = hiddenValues.map((value) => lookupTypedCode(type, value)?.description ?? 'No description available.');
+          const overflowMarkup = hiddenValues.length === 0 ? '' : renderOverflowCode(hiddenValues.length, hiddenLabels, hiddenDescriptions);
+          groupMarkup = '<span class="code-chip-group">' + visibleMarkup + overflowMarkup + '</span>';
+        }
+        return groupMarkup;
       }
 
       function closeInfoPopover() {
@@ -1087,21 +1106,12 @@ export class DashboardViewService {
           const triggerLabel = humanizeReason(prediction.trigger.triggerType) === prediction.trigger.triggerType
             ? prediction.trigger.triggerType.replace('_', ' ')
             : humanizeReason(prediction.trigger.triggerType);
-          const regimeLabel = renderRegimeCode(prediction.crossAssetRegime);
-          const regimeHover = renderCrossAssetHover(prediction.crossAssetRegime);
-          const leadLabel =
-            prediction.crossAssetRegime.hasLeaderLaggardOpportunity
-              ? 'LAG ' + formatNumber(prediction.crossAssetRegime.lagRatio, 2)
-              : prediction.crossAssetRegime.leaderMarketKey === null
-                ? '—'
-                : prediction.crossAssetRegime.leaderMarketKey.toUpperCase();
           return '<tr>' +
             '<td><strong>' + prediction.asset.toUpperCase() + '</strong> <span class="tiny">' + prediction.window + '</span></td>' +
             '<td><span class="pill ' + directionClass + '">' + prediction.direction + '</span></td>' +
             '<td>' + formatNumber(prediction.confidence) + '</td>' +
             '<td><span title="' + triggerLabel + '">' + renderTriggerCode(prediction.trigger.triggerType) + '</span></td>' +
             '<td>' + renderInfoCode('setup', prediction.winningSetupType) + '</td>' +
-            '<td><span title="' + regimeHover + '">' + regimeLabel + '</span></td>' +
             '<td><span title="' + prediction.winningEngineIds.join(', ') + '">' + renderEngineComboCodes(prediction.winningEngineIds) + '</span></td>' +
             '<td>' + renderResultBadge(prediction.result) + '</td>' +
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
