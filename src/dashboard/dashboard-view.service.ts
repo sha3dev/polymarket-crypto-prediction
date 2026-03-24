@@ -189,8 +189,20 @@ export class DashboardViewService {
       }
       .code-chip-group {
         display: inline-flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 4px;
+        align-items: center;
+        white-space: nowrap;
+        overflow-x: auto;
+        max-width: 100%;
+        padding-bottom: 2px;
+      }
+      .code-chip-group::-webkit-scrollbar {
+        height: 6px;
+      }
+      .code-chip-group::-webkit-scrollbar-thumb {
+        background: rgba(13, 27, 42, 0.12);
+        border-radius: 999px;
       }
       .info-popover {
         position: fixed;
@@ -407,6 +419,37 @@ export class DashboardViewService {
           take_profit_hit: { code: 'TPF', label: 'Take Profit Hit', description: 'The position closed because the take-profit level was reached.' },
           stop_loss_hit: { code: 'STP', label: 'Stop Loss Hit', description: 'The position closed because the stop-loss level was reached.' },
         },
+        reason: {
+          READY: { code: 'RDY', label: 'Ready', description: 'No blocking reason is active.' },
+          NPR: { code: 'NPR', label: 'No Prediction', description: 'No valid prediction exists for this market right now.' },
+          OPN: { code: 'OPN', label: 'Open Position', description: 'A position is already open, so the engine will not open another one.' },
+          DIR: { code: 'DIR', label: 'Invalid Direction', description: 'The prediction direction could not be converted into a valid trading side.' },
+          REF: { code: 'REF', label: 'Reference Missing', description: 'The execution layer could not determine a valid reference token price.' },
+          LIV: { code: 'LIV', label: 'Market Not Live', description: 'The market is not currently considered live enough for execution.' },
+          QLT: { code: 'QLT', label: 'Quality Too Low', description: 'The market quality score is below the execution threshold.' },
+          CNF: { code: 'CNF', label: 'Confidence Too Low', description: 'The selected setup is not confident enough for execution.' },
+          CMB: { code: 'CMB', label: 'Combo Gate Failed', description: 'The legacy strategy combo gate is still blocking execution.' },
+          XRG: { code: 'XRG', label: 'Regime Conflict', description: 'The local prediction fights the active cross-asset regime.' },
+          EXE: { code: 'EXE', label: 'Execution Score Low', description: 'The execution score is below the minimum threshold.' },
+          HIS: { code: 'HIS', label: 'History Thin', description: 'There is not enough execution history yet.' },
+          BST: { code: 'BST', label: 'Bootstrap Low', description: 'The bootstrap-discounted execution score is still too low.' },
+          SDR: { code: 'SDR', label: 'Setup Needs Regime', description: 'This setup requires a directional regime and does not have one.' },
+          SRV: { code: 'SRV', label: 'Reversal Risk', description: 'This setup is blocked because reversal risk is too high.' },
+          SLG: { code: 'SLG', label: 'Needs Laggard', description: 'The setup needs a leader-laggard structure and it is not present.' },
+          SLD: { code: 'SLD', label: 'Needs Leader', description: 'The setup needs a clear leader market and none is available.' },
+          SMO: { code: 'SMO', label: 'Needs Momentum', description: 'The setup needs stronger local momentum confirmation.' },
+          SBS: { code: 'SBS', label: 'Needs Basis', description: 'The setup needs basis or repricing divergence that is not present.' },
+          SFD: { code: 'SFD', label: 'Fade Conflict', description: 'Fade logic is blocked because strong breadth still dominates.' },
+          BND: { code: 'BND', label: 'Entry Band', description: 'The reference token price is too far from the preferred entry band.' },
+          SPR: { code: 'SPR', label: 'Spread Wide', description: 'The spread is too wide for execution.' },
+          MSC: { code: 'MSC', label: 'Market Score', description: 'The market score is too low for execution.' },
+          WRM: { code: 'WRM', label: 'Warming Up', description: 'The market is still warming up and has not earned execution trust yet.' },
+          MAK: { code: 'MAK', label: 'Maker Preferred', description: 'Execution is allowed, and the engine prefers maker-style entry.' },
+          TSP: { code: 'TSP', label: 'Tight Spread', description: 'Execution prefers taking liquidity because the spread is already tight.' },
+          URG: { code: 'URG', label: 'Urgent', description: 'Execution prefers taking liquidity because urgency is high.' },
+          FIL: { code: 'FIL', label: 'Fill Risk', description: 'Maker fill probability is too low, so crossing is preferred.' },
+          DRF: { code: 'DRF', label: 'Book Drift', description: 'The order book is drifting away, making passive entry unattractive.' },
+        },
       };
 
       function formatNumber(value, digits = 3) {
@@ -458,6 +501,13 @@ export class DashboardViewService {
           ? '—'
           : '<span class="code-chip-group">' + engineIds.map((engineId) => renderInfoCode('engine', engineId)).join('') + '</span>';
         return comboMarkup;
+      }
+
+      function renderReasonCodeGroup(reasonCodes) {
+        const reasonMarkup = reasonCodes.length === 0
+          ? renderInfoCode('reason', 'READY', 'RDY')
+          : '<span class="code-chip-group">' + reasonCodes.map((reasonCode) => renderInfoCode('reason', reasonCode, reasonCode)).join('') + '</span>';
+        return reasonMarkup;
       }
 
       function closeInfoPopover() {
@@ -657,16 +707,16 @@ export class DashboardViewService {
       }
 
       function renderReasonCodes(decision) {
-        let reasonCodes = 'READY';
+        let reasonCodes = renderInfoCode('reason', 'READY', 'RDY');
         if (decision.isEntryAllowed) {
           if (decision.executionReason !== null) {
-            reasonCodes = renderReasonCode(humanizeReason(decision.executionReason));
+            reasonCodes = renderReasonCodeGroup([renderReasonCode(humanizeReason(decision.executionReason))]);
           }
         } else {
           if (decision.gateFailures.length > 0) {
-            reasonCodes = decision.gateFailures
-              .map((reasonCode) => renderReasonCode(humanizeReason(reasonCode)))
-              .join('+');
+            reasonCodes = renderReasonCodeGroup(
+              decision.gateFailures.map((reasonCode) => renderReasonCode(humanizeReason(reasonCode))),
+            );
           }
         }
         return reasonCodes;
@@ -940,6 +990,17 @@ export class DashboardViewService {
         return regimeMarkup;
       }
 
+      function renderRegimeCompactCode(regimeId, breadthStrength) {
+        const regimeMarkup =
+          regimeId === null || regimeId === undefined
+            ? '—'
+            : renderInfoCode('regime', regimeId, regimeId) +
+              '<span class="tiny" style="margin-left:6px">' +
+              formatNumber(breadthStrength ?? 0, 2) +
+              '</span>';
+        return regimeMarkup;
+      }
+
       function renderResultBadge(result) {
         let resultBadge = '<span class="pill">' + result.status.toUpperCase() + '</span>';
         if (result.status === "ok") {
@@ -1097,10 +1158,7 @@ export class DashboardViewService {
           const comboGateLabel = marketExecution.decision.hasComboGatePassed ? '<span class="pill up">OPEN</span>' : '<span class="pill down">BLOCK</span>';
           const breadthLabel = marketExecution.decision.regimeId === null
             ? '—'
-            : renderRegimeCode({
-                regimeId: marketExecution.decision.regimeId,
-                breadthStrength: marketExecution.decision.breadthStrength ?? 0,
-              });
+            : renderRegimeCompactCode(marketExecution.decision.regimeId, marketExecution.decision.breadthStrength);
           const breadthHover =
             marketExecution.decision.breadthDirection === 'NEUTRAL'
               ? 'neutral cross-asset regime'
