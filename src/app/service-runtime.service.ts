@@ -14,7 +14,9 @@ import config from "../config.ts";
 import { DashboardSummaryService } from "../dashboard/dashboard-summary.service.ts";
 import { DashboardViewService } from "../dashboard/dashboard-view.service.ts";
 import { ExecutionPolicyService } from "../execution/execution-policy.service.ts";
+import type { ExecutionService } from "../execution/execution.types.ts";
 import { PaperExecutionService } from "../execution/paper-execution.service.ts";
+import { RealExecutionService } from "../execution/real-execution.service.ts";
 import { HttpServerService } from "../http/http-server.service.ts";
 import logger from "../logger.ts";
 import { MarketStateService } from "../market/market-state.service.ts";
@@ -37,7 +39,7 @@ export class ServiceRuntime {
   private readonly snapshotService: SnapshotService | null;
   private readonly marketStateService: MarketStateService;
   private readonly predictionEngineService: PredictionEngineService;
-  private readonly paperExecutionService: PaperExecutionService;
+  private readonly executionService: ExecutionService;
   private readonly httpServerService: HttpServerService;
   private readonly startedAt: number;
   private server: ServerType | null;
@@ -51,14 +53,14 @@ export class ServiceRuntime {
     snapshotService: SnapshotService | null,
     marketStateService: MarketStateService,
     predictionEngineService: PredictionEngineService,
-    paperExecutionService: PaperExecutionService,
+    executionService: ExecutionService,
     httpServerService: HttpServerService,
     startedAt: number,
   ) {
     this.snapshotService = snapshotService;
     this.marketStateService = marketStateService;
     this.predictionEngineService = predictionEngineService;
-    this.paperExecutionService = paperExecutionService;
+    this.executionService = executionService;
     this.httpServerService = httpServerService;
     this.startedAt = startedAt;
     this.server = null;
@@ -75,6 +77,7 @@ export class ServiceRuntime {
     const strategyMetricsService = new StrategyMetricsService(ServiceRuntime.buildStrategyDefinitions());
     const strategyEngineService = new StrategyEngineService(strategyMetricsService);
     const comboMetricsService = new ComboMetricsService();
+    const executionPolicyService = new ExecutionPolicyService();
     const predictionEngineService = new PredictionEngineService(
       marketStateService,
       strategyEngineService,
@@ -82,19 +85,22 @@ export class ServiceRuntime {
       new PredictionStoreService(),
       comboMetricsService,
     );
-    const paperExecutionService = new PaperExecutionService(marketStateService, predictionEngineService, new ExecutionPolicyService());
+    const executionService =
+      config.EXECUTION_MODE === "real"
+        ? new RealExecutionService(marketStateService, predictionEngineService, executionPolicyService)
+        : new PaperExecutionService(marketStateService, predictionEngineService, executionPolicyService);
     const httpServerService = new HttpServerService(
       predictionEngineService,
-      paperExecutionService,
+      executionService,
       marketStateService,
-      new DashboardSummaryService(marketStateService, predictionEngineService, paperExecutionService, startedAt),
+      new DashboardSummaryService(marketStateService, predictionEngineService, executionService, startedAt),
       new DashboardViewService(),
     );
     return new ServiceRuntime(
       new SnapshotService(config.SNAPSHOT_INTERVAL_MS),
       marketStateService,
       predictionEngineService,
-      paperExecutionService,
+      executionService,
       httpServerService,
       startedAt,
     );
@@ -151,12 +157,13 @@ export class ServiceRuntime {
       await this.snapshotService.disconnect();
       this.hasAttachedSnapshotListener = false;
     }
+    await this.executionService.disconnect();
   }
 
   public ingestSnapshot(snapshot: InputSnapshot): void {
     const marketUpdateResult = this.marketStateService.ingestSnapshot(snapshot);
     this.predictionEngineService.handleSnapshot(marketUpdateResult.generatedAt, marketUpdateResult.triggeredMarkets);
-    this.paperExecutionService.handleSnapshot(marketUpdateResult.generatedAt);
+    void this.executionService.handleSnapshot(marketUpdateResult.generatedAt);
   }
 
   /**

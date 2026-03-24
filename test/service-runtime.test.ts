@@ -227,12 +227,17 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const executionResponse = await fetch(`http://127.0.0.1:${address.port}/v1/execution`);
   const executionJson = await executionResponse.json();
   assert.equal(executionResponse.status, 200);
+  assert.equal(executionJson.executionMode, "paper");
+  assert.equal(executionJson.account.mode, "paper");
+  assert.equal(executionJson.account.balanceUsd, null);
   assert.equal(executionJson.executionNow.length, 8);
   assert.equal(typeof executionJson.executionNow[0].decision.marketTradeCount, "number");
   assert.equal(typeof executionJson.executionNow[0].decision.breadthDirection, "string");
   assert.equal(typeof executionJson.executionNow[0].decision.hasBreadthAlignment, "boolean");
   assert.equal(executionJson.executionNow[0].decision.orderShareCount >= 5, true);
   assert.equal(executionJson.executionNow[0].decision.orderNotionalUsd === null || executionJson.executionNow[0].decision.orderNotionalUsd >= 1, true);
+  assert.equal(typeof executionJson.executionPerformance.tradeCount, "number");
+  assert.equal(typeof executionJson.paperExecutionPerformance.tradeCount, "number");
 
   const tradesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/trades?limit=10`);
   const tradesJson = await tradesResponse.json();
@@ -246,6 +251,8 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const summaryResponse = await fetch(`http://127.0.0.1:${address.port}/v1/dashboard/summary`);
   const summaryJson = await summaryResponse.json();
   assert.equal(summaryResponse.status, 200);
+  assert.equal(summaryJson.executionMode, "paper");
+  assert.equal(summaryJson.account.mode, "paper");
   assert.equal(Array.isArray(summaryJson.latestPredictions), true);
   assert.equal(
     summaryJson.latestPredictions.every((prediction: { result: { status: string } }) => prediction.result.status !== "pending"),
@@ -261,6 +268,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(Array.isArray(summaryJson.comboLeaders), true);
   assert.equal(Array.isArray(summaryJson.latestComboInfluence), true);
   assert.equal(typeof summaryJson.selectedStrategyMarketKey, "string");
+  assert.equal(typeof summaryJson.executionPerformance.tradeCount, "number");
   assert.equal(typeof summaryJson.paperExecutionPerformance.tradeCount, "number");
 
   const invalidLimitResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=999`);

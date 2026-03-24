@@ -613,9 +613,12 @@ Includes:
 - combo leaders
 - recent combo influence
 - execution decisions now
-- open paper positions
-- recent paper trades
-- paper execution performance
+- execution mode
+- active account summary
+- open positions for the active backend
+- recent trades for the active backend
+- execution performance
+- legacy `paperExecutionPerformance` compatibility field
 - maker/taker usage stats
 
 ### `GET /v1/execution`
@@ -626,13 +629,16 @@ Returns the current execution gate plus open positions.
 
 Includes:
 
+- `executionMode`
+- `account`
 - `executionNow`
 - `openPositions`
+- `executionPerformance`
 - `paperExecutionPerformance`
 
 ### `GET /v1/trades?limit=N`
 
-Returns recent closed paper trades.
+Returns recent closed trades from the active execution backend.
 
 - status: `200`
 - validation failure: `400`
@@ -663,7 +669,7 @@ Creates the fully wired service runtime with:
 - strategy engine
 - combo engine
 - prediction engine
-- paper execution layer
+- execution backend selected by `EXECUTION_MODE`
 - dashboard summary service
 - HTTP server
 
@@ -772,6 +778,8 @@ Includes:
 
 - health
 - KPIs
+- execution mode
+- account summary
 - markets
 - latest resolved predictions
 - strategy boards
@@ -782,6 +790,31 @@ Includes:
 - portfolio stats
 
 Use it when integrating an external UI that wants the same operator view as the built-in dashboard.
+
+### `ExecutionMode`
+
+Execution backend selector.
+
+Allowed values:
+
+- `paper`
+- `real`
+
+Use it to branch UI copy, safety controls, and operational expectations.
+
+### `ExecutionAccountSummary`
+
+Operational account summary for the active execution backend.
+
+Includes:
+
+- `mode`
+- `balanceUsd`
+- `lastBalanceRefreshAt`
+- `isBalanceStale`
+- `lastBalanceError`
+
+In paper mode the balance fields remain empty. In real mode they expose the cached live collateral view.
 
 ### `HealthPayload`
 
@@ -851,9 +884,9 @@ Includes full entry, exit, maker/taker, and realized-PnL fields.
 
 Use it if you need the detailed position state rather than the compressed summary view.
 
-### `PaperTrade`
+### `ExecutionTrade`
 
-Closed trade record.
+Closed trade record for the active execution backend.
 
 Includes:
 
@@ -865,6 +898,12 @@ Includes:
 - exit reason
 
 Use it for trade logs, performance analysis, and PnL attribution.
+
+### `PaperTrade`
+
+Backward-compatible alias of `ExecutionTrade`.
+
+Use it only for older callers that still depend on the legacy export name.
 
 ### `PortfolioExecutionSummary`
 
@@ -995,6 +1034,12 @@ Configuration lives in [src/config.ts](/Users/jc/Documents/GitHub/polymarket-cry
 - `CROSS_ASSET_LAGGARD_THRESHOLD`: minimum lag ratio required before the leader-laggard catch-up strategy activates.
 - `EXECUTION_BOOTSTRAP_MIN_DISCOUNT`: lowest discount applied to research score while bootstrapping execution trust.
 - `EXECUTION_BOOTSTRAP_MAX_DISCOUNT`: highest bootstrap discount allowed even after research quality improves.
+- `EXECUTION_MODE`: selects `paper` or `real` execution. `real` enables live order placement through `@sha3/polymarket`.
+- `REAL_BALANCE_REFRESH_MS`: cache TTL for the real account balance shown in the dashboard and HTTP payloads.
+- `POLYMARKET_PRIVATE_KEY`: required private key for `EXECUTION_MODE=real`. Startup fails hard when it is missing.
+- `POLYMARKET_FUNDER_ADDRESS`: optional funder address forwarded to the live Polymarket client.
+- `POLYMARKET_SIGNATURE_TYPE`: optional signature type forwarded to the live Polymarket client.
+- `POLYMARKET_MAX_ALLOWED_SLIPPAGE`: optional max slippage forwarded to the live Polymarket client during initialization.
 
 ## Scripts
 

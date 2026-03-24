@@ -13,7 +13,7 @@ import { Hono } from "hono";
 import config from "../config.ts";
 import type { DashboardSummaryService } from "../dashboard/dashboard-summary.service.ts";
 import type { DashboardViewService } from "../dashboard/dashboard-view.service.ts";
-import type { PaperExecutionService } from "../execution/paper-execution.service.ts";
+import type { ExecutionService } from "../execution/execution.types.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketWindow } from "../market/market.types.ts";
 import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
@@ -29,7 +29,7 @@ export class HttpServerService {
    */
 
   private readonly predictionEngineService: PredictionEngineService;
-  private readonly paperExecutionService: PaperExecutionService;
+  private readonly executionService: ExecutionService;
   private readonly marketStateService: MarketStateService;
   private readonly dashboardSummaryService: DashboardSummaryService;
   private readonly dashboardViewService: DashboardViewService;
@@ -40,13 +40,13 @@ export class HttpServerService {
 
   public constructor(
     predictionEngineService: PredictionEngineService,
-    paperExecutionService: PaperExecutionService,
+    executionService: ExecutionService,
     marketStateService: MarketStateService,
     dashboardSummaryService: DashboardSummaryService,
     dashboardViewService: DashboardViewService,
   ) {
     this.predictionEngineService = predictionEngineService;
-    this.paperExecutionService = paperExecutionService;
+    this.executionService = executionService;
     this.marketStateService = marketStateService;
     this.dashboardSummaryService = dashboardSummaryService;
     this.dashboardViewService = dashboardViewService;
@@ -99,9 +99,9 @@ export class HttpServerService {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
       return context.json(this.dashboardSummaryService.buildHealthPayload(Date.now()), 200);
     });
-    app.get("/v1/dashboard/summary", (context) => {
+    app.get("/v1/dashboard/summary", async (context) => {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
-      return context.json(this.dashboardSummaryService.buildDashboardSummary(Date.now()), 200);
+      return context.json(await this.dashboardSummaryService.buildDashboardSummary(Date.now()), 200);
     });
     app.get("/v1/strategies", (context) => {
       const asset = this.parseAsset(context.req.query("asset"));
@@ -129,13 +129,17 @@ export class HttpServerService {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
       return context.json(this.predictionEngineService.getComboSummaries(asset && window ? `${asset}:${window}` : undefined).slice(0, limit), 200);
     });
-    app.get("/v1/execution", (context) => {
+    app.get("/v1/execution", async (context) => {
+      const executionPerformance = this.executionService.getPortfolioSummary();
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
       return context.json(
         {
-          executionNow: this.paperExecutionService.getExecutionSummaries(),
-          openPositions: this.paperExecutionService.getOpenPositions(),
-          paperExecutionPerformance: this.paperExecutionService.getPortfolioSummary(),
+          executionMode: this.executionService.getExecutionMode(),
+          account: await this.executionService.getAccountSummary(Date.now()),
+          executionNow: this.executionService.getExecutionSummaries(),
+          openPositions: this.executionService.getOpenPositions(),
+          executionPerformance,
+          paperExecutionPerformance: executionPerformance,
         },
         200,
       );
@@ -146,7 +150,7 @@ export class HttpServerService {
         return context.json({ code: "invalid_request", message: "a valid limit is required." }, 400);
       }
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
-      return context.json(this.paperExecutionService.getRecentTrades(limit), 200);
+      return context.json(this.executionService.getRecentTrades(limit), 200);
     });
     app.get("/v1/markets", (context) => {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);

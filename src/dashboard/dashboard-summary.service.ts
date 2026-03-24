@@ -5,13 +5,15 @@
 import type { ComboSummary, MarketComboBoard } from "../combo/combo.types.ts";
 import config from "../config.ts";
 import type {
+  ExecutionAccountSummary,
+  ExecutionMode,
+  ExecutionService,
+  ExecutionTrade,
   MarketExecutionSummary,
   MarketPerformanceSummary,
   OpenPositionSummary,
-  PaperTrade,
   PortfolioExecutionSummary,
 } from "../execution/execution.types.ts";
-import type { PaperExecutionService } from "../execution/paper-execution.service.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { MarketSummary } from "../market/market.types.ts";
 import type { PredictionEngineService } from "../prediction/prediction-engine.service.ts";
@@ -35,6 +37,8 @@ export type HealthPayload = {
 export type DashboardSummaryPayload = {
   generatedAt: number;
   pollIntervalMs: number;
+  executionMode: ExecutionMode;
+  account: ExecutionAccountSummary;
   health: HealthPayload;
   kpis: {
     liveMarkets: number;
@@ -50,12 +54,13 @@ export type DashboardSummaryPayload = {
   selectedStrategyMarketKey: string;
   executionNow: MarketExecutionSummary[];
   openPositions: OpenPositionSummary[];
-  recentTrades: PaperTrade[];
+  recentTrades: ExecutionTrade[];
   marketPerformance: MarketPerformanceSummary[];
   marketPnlTable: MarketPerformanceSummary[];
   comboBoards: MarketComboBoard[];
   comboLeaders: ComboSummary[];
   latestComboInfluence: PredictionResponse[];
+  executionPerformance: PortfolioExecutionSummary;
   paperExecutionPerformance: PortfolioExecutionSummary;
   makerTakerStats: {
     makerFillRate: number;
@@ -75,7 +80,7 @@ export class DashboardSummaryService {
 
   private readonly marketStateService: MarketStateService;
   private readonly predictionEngineService: PredictionEngineService;
-  private readonly paperExecutionService: PaperExecutionService;
+  private readonly executionService: ExecutionService;
   private readonly startedAt: number;
 
   /**
@@ -85,12 +90,12 @@ export class DashboardSummaryService {
   public constructor(
     marketStateService: MarketStateService,
     predictionEngineService: PredictionEngineService,
-    paperExecutionService: PaperExecutionService,
+    executionService: ExecutionService,
     startedAt: number,
   ) {
     this.marketStateService = marketStateService;
     this.predictionEngineService = predictionEngineService;
-    this.paperExecutionService = paperExecutionService;
+    this.executionService = executionService;
     this.startedAt = startedAt;
   }
 
@@ -144,21 +149,21 @@ export class DashboardSummaryService {
       serviceName: config.SERVICE_NAME,
       snapshotAgeMs,
       isSnapshotHealthy,
-      pendingEvaluationCount: this.paperExecutionService.getOpenPositionCount(),
+      pendingEvaluationCount: this.executionService.getOpenPositionCount(),
       monitoredMarketCount: 8,
       startedAt: this.startedAt,
     };
   }
 
-  public buildDashboardSummary(nowTimestamp: number): DashboardSummaryPayload {
+  public async buildDashboardSummary(nowTimestamp: number): Promise<DashboardSummaryPayload> {
     const markets = this.marketStateService.getMarketSummaries(nowTimestamp);
     const latestPredictions = this.predictionEngineService.getRecentResolvedPredictions(20);
     const strategies = this.predictionEngineService.getStrategySummaries();
     const strategyBoards = this.buildStrategyBoards();
-    const executionNow = this.paperExecutionService.getExecutionSummaries();
-    const openPositions = this.paperExecutionService.getOpenPositions();
-    const recentTrades = this.paperExecutionService.getRecentTrades(20);
-    const marketPerformance = this.paperExecutionService.getMarketPerformanceSummaries();
+    const executionNow = this.executionService.getExecutionSummaries();
+    const openPositions = this.executionService.getOpenPositions();
+    const recentTrades = this.executionService.getRecentTrades(20);
+    const marketPerformance = this.executionService.getMarketPerformanceSummaries();
     const marketPnlTable = [...marketPerformance].sort((leftMarketPerformance, rightMarketPerformance) => {
       return rightMarketPerformance.cumulativeNetPnl - leftMarketPerformance.cumulativeNetPnl;
     });
@@ -166,7 +171,9 @@ export class DashboardSummaryService {
     const comboBoards = comboSummaries.length === 0 ? [] : this.buildComboBoards(marketPerformance);
     const comboLeaders = comboSummaries.slice(0, 12);
     const latestComboInfluence = latestPredictions.filter((prediction) => prediction.comboBreakdown.activeCombos.length > 0).slice(0, 12);
-    const paperExecutionPerformance = this.paperExecutionService.getPortfolioSummary();
+    const executionPerformance = this.executionService.getPortfolioSummary();
+    const paperExecutionPerformance = executionPerformance;
+    const account = await this.executionService.getAccountSummary(nowTimestamp);
     const resolvedPredictions = latestPredictions.filter((prediction) => prediction.result.status !== "pending");
     const okPredictions = resolvedPredictions.filter((prediction) => prediction.result.status === "ok");
     const resolvedAccuracy = resolvedPredictions.length === 0 ? 0 : okPredictions.length / resolvedPredictions.length;
@@ -177,10 +184,12 @@ export class DashboardSummaryService {
     return {
       generatedAt: nowTimestamp,
       pollIntervalMs: config.DASHBOARD_POLL_INTERVAL_MS,
+      executionMode: this.executionService.getExecutionMode(),
+      account,
       health: this.buildHealthPayload(nowTimestamp),
       kpis: {
         liveMarkets: markets.filter((market) => market.isLive).length,
-        pendingEvaluations: this.paperExecutionService.getOpenPositionCount(),
+        pendingEvaluations: this.executionService.getOpenPositionCount(),
         totalPredictions: latestPredictions.length,
         resolvedAccuracy,
         averageConfidence,
@@ -198,11 +207,12 @@ export class DashboardSummaryService {
       comboBoards,
       comboLeaders,
       latestComboInfluence,
+      executionPerformance,
       paperExecutionPerformance,
       makerTakerStats: {
-        makerFillRate: paperExecutionPerformance.makerFillRate,
-        makerUsageRatio: paperExecutionPerformance.makerUsageRatio,
-        takerUsageRatio: paperExecutionPerformance.takerUsageRatio,
+        makerFillRate: executionPerformance.makerFillRate,
+        makerUsageRatio: executionPerformance.makerUsageRatio,
+        takerUsageRatio: executionPerformance.takerUsageRatio,
       },
     };
   }

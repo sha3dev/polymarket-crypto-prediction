@@ -10,7 +10,10 @@ export type {
   HealthPayload,
 } from "./dashboard/dashboard-summary.service.ts";
 export type {
+  ExecutionAccountSummary,
   ExecutionDecision,
+  ExecutionMode,
+  ExecutionTrade,
   MarketExecutionSummary,
   OpenPositionSummary,
   PaperPosition,

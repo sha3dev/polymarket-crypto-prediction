@@ -11,8 +11,10 @@ import type { PredictionEngineService } from "../prediction/prediction-engine.se
 import type { PredictionResponse } from "../prediction/prediction.types.ts";
 import type { ExecutionPolicyService } from "./execution-policy.service.ts";
 import type {
+  ExecutionAccountSummary,
   ExecutionDecision,
   ExecutionStyle,
+  ExecutionTrade,
   MarketExecutionSummary,
   MarketPerformanceSummary,
   OpenPositionSummary,
@@ -657,7 +659,7 @@ export class PaperExecutionService {
     return openPositionSummaries;
   }
 
-  public getRecentTrades(limit: number): PaperTrade[] {
+  public getRecentTrades(limit: number): ExecutionTrade[] {
     const recentTrades = this.recentTrades.slice(0, limit);
     return recentTrades;
   }
@@ -674,5 +676,23 @@ export class PaperExecutionService {
       }
     }
     return marketPerformanceSummaries;
+  }
+
+  public getExecutionMode(): "paper" {
+    return "paper";
+  }
+
+  public getAccountSummary(_nowTimestamp: number): ExecutionAccountSummary {
+    return {
+      mode: "paper",
+      balanceUsd: null,
+      lastBalanceRefreshAt: null,
+      isBalanceStale: false,
+      lastBalanceError: null,
+    };
+  }
+
+  public async disconnect(): Promise<void> {
+    return;
   }
 }

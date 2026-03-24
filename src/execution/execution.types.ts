@@ -13,6 +13,7 @@ export type PositionSide = "up" | "down";
 export type TradeLifecycleStatus = "idle" | "entry_pending_maker" | "open" | "exit_pending_maker" | "closed";
 export type TradeExitReason = "take_profit_hit" | "stop_loss_hit";
 export type ComboSource = "research" | "execution";
+export type ExecutionMode = "paper" | "real";
 export type ExecutionDecision = {
   marketKey: MarketKey;
   asset: AssetSymbol;
@@ -75,7 +76,7 @@ export type PaperPosition = {
   hasTakerFallbackUsed: boolean;
   signalTimestamp: number;
 };
-export type PaperTrade = {
+export type ExecutionTrade = {
   positionId: string;
   marketKey: MarketKey;
   asset: AssetSymbol;
@@ -96,6 +97,7 @@ export type PaperTrade = {
   holdTimeMs: number;
   hasTakerFallbackUsed: boolean;
 };
+export type PaperTrade = ExecutionTrade;
 export type OpenPositionSummary = {
   marketKey: MarketKey;
   asset: AssetSymbol;
@@ -149,4 +151,30 @@ export type PortfolioExecutionSummary = {
   makerUsageRatio: number;
   takerUsageRatio: number;
   tradeCount: number;
+};
+export type ExecutionAccountSummary = {
+  mode: ExecutionMode;
+  balanceUsd: number | null;
+  lastBalanceRefreshAt: number | null;
+  isBalanceStale: boolean;
+  lastBalanceError: string | null;
+};
+export type ExecutionServiceSnapshot = {
+  executionMode: ExecutionMode;
+  account: ExecutionAccountSummary;
+  executionNow: MarketExecutionSummary[];
+  openPositions: OpenPositionSummary[];
+  executionPerformance: PortfolioExecutionSummary;
+};
+export type ExecutionService = {
+  getExecutionMode(): ExecutionMode;
+  handleSnapshot(generatedAt: number): Promise<void> | void;
+  getExecutionSummaries(): MarketExecutionSummary[];
+  getOpenPositions(): OpenPositionSummary[];
+  getRecentTrades(limit: number): ExecutionTrade[];
+  getPortfolioSummary(): PortfolioExecutionSummary;
+  getMarketPerformanceSummaries(): MarketPerformanceSummary[];
+  getOpenPositionCount(): number;
+  getAccountSummary(nowTimestamp: number): Promise<ExecutionAccountSummary> | ExecutionAccountSummary;
+  disconnect(): Promise<void>;
 };

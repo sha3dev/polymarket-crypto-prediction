@@ -379,6 +379,24 @@ export class DashboardViewService {
         if (reasonCode === 'cross_asset_regime_conflict') {
           humanReason = 'cross-asset regime conflict';
         }
+        if (reasonCode === 'live_mode_not_initialized') {
+          humanReason = 'live mode not initialized';
+        }
+        if (reasonCode === 'live_market_unresolved') {
+          humanReason = 'live market unresolved';
+        }
+        if (reasonCode === 'live_balance_unavailable') {
+          humanReason = 'live balance unavailable';
+        }
+        if (reasonCode === 'live_order_post_failed') {
+          humanReason = 'live order post failed';
+        }
+        if (reasonCode === 'live_entry_not_confirmed') {
+          humanReason = 'live entry not confirmed';
+        }
+        if (reasonCode === 'live_exit_not_confirmed') {
+          humanReason = 'live exit not confirmed';
+        }
         if (reasonCode === 'execution_score_too_low') {
           humanReason = 'execution score too low';
         }
@@ -528,6 +546,24 @@ export class DashboardViewService {
         if (reasonCode === 'cross-asset regime conflict') {
           reasonShortCode = 'XRG';
         }
+        if (reasonCode === 'live mode not initialized') {
+          reasonShortCode = 'LNI';
+        }
+        if (reasonCode === 'live market unresolved') {
+          reasonShortCode = 'LMR';
+        }
+        if (reasonCode === 'live balance unavailable') {
+          reasonShortCode = 'LBA';
+        }
+        if (reasonCode === 'live order post failed') {
+          reasonShortCode = 'LOP';
+        }
+        if (reasonCode === 'live entry not confirmed') {
+          reasonShortCode = 'LEC';
+        }
+        if (reasonCode === 'live exit not confirmed') {
+          reasonShortCode = 'LXC';
+        }
         if (reasonCode === 'execution score too low') {
           reasonShortCode = 'EXE';
         }
@@ -655,13 +691,18 @@ export class DashboardViewService {
       }
 
       function renderKpis(summary) {
+        const executionPerformance = summary.executionPerformance ?? summary.paperExecutionPerformance;
         const entries = [
-          ["Executable", "Markets that currently pass the entry gate and would allow a new paper trade.", summary.paperExecutionPerformance.executableEntryCount],
-          ["Open pos", "Paper positions currently open or pending maker exit.", summary.paperExecutionPerformance.openPositionCount],
-          ["Paper PnL", "Cumulative simulated net PnL after proxy execution costs.", formatNumber(summary.paperExecutionPerformance.cumulativeNetPnl)],
-          ["Max DD", "Maximum rolling drawdown of the paper execution curve.", formatNumber(summary.paperExecutionPerformance.maxDrawdown)],
-          ["Maker fill %", "Share of simulated trades where maker logic achieved a passive fill on at least one side.", (summary.paperExecutionPerformance.makerFillRate * 100).toFixed(1) + "%"],
+          ["Mode", "Current execution backend. PAPER means simulated trading. REAL means live account execution.", String(summary.executionMode).toUpperCase()],
+          ["Executable", "Markets that currently pass the entry gate and would allow a new trade.", executionPerformance.executableEntryCount],
+          ["Open pos", "Positions currently open or pending maker exit in the active execution backend.", executionPerformance.openPositionCount],
+          [summary.executionMode === "real" ? "Real PnL" : "Paper PnL", "Cumulative net PnL for the active execution backend.", formatNumber(executionPerformance.cumulativeNetPnl)],
+          ["Max DD", "Maximum rolling drawdown of the active execution curve.", formatNumber(executionPerformance.maxDrawdown)],
+          ["Maker fill %", "Share of trades where maker logic achieved a passive fill on at least one side.", (executionPerformance.makerFillRate * 100).toFixed(1) + "%"],
         ];
+        if (summary.executionMode === "real") {
+          entries.push(["Balance", "Live Polymarket collateral balance refreshed from the configured wallet.", summary.account.balanceUsd === null ? "—" : "$" + formatNumber(summary.account.balanceUsd, 2)]);
+        }
         document.getElementById("kpis").innerHTML = entries.map(([label, hint, value]) => '<div class="kpi"><div class="tiny">' + renderHintLabel(label, hint) + '</div><strong>' + value + '</strong></div>').join("");
       }
 
@@ -933,9 +974,13 @@ export class DashboardViewService {
             '<div class="health-item"><strong>' + summary.health.serviceName + '</strong><div class="tiny">' + renderHintLabel('Started', 'Timestamp when the current service runtime booted.') + ': ' + formatTimestamp(summary.health.startedAt) + '</div></div>' +
             '<div class="health-item"><strong>' + formatNumber(summary.health.snapshotAgeMs, 0) + ' ms</strong><div class="tiny">' + renderHintLabel('Snapshot age', 'Milliseconds since the last snapshot was processed by the service.') + '</div></div>' +
             '<div class="health-item"><strong>' + summary.health.isSnapshotHealthy + '</strong><div class="tiny">' + renderHintLabel('Healthy', 'True when the latest snapshot is fresh enough according to configured freshness thresholds.') + '</div></div>' +
-            '<div class="health-item"><strong>' + summary.health.pendingEvaluationCount + '</strong><div class="tiny">' + renderHintLabel('Active trades', 'Number of paper positions still open or waiting on maker fills before TP or SL resolution.') + '</div></div>' +
+            '<div class="health-item"><strong>' + String(summary.executionMode).toUpperCase() + '</strong><div class="tiny">' + renderHintLabel('Execution mode', 'Current execution backend used for orders and operational stats.') + '</div></div>' +
+            '<div class="health-item"><strong>' + summary.health.pendingEvaluationCount + '</strong><div class="tiny">' + renderHintLabel('Active trades', 'Number of active positions still open or waiting on maker fills in the current execution backend.') + '</div></div>' +
+            '<div class="health-item"><strong>' + (summary.account.balanceUsd === null ? '—' : '$' + formatNumber(summary.account.balanceUsd, 2)) + '</strong><div class="tiny">' + renderHintLabel('Balance', 'Current account balance for real mode. Empty in paper mode.') + '</div></div>' +
+            '<div class="health-item"><strong>' + (summary.account.lastBalanceRefreshAt === null ? '—' : formatNumber(summary.generatedAt - summary.account.lastBalanceRefreshAt, 0) + ' ms') + '</strong><div class="tiny">' + renderHintLabel('Balance age', 'Milliseconds since the last account balance refresh.') + '</div></div>' +
             '<div class="health-item"><strong>' + (summary.makerTakerStats.makerUsageRatio * 100).toFixed(1) + '%</strong><div class="tiny">' + renderHintLabel('Maker usage', 'Share of recent trades opened as maker.') + '</div></div>' +
             '<div class="health-item"><strong>' + (summary.makerTakerStats.takerUsageRatio * 100).toFixed(1) + '%</strong><div class="tiny">' + renderHintLabel('Taker usage', 'Share of recent trades opened as taker.') + '</div></div>' +
+            '<div class="health-item"><strong>' + (summary.account.lastBalanceError ?? 'none') + '</strong><div class="tiny">' + renderHintLabel('Balance err', 'Last account-balance refresh error if one occurred.') + '</div></div>' +
           '</div>';
       }
 
