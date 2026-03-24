@@ -104,6 +104,10 @@ export type CrossAssetRegime = {
   regimeId: CrossAssetRegimeId;
   regimeClass: "neutral" | "directional" | "leader_laggard" | "fragmented" | "reversal";
   breadthDirection: CrossAssetBreadthDirection;
+  btcDirection: CrossAssetBreadthDirection;
+  ethDirection: CrossAssetBreadthDirection;
+  anchorAsset: AssetSymbol | null;
+  anchorDirection: CrossAssetBreadthDirection;
   breadthStrength: number;
   breadthParticipation: number;
   averageSignedMove: number;

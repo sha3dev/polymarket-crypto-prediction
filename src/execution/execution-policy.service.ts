@@ -120,6 +120,31 @@ export class ExecutionPolicyService {
     }
   }
 
+  private appendGateFailureIfMissing(gateFailures: string[], gateFailure: string): void {
+    if (!gateFailures.includes(gateFailure)) {
+      gateFailures.push(gateFailure);
+    }
+  }
+
+  private appendAnchorGateFailures(gateFailures: string[], prediction: PredictionResponse, marketSlice: MarketSnapshotSlice): void {
+    const btcDirection = prediction.crossAssetRegime.btcDirection;
+    const ethDirection = prediction.crossAssetRegime.ethDirection;
+    const predictionDirection = prediction.direction;
+    if (marketSlice.asset === "eth") {
+      const hasEthConflictWithBtc = btcDirection !== "NEUTRAL" && predictionDirection !== btcDirection;
+      if (hasEthConflictWithBtc) {
+        this.appendGateFailureIfMissing(gateFailures, "cross_asset_regime_conflict");
+      }
+    }
+    if (marketSlice.asset === "sol" || marketSlice.asset === "xrp") {
+      const hasMissingDirectionalAlignment = btcDirection === "NEUTRAL" || ethDirection === "NEUTRAL" || btcDirection !== ethDirection;
+      const hasAltDirectionConflict = !hasMissingDirectionalAlignment && predictionDirection !== btcDirection;
+      if (hasMissingDirectionalAlignment || hasAltDirectionConflict) {
+        this.appendGateFailureIfMissing(gateFailures, "cross_asset_regime_conflict");
+      }
+    }
+  }
+
   private resolveTokenPrice(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number | null {
     const tokenMetrics = positionSide === "up" ? marketSlice.up : marketSlice.down;
     const tokenPrice = tokenMetrics.midpoint ?? tokenMetrics.price;
@@ -266,6 +291,7 @@ export class ExecutionPolicyService {
           if (!this.hasBreadthAlignment(prediction)) {
             gateFailures.push("cross_asset_regime_conflict");
           }
+          this.appendAnchorGateFailures(gateFailures, prediction, marketSlice);
           if (!marketSlice.quality.hasLiveMarket) {
             gateFailures.push("market_not_live");
           }

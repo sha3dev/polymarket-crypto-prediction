@@ -20,7 +20,66 @@ test("ExecutionPolicyService blocks entries that fight a strong cross-asset brea
   assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
 });
 
-function buildMarketSnapshotSlice(): MarketSnapshotSlice {
+test("ExecutionPolicyService blocks alt longs when the BTC anchor is clearly down", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "xrp", "DOWN", "NEUTRAL");
+  const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("xrp"), prediction, null, buildMarketPerformanceSummary("xrp"));
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
+  assert.equal(executionDecision.isEntryAllowed, false);
+  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+});
+
+test("ExecutionPolicyService blocks ETH when BTC is clearly moving the other way", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "eth", "DOWN", "NEUTRAL");
+  const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("eth"), prediction, null, buildMarketPerformanceSummary("eth"));
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
+  assert.equal(executionDecision.isEntryAllowed, false);
+  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+});
+
+test("ExecutionPolicyService blocks SOL when BTC and ETH align against it", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "sol", "DOWN", "DOWN");
+  const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("sol"), prediction, null, buildMarketPerformanceSummary("sol"));
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
+  assert.equal(executionDecision.isEntryAllowed, false);
+  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+});
+
+test("ExecutionPolicyService blocks XRP when BTC and ETH are not aligned", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "xrp", "UP", "NEUTRAL");
+  const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("xrp"), prediction, null, buildMarketPerformanceSummary("xrp"));
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
+  assert.equal(executionDecision.isEntryAllowed, false);
+  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+});
+
+test("ExecutionPolicyService allows SOL only when BTC and ETH align with it", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "sol", "UP", "UP");
+  const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("sol"), prediction, null, buildMarketPerformanceSummary("sol"));
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
+  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), false);
+});
+
+function buildMarketSnapshotSlice(asset: "btc" | "eth" | "sol" | "xrp" = "btc"): MarketSnapshotSlice {
   const tokenMetrics = buildTokenMetrics(0.5);
   const marketQuality: MarketQuality = {
     score: 0.95,
@@ -41,11 +100,11 @@ function buildMarketSnapshotSlice(): MarketSnapshotSlice {
     },
   ];
   return {
-    asset: "btc",
+    asset,
     window: "5m",
-    marketKey: "btc:5m",
+    marketKey: `${asset}:5m`,
     generatedAt: 2_000,
-    slug: "btc-5m",
+    slug: `${asset}-5m`,
     marketStart: "2025-01-01T00:00:00.000Z",
     marketEnd: "2025-01-01T00:05:00.000Z",
     priceToBeat: 100,
@@ -76,12 +135,17 @@ function buildTokenMetrics(midpoint: number): TokenMetrics {
   };
 }
 
-function buildPredictionResponse(direction: PredictionDirection): PredictionResponse {
+function buildPredictionResponse(
+  direction: PredictionDirection,
+  asset: "btc" | "eth" | "sol" | "xrp" = "btc",
+  btcDirection: "UP" | "DOWN" | "NEUTRAL" = "UP",
+  ethDirection: "UP" | "DOWN" | "NEUTRAL" = "UP",
+): PredictionResponse {
   const positionSide: PositionSide = direction === "UP" ? "up" : "down";
   return {
-    asset: "btc",
+    asset,
     window: "5m",
-    marketKey: "btc:5m",
+    marketKey: `${asset}:5m`,
     direction,
     confidence: 0.88,
     weightedScore: direction === "UP" ? 0.88 : -0.88,
@@ -91,8 +155,8 @@ function buildPredictionResponse(direction: PredictionDirection): PredictionResp
     adjustedConfidence: 0.88,
     timestamp: 2_000,
     trigger: {
-      marketKey: "btc:5m",
-      asset: "btc",
+      marketKey: `${asset}:5m`,
+      asset,
       window: "5m",
       triggeredToken: "up",
       triggerType: "crossed_half",
@@ -119,6 +183,10 @@ function buildPredictionResponse(direction: PredictionDirection): PredictionResp
       regimeId: "leader_laggard_up",
       regimeClass: "leader_laggard",
       breadthDirection: "UP",
+      btcDirection,
+      ethDirection,
+      anchorAsset: "btc",
+      anchorDirection: btcDirection === "NEUTRAL" ? ethDirection : btcDirection,
       breadthStrength: 0.91,
       breadthParticipation: 1,
       averageSignedMove: 0.08,
@@ -129,7 +197,7 @@ function buildPredictionResponse(direction: PredictionDirection): PredictionResp
       qualifyingMarketCount: 4,
       leaderMarketKey: "eth:5m",
       leaderGroup: ["eth:5m", "btc:5m"],
-      laggardGroup: ["btc:5m"],
+      laggardGroup: [`${asset}:5m`],
       synchronyScore: 1,
       accelerationScore: 0.72,
       exhaustionScore: 0.28,
@@ -169,10 +237,10 @@ function buildPredictionResponse(direction: PredictionDirection): PredictionResp
   };
 }
 
-function buildMarketPerformanceSummary(): MarketPerformanceSummary {
+function buildMarketPerformanceSummary(asset: "btc" | "eth" | "sol" | "xrp" = "btc"): MarketPerformanceSummary {
   return {
-    marketKey: "btc:5m",
-    asset: "btc",
+    marketKey: `${asset}:5m`,
+    asset,
     window: "5m",
     predictionCount: 10,
     score: 0.81,

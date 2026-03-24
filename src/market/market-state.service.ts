@@ -85,6 +85,23 @@ export class MarketStateService {
     return marketKey;
   }
 
+  private extractAssetFromMarketKey(marketKey: MarketKey): AssetSymbol {
+    const [asset] = marketKey.split(":");
+    return asset as AssetSymbol;
+  }
+
+  private resolveCrossAssetWeight(marketKey: MarketKey): number {
+    const asset = this.extractAssetFromMarketKey(marketKey);
+    let crossAssetWeight = 1;
+    if (asset === "btc") {
+      crossAssetWeight = 2.4;
+    }
+    if (asset === "eth") {
+      crossAssetWeight = 1.6;
+    }
+    return crossAssetWeight;
+  }
+
   private requireMarketRecord(marketKey: MarketKey): MarketRecord {
     const marketRecord = this.marketRecords.get(marketKey);
     if (!marketRecord) {
@@ -617,6 +634,35 @@ export class MarketStateService {
     return regimeClass;
   }
 
+  private resolveAnchorSignal(window: MarketWindow): { anchorAsset: AssetSymbol | null; anchorDirection: CrossAssetRegime["anchorDirection"] } {
+    const btcMarketRecord = this.requireMarketRecord(this.buildMarketKey("btc", window));
+    const ethMarketRecord = this.requireMarketRecord(this.buildMarketKey("eth", window));
+    const btcSignedMove = this.resolveSignedMove(btcMarketRecord.latest, btcMarketRecord.previous);
+    const ethSignedMove = this.resolveSignedMove(ethMarketRecord.latest, ethMarketRecord.previous);
+    let anchorAsset: AssetSymbol | null = null;
+    let anchorDirection: CrossAssetRegime["anchorDirection"] = "NEUTRAL";
+    if (btcMarketRecord.latest?.quality.hasLiveMarket && Math.abs(btcSignedMove) >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD) {
+      anchorAsset = "btc";
+      anchorDirection = btcSignedMove > 0 ? "UP" : "DOWN";
+    } else {
+      if (ethMarketRecord.latest?.quality.hasLiveMarket && Math.abs(ethSignedMove) >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD) {
+        anchorAsset = "eth";
+        anchorDirection = ethSignedMove > 0 ? "UP" : "DOWN";
+      }
+    }
+    return { anchorAsset, anchorDirection };
+  }
+
+  private resolveDirectionalMove(window: MarketWindow, asset: AssetSymbol): CrossAssetRegime["btcDirection"] {
+    const marketRecord = this.requireMarketRecord(this.buildMarketKey(asset, window));
+    const signedMove = this.resolveSignedMove(marketRecord.latest, marketRecord.previous);
+    let directionalMove: CrossAssetRegime["btcDirection"] = "NEUTRAL";
+    if (marketRecord.latest?.quality.hasLiveMarket && Math.abs(signedMove) >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD) {
+      directionalMove = signedMove > 0 ? "UP" : "DOWN";
+    }
+    return directionalMove;
+  }
+
   private buildCrossAssetRegime(marketKey: MarketKey, window: MarketWindow): CrossAssetRegime {
     const qualifyingMoves: Array<{ marketKey: MarketKey; signedMove: number }> = [];
     const targetMarketRecord = this.requireMarketRecord(marketKey);
@@ -630,17 +676,28 @@ export class MarketStateService {
     }
     const positiveMoves = qualifyingMoves.filter((qualifyingMove) => qualifyingMove.signedMove > 0);
     const negativeMoves = qualifyingMoves.filter((qualifyingMove) => qualifyingMove.signedMove < 0);
-    const dominantMoves = positiveMoves.length >= negativeMoves.length ? positiveMoves : negativeMoves;
+    const weightedPositiveBias = positiveMoves.reduce(
+      (aggregatedBias, positiveMove) => aggregatedBias + this.resolveCrossAssetWeight(positiveMove.marketKey),
+      0,
+    );
+    const weightedNegativeBias = negativeMoves.reduce(
+      (aggregatedBias, negativeMove) => aggregatedBias + this.resolveCrossAssetWeight(negativeMove.marketKey),
+      0,
+    );
     const breadthDirection =
       qualifyingMoves.length === 0
         ? "NEUTRAL"
-        : positiveMoves.length === negativeMoves.length
+        : weightedPositiveBias === weightedNegativeBias
           ? "NEUTRAL"
-          : positiveMoves.length > negativeMoves.length
+          : weightedPositiveBias > weightedNegativeBias
             ? "UP"
             : "DOWN";
+    const dominantMoves = breadthDirection === "DOWN" ? negativeMoves : breadthDirection === "UP" ? positiveMoves : [];
     const alignedMarketCount = dominantMoves.length;
     const qualifyingMarketCount = qualifyingMoves.length;
+    const anchorSignal = this.resolveAnchorSignal(window);
+    const btcDirection = this.resolveDirectionalMove(window, "btc");
+    const ethDirection = this.resolveDirectionalMove(window, "eth");
     const breadthParticipation = qualifyingMarketCount === 0 ? 0 : alignedMarketCount / qualifyingMarketCount;
     const averageSignedMove =
       dominantMoves.length === 0
@@ -683,6 +740,10 @@ export class MarketStateService {
       regimeId,
       regimeClass,
       breadthDirection,
+      btcDirection,
+      ethDirection,
+      anchorAsset: anchorSignal.anchorAsset,
+      anchorDirection: anchorSignal.anchorDirection,
       breadthStrength,
       breadthParticipation,
       averageSignedMove,

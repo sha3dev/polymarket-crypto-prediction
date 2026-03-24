@@ -69,6 +69,42 @@ The important architectural change is this:
 
 ## Core Concepts
 
+### What A Setup Is
+
+`Setup` is the final idea class the system believes it has found.
+
+It is not:
+
+- a raw strategy
+- a raw engine
+- a direct trading order
+
+It is:
+
+- the final narrative selected after the model looks at regime, active engines, direction agreement, and structural fit
+
+Short version:
+
+- `strategies` are low-level sensors
+- `engines` group those sensors by information family
+- the `combination engine` picks the best narrative
+- that winning narrative is the `setup`
+
+So:
+
+- `engine` answers: "where is the evidence coming from?"
+- `setup` answers: "what kind of trade idea is this?"
+
+Example:
+
+- `breadth_engine + propagation_engine + local_momentum_engine`
+  can produce `leader_laggard_catchup`
+
+That means:
+
+- the evidence comes from breadth, propagation, and momentum
+- the final story is "leaders already moved, this laggard may catch up"
+
 ### Research vs Execution
 
 `Research` is the broad learning layer.
@@ -115,6 +151,20 @@ Under the new architecture, these market scores are no longer the top of the hie
 ### Cross-Asset Regime
 
 The new model treats cross-asset context as structural, not decorative.
+
+It now applies a very simple directional hierarchy:
+
+- `BTC` is the primary market leader
+- `ETH` is only tradable in the same direction as `BTC`
+- `SOL` and `XRP` are only tradable when `BTC` and `ETH` are aligned
+- `SOL` and `XRP` can only be traded in that shared `BTC`/`ETH` direction
+
+In practical terms:
+
+- if `BTC` is down, the system will not allow `ETH UP`
+- if `BTC` is up and `ETH` is not clearly up as well, the system will not allow `SOL UP` or `XRP UP`
+- if `BTC` and `ETH` are both down, the system will not allow `SOL UP` or `XRP UP`
+- breadth still matters, but this hierarchy is treated as a hard structural guardrail
 
 For each `5m` or `15m` window, the regime engine measures:
 
@@ -246,6 +296,61 @@ Current setup types:
 - `fade_failed_cross`
 - `research_probe`
 
+What a `setup` actually means:
+
+- A `setup` is not a raw strategy and it is not the same thing as an engine.
+- A `setup` is the final trade narrative chosen by the combination engine after it looks at:
+  - the current cross-asset regime
+  - which engines are active
+  - whether those engines agree on direction
+  - whether that agreement makes structural sense for the current market
+- In practical terms, the setup answers this question:
+  - “What kind of idea does the system believe this is?”
+
+The hierarchy is:
+
+1. raw strategies produce local evidence
+2. engines aggregate that evidence by information family
+3. the combination engine compares plausible narratives
+4. one `setup` wins
+5. execution decides whether that setup deserves capital
+
+This distinction matters:
+
+- `engine` = where the evidence comes from
+- `setup` = what story that evidence is telling
+
+Examples:
+
+- `breadth_engine + local_momentum_engine + propagation_engine`
+  can produce the setup `broad_continuation`
+- `breadth_engine + propagation_engine`
+  can produce `leader_laggard_catchup`
+- `mispricing_engine + meta_engine`
+  can produce `mispricing_repricing`
+- `reversion_engine + local_microstructure_engine`
+  can produce `fade_failed_cross`
+
+So when you read `Execution Now` or `Resolved Predictions`:
+
+- the `setup` tells you the model's final interpretation
+- the `engine combo` tells you which families of evidence supported that interpretation
+
+Short interpretation of each setup:
+
+- `broad_continuation`
+  The market is moving with a real broad impulse and continuation is the main idea.
+- `leader_laggard_catchup`
+  Some markets are clearly leading and this market looks like a laggard that may catch up.
+- `local_breakout_confirmed`
+  Local continuation is strong enough on this market even without needing the strongest propagation case.
+- `mispricing_repricing`
+  The market looks temporarily mispriced versus external or structural reference signals.
+- `fade_failed_cross`
+  A continuation move looks invalid and the system prefers the rejection/reversion narrative.
+- `research_probe`
+  The system sees a research-worthy idea, but not one that should automatically deserve execution trust.
+
 The selection logic prefers:
 
 - combinations whose engines agree on direction
@@ -352,6 +457,7 @@ Interpretation:
 - if this engine is dominant, the whole market is moving together
 - this engine often drives `broad_continuation`
 - when it is strong, isolated local contrarian calls should be treated skeptically
+- `s21` is now a confirmation sensor inside this engine, not the main source of breadth conviction by itself
 
 ### `propagation_engine`
 
@@ -421,7 +527,7 @@ The raw ids still map to these niches:
 - `s18` Liquidity Shock Fade: short mean reversion
 - `s19` Recent Performance Hedge: meta damping
 - `s20` Online Logistic Blend: blended meta read
-- `s21` Cross-Asset Breadth Impulse: synchronized market-wide flow
+- `s21` Cross-Asset Breadth Impulse: synchronized market-wide flow confirmation
 - `s22` Leader-Laggard Catch-Up: propagation into lagging assets
 
 ## Prediction Lifecycle

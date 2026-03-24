@@ -65,7 +65,7 @@ export class StrategyEngineService {
       { strategyId: "s18", name: "Liquidity Shock Fade", tier: "medium", description: "Short mean reversion." },
       { strategyId: "s19", name: "Recent Performance Hedge", tier: "high", description: "Meta performance hedge." },
       { strategyId: "s20", name: "Online Logistic Blend", tier: "high", description: "Feature-weighted blend." },
-      { strategyId: "s21", name: "Cross-Asset Breadth Impulse", tier: "medium", description: "Market-wide synchronous move confirmation." },
+      { strategyId: "s21", name: "Cross-Asset Breadth Impulse", tier: "medium", description: "Market-wide breadth confirmation, not primary conviction." },
       { strategyId: "s22", name: "Leader-Laggard Catch-Up", tier: "high", description: "Follow lagging asset after peer impulse." },
     ];
     return strategyDefinitions;
@@ -223,7 +223,7 @@ export class StrategyEngineService {
     const directionSign = context.crossAssetRegime.breadthDirection === "UP" ? 1 : context.crossAssetRegime.breadthDirection === "DOWN" ? -1 : 0;
     let engineBias = 0;
     if (engineId === "breadth_engine") {
-      engineBias = directionSign * (context.crossAssetRegime.breadthStrength * 1.35 + context.crossAssetRegime.synchronyScore * 0.2);
+      engineBias = directionSign * (context.crossAssetRegime.breadthStrength * 0.55 + context.crossAssetRegime.synchronyScore * 0.08);
     }
     if (engineId === "propagation_engine") {
       engineBias =
@@ -254,7 +254,7 @@ export class StrategyEngineService {
     const isDirectionAligned = crossAssetRegime.breadthDirection === "NEUTRAL" ? true : crossAssetRegime.breadthDirection === direction;
     let regimeFit = 0.85;
     if (engineId === "breadth_engine") {
-      regimeFit = crossAssetRegime.isDirectional ? 1 + crossAssetRegime.breadthStrength * 0.7 : 0.35;
+      regimeFit = crossAssetRegime.isDirectional ? 0.92 + crossAssetRegime.breadthStrength * 0.22 : 0.4;
     }
     if (engineId === "propagation_engine") {
       regimeFit = crossAssetRegime.hasLeaderLaggardOpportunity ? 1.1 + crossAssetRegime.lagRatio * 0.35 : crossAssetRegime.isDirectional ? 0.7 : 0.3;
@@ -737,8 +737,8 @@ export class StrategyEngineService {
     if (crossAssetRegime.hasStrongBreadth && crossAssetRegime.breadthDirection !== "NEUTRAL") {
       const breadthDirectionSign = crossAssetRegime.breadthDirection === "UP" ? 1 : -1;
       const alignmentBias =
-        Math.sign(crossAssetRegime.targetSignedMove) === 0 ? 0.85 : Math.sign(crossAssetRegime.targetSignedMove) === breadthDirectionSign ? 1 : -0.55;
-      score = breadthDirectionSign * crossAssetRegime.breadthStrength * alignmentBias;
+        Math.sign(crossAssetRegime.targetSignedMove) === 0 ? 0.45 : Math.sign(crossAssetRegime.targetSignedMove) === breadthDirectionSign ? 0.55 : -0.2;
+      score = breadthDirectionSign * crossAssetRegime.breadthStrength * 0.28 * alignmentBias;
     }
     return score;
   }
