@@ -17,6 +17,7 @@ export type MarketKey = `${AssetSymbol}:${MarketWindow}`;
 export type TriggeredToken = "up" | "down";
 export type TriggerType = "near_half" | "crossed_half";
 export type PredictionDirection = "UP" | "DOWN";
+export type CrossAssetBreadthDirection = PredictionDirection | "NEUTRAL";
 export type SnapshotValue = number | string | null;
 export type InputSnapshot = { generated_at: number } & Record<string, SnapshotValue>;
 export type OrderBookLevel = { price: number; size: number };
@@ -89,6 +90,20 @@ export type MarketTrigger = {
   distanceToHalf: number | null;
   triggeredAt: number;
 };
+export type CrossAssetRegime = {
+  breadthDirection: CrossAssetBreadthDirection;
+  breadthStrength: number;
+  breadthParticipation: number;
+  averageSignedMove: number;
+  targetSignedMove: number;
+  peerAverageSignedMove: number;
+  lagRatio: number;
+  alignedMarketCount: number;
+  qualifyingMarketCount: number;
+  leaderMarketKey: MarketKey | null;
+  hasStrongBreadth: boolean;
+  hasLeaderLaggardOpportunity: boolean;
+};
 export type MarketUpdateResult = {
   generatedAt: number;
   triggeredMarkets: MarketTrigger[];
@@ -126,4 +141,5 @@ export type PredictionContext = {
   current: MarketSnapshotSlice;
   previous: MarketSnapshotSlice | null;
   history: MarketHistoryEntry[];
+  crossAssetRegime: CrossAssetRegime;
 };

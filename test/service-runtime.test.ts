@@ -124,6 +124,8 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(typeof latestPredictionJson.adjustedWeightedScore, "number");
   assert.equal(typeof latestPredictionJson.baseConfidence, "number");
   assert.equal(typeof latestPredictionJson.adjustedConfidence, "number");
+  assert.equal(typeof latestPredictionJson.crossAssetRegime.breadthDirection, "string");
+  assert.equal(typeof latestPredictionJson.crossAssetRegime.breadthStrength, "number");
   assert.equal(Array.isArray(latestPredictionJson.comboBreakdown.activeCombos), true);
 
   const cooldownPredictionsResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=10`);
@@ -184,7 +186,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const strategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies`);
   const strategiesJson = (await strategiesResponse.json()) as StrategySummary[];
   assert.equal(strategiesResponse.status, 200);
-  assert.equal(strategiesJson.length, 20);
+  assert.equal(strategiesJson.length, 22);
   assert.equal(
     strategiesJson.every((strategy) => strategy.totalResolved >= 0),
     true,
@@ -194,7 +196,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const btcStrategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies?asset=btc&window=5m`);
   const btcStrategiesJson = (await btcStrategiesResponse.json()) as StrategySummary[];
   assert.equal(btcStrategiesResponse.status, 200);
-  assert.equal(btcStrategiesJson.length, 20);
+  assert.equal(btcStrategiesJson.length, 22);
   assert.equal(btcStrategiesJson[0]?.marketKey, "btc:5m");
   assert.equal(
     btcStrategiesJson.every((strategy) => strategy.totalResolved >= 0),
@@ -204,7 +206,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const solStrategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies?asset=sol&window=5m`);
   const solStrategiesJson = (await solStrategiesResponse.json()) as StrategySummary[];
   assert.equal(solStrategiesResponse.status, 200);
-  assert.equal(solStrategiesJson.length, 20);
+  assert.equal(solStrategiesJson.length, 22);
   assert.equal(solStrategiesJson[0]?.marketKey, "sol:5m");
   assert.ok(solStrategiesJson.every((strategy) => strategy.totalResolved === 0));
 
@@ -227,6 +229,8 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(executionResponse.status, 200);
   assert.equal(executionJson.executionNow.length, 8);
   assert.equal(typeof executionJson.executionNow[0].decision.marketTradeCount, "number");
+  assert.equal(typeof executionJson.executionNow[0].decision.breadthDirection, "string");
+  assert.equal(typeof executionJson.executionNow[0].decision.hasBreadthAlignment, "boolean");
   assert.equal(executionJson.executionNow[0].decision.orderShareCount >= 5, true);
   assert.equal(executionJson.executionNow[0].decision.orderNotionalUsd === null || executionJson.executionNow[0].decision.orderNotionalUsd >= 1, true);
 

@@ -52,6 +52,10 @@ export class ExecutionPolicyService {
       makerFillProbability: 0,
       bookRiskScore: 1,
       positionSizeSuggestion: 0,
+      breadthDirection: prediction?.crossAssetRegime.breadthDirection ?? "NEUTRAL",
+      breadthStrength: prediction?.crossAssetRegime.breadthStrength ?? null,
+      hasStrongBreadth: prediction?.crossAssetRegime.hasStrongBreadth ?? false,
+      hasBreadthAlignment: this.hasBreadthAlignment(prediction),
       hasComboGatePassed: prediction?.comboGate.hasComboGatePassed ?? false,
       selectedComboKey: prediction?.comboGate.selectedComboKey ?? null,
       selectedComboSize: prediction?.comboGate.selectedComboSize ?? null,
@@ -70,6 +74,16 @@ export class ExecutionPolicyService {
       positionSide = "down";
     }
     return positionSide;
+  }
+
+  private hasBreadthAlignment(prediction: PredictionResponse | null): boolean {
+    let hasBreadthAlignment = true;
+    const breadthDirection = prediction?.crossAssetRegime.breadthDirection ?? "NEUTRAL";
+    const hasStrongBreadth = prediction?.crossAssetRegime.hasStrongBreadth ?? false;
+    if (prediction !== null && hasStrongBreadth && breadthDirection !== "NEUTRAL") {
+      hasBreadthAlignment = prediction.direction === breadthDirection;
+    }
+    return hasBreadthAlignment;
   }
 
   private resolveTokenPrice(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number | null {
@@ -215,6 +229,9 @@ export class ExecutionPolicyService {
           if (!prediction.comboGate.hasComboGatePassed) {
             gateFailures.push("combo_gate_failed");
           }
+          if (!this.hasBreadthAlignment(prediction)) {
+            gateFailures.push("cross_asset_regime_conflict");
+          }
           if (!marketSlice.quality.hasLiveMarket) {
             gateFailures.push("market_not_live");
           }
@@ -287,6 +304,10 @@ export class ExecutionPolicyService {
               makerFillProbability,
               bookRiskScore,
               positionSizeSuggestion,
+              breadthDirection: prediction.crossAssetRegime.breadthDirection,
+              breadthStrength: prediction.crossAssetRegime.breadthStrength,
+              hasStrongBreadth: prediction.crossAssetRegime.hasStrongBreadth,
+              hasBreadthAlignment: true,
               hasComboGatePassed: true,
               selectedComboKey: prediction.comboGate.selectedComboKey,
               selectedComboSize: prediction.comboGate.selectedComboSize,

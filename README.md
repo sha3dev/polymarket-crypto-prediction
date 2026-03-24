@@ -1,10 +1,6 @@
 # @sha3/polymarket-crypto-prediction
 
-Real-time Node.js service for Polymarket crypto Up/Down markets with three layers in one process:
-
-- market monitoring from `@sha3/polymarket-snapshot`
-- event-driven 30-second prediction and rolling strategy scoring
-- paper execution overlay for near-`0.5` entries, TP/SL exits, and maker-vs-taker choice
+Real-time Node.js service for Polymarket crypto Up/Down markets. It ingests market snapshots, runs a twenty-two-strategy ensemble, discovers dynamic pairs and trios, separates `research` from `execution`, and simulates a conservative paper-trading layer with TP/SL exits.
 
 ## TL;DR
 
@@ -18,25 +14,436 @@ Open:
 
 - `http://localhost:3300/` dashboard
 - `http://localhost:3300/v1/healthz` health
-- `http://localhost:3300/v1/execution` current paper execution state
+- `http://localhost:3300/v1/execution` execution gate state
+- `http://localhost:3300/v1/dashboard/summary` full dashboard payload
 
-## Why
+## Why This Exists
 
-Use this package when you want one service that can answer both:
+This service answers two different questions and keeps them separated:
 
-- “what does the ensemble predict around the 0.5 zone?”
-- “if I only wanted to trade those signals near 0.5, would I enter now, with TP/SL, as maker or taker, and how would that policy have performed recently?”
+- `research`: what does the ensemble believe about a Polymarket market right now?
+- `execution`: which of those signals are good enough to deserve capital, given recent trade quality, combo quality, market quality, and execution constraints?
+
+That split is the core design choice of the project:
+
+- all resolved predictions can improve `research`
+- only execution-approved trades affect paper PnL
+- combos and trios are not cosmetic boosts anymore; they are part of the execution gate
 
 ## Main Capabilities
 
 - Watches BTC, ETH, SOL, and XRP on `5m` and `15m` Polymarket markets.
-- Triggers predictions only on proximity or crosses around `0.5`.
-- Scores twenty strategies and adapts ensemble weights online.
-- Simulates execution for token entries near `0.5` with token-price TP/SL.
-- Decides `maker` vs `taker` from order-book conditions and urgency.
-- Sizes paper trades so they respect Polymarket minimums of `5` shares and `$1` notional.
-- Warms up each market with a few predictions before the paper execution overlay is allowed to trade it.
-- Exposes REST APIs plus a single-screen Hono dashboard with hover hints.
+- Generates event-driven predictions around the `0.5` zone instead of continuously spamming every tick.
+- Adapts twenty-two strategy weights online from rolling research outcomes.
+- Builds dynamic strategy pairs and trios per market.
+- Requires a combo or trio gate before execution is allowed.
+- Separates research quality from execution quality through distinct market scores.
+- Simulates conservative paper trading with TP/SL, maker/taker choice, and position caps.
+- Exposes REST endpoints plus a single-screen operator dashboard.
+
+## System Overview
+
+The runtime has four layers:
+
+1. `Market ingestion`
+   Reads Polymarket token state plus spot and Chainlink context from `@sha3/polymarket-snapshot`.
+
+2. `Research prediction engine`
+   Generates predictions on trigger events around `0.5`, scores strategies, and tracks rolling prediction quality.
+
+3. `Combo intelligence`
+   Builds dynamic pairs and trios from currently participating strategies, scores them, and decides whether any combo is good enough to unlock execution.
+
+4. `Execution overlay`
+   Applies a stricter gate based on:
+   - market quality
+   - prediction confidence
+   - combo gate
+   - `research score`
+   - `execution score`
+   - discounted bootstrap logic when there is not enough real trade history yet
+
+## Core Concepts
+
+### Research vs Execution
+
+`Research` is the broad learning layer. A prediction can be generated and later resolved even if it never became a trade.
+
+`Execution` is the capital-allocation layer. A prediction only becomes executable when all hard gates pass, especially:
+
+- market quality
+- price proximity to the preferred entry anchor
+- spread and depth constraints
+- minimum effective execution score
+- combo or trio gate approval
+
+Only executed trades affect paper PnL. This keeps the model from confusing “interesting signal” with “tradable signal.”
+
+### Scores
+
+The service tracks three market-level notions of score:
+
+- `researchScore`
+  Derived from resolved predictions. It measures signal quality, signed edge, calibration, and sample size.
+
+- `executionScore`
+  Derived only from closed paper trades. It measures actual realized trade quality after costs and drawdown.
+
+- `effectiveExecutionScore`
+  The score used by the execution gate.
+  - if there are not enough trades yet, it uses discounted `researchScore`
+  - once trade history exists, it uses the more conservative of:
+    - the real `executionScore`
+    - the discounted `researchScore`
+
+This design avoids cold-start paralysis without letting early optimistic research metrics immediately become full execution trust.
+
+### Cross-Asset Regime
+
+The engine also measures whether the whole crypto complex is moving together inside the same window.
+
+For each `5m` or `15m` slice it computes:
+
+- directional breadth across BTC, ETH, SOL, and XRP
+- breadth strength from participation plus move magnitude
+- whether the current market is lagging a broader impulse led by peers
+
+This information is used in two places:
+
+- `research`
+  Through dedicated strategies that reward broad synchronous moves and leader-laggard catch-up setups.
+
+- `execution`
+  Through a hard block when a local signal fights a strong market-wide breadth regime.
+
+### Combos and Trios
+
+Combos are dynamic pairs or trios of strategies built from the highest-weight participating strategies on the current market.
+
+For every active pair or trio, the engine tracks:
+
+- sample count
+- agreement purity
+- hit rate
+- PnL proxy
+- lift versus the best member
+- drawdown proxy
+- recent streak
+- calibration error
+
+Combos serve two roles:
+
+- `research role`
+  Agreement combos can still boost score and disagreement combos can still reduce confidence.
+
+- `execution role`
+  A combo or trio must be historically strong enough to pass the combo gate, or the prediction is not tradable.
+
+The execution gate prefers the best eligible combo by:
+
+- effective combo score
+- sample size
+- lower drawdown
+- lift over the best member
+
+If no combo or trio is good enough, the prediction may still exist in research, but execution is blocked.
+
+## Strategy Model
+
+The ensemble contains twenty-two strategies arranged in three escalation tiers:
+
+- `low`
+  Cheap, fast features that always run first.
+
+- `medium`
+  Activated when the low-tier aggregate is not confident enough.
+
+- `high`
+  Activated when the low+medium aggregate is still ambiguous.
+
+Each strategy emits:
+
+- direction
+- score
+- confidence
+- current market-local adaptive weight
+- debug context
+
+The final ensemble decision is a weighted aggregate of participating strategies. Strategy weights adapt online from rolling research outcomes, not from raw static constants.
+
+## Strategy Reference
+
+### Low Tier
+
+#### `s01` Momentum EWMA
+
+Looks at recent `up` midpoint drift over the last few slices and measures short continuation pressure.
+
+Use it for:
+
+- local short-term trend continuation
+- confirming whether a move around `0.5` has momentum behind it
+
+#### `s02` Token Microprice
+
+Uses token imbalance and distance-to-half to approximate top-of-book pressure.
+
+Use it for:
+
+- immediate book-pressure reads
+- deciding whether local order-book shape favors `UP` or `DOWN`
+
+#### `s06` No-Arb Consistency
+
+Checks whether `UP` and `DOWN` probabilities make sense together.
+
+Use it for:
+
+- identifying inconsistent token pricing
+- catching imbalance created by token-side mispricing rather than directional conviction
+
+#### `s07` Spread Compression
+
+Combines relative token spread pressure with spot momentum.
+
+Use it for:
+
+- situations where improved liquidity is aligning with directional spot flow
+
+#### `s08` Barrier Timing
+
+Compares Chainlink price with the market’s `priceToBeat`.
+
+Use it for:
+
+- “who is on the correct side of the barrier” logic
+- detecting when the barrier itself is misread by token pricing
+
+#### `s09` Spot Consensus Momentum
+
+Direct spot-consensus drift signal.
+
+Use it for:
+
+- fast cross-venue directional confirmation
+
+#### `s14` Chainlink Basis
+
+Measures the gap between spot consensus and Chainlink.
+
+Use it for:
+
+- oracle catch-up and basis normalization effects
+
+#### `s16` Freshness Gap
+
+Compares token staleness with the freshest spot venues and projects spot momentum into stale-token situations.
+
+Use it for:
+
+- lead-lag opportunities caused by slower token updates
+
+### Medium Tier
+
+#### `s03` Token Imbalance Band
+
+Uses relative depth between `UP` and `DOWN`.
+
+Use it for:
+
+- multi-level token book skew
+- asymmetric local liquidity
+
+#### `s04` Wall Proximity
+
+Looks at relative spreads and depth to infer liquidity barriers.
+
+Use it for:
+
+- wall-based directional bias
+- barrier pressure near relevant token levels
+
+#### `s05` Order Book Churn
+
+Measures recent change in `UP` vs `DOWN` midpoint dynamics.
+
+Use it for:
+
+- microstructure rotation
+- unstable local directional handoff
+
+#### `s10` Spot Micropressure
+
+Averages order-book imbalance across spot venues.
+
+Use it for:
+
+- cross-venue microstructure confirmation
+
+#### `s11` Spot Dispersion
+
+Penalizes noisy multi-venue moves, especially when spot momentum and venue dispersion disagree.
+
+Use it for:
+
+- avoiding weak consensus moves
+- preferring coordinated spot action
+
+#### `s12` Volatility Breakout
+
+Normalizes recent momentum by recent average absolute movement.
+
+Use it for:
+
+- regime transitions
+- detecting when a move is large relative to recent volatility
+
+#### `s13` Spot Slippage Skew
+
+Uses spread conditions across spot venues as a slope and friction proxy.
+
+Use it for:
+
+- rough directional pressure from venue execution friction
+
+#### `s15` Theoretical Probability Gap
+
+Compares a simple theoretical barrier probability with observed token probability.
+
+Use it for:
+
+- token-versus-barrier dislocations
+
+#### `s17` Regime Switch
+
+Switches between continuation and fade logic depending on available liquidity.
+
+Use it for:
+
+- adapting behavior to deep versus thin books
+
+#### `s18` Liquidity Shock Fade
+
+Mean-reversion signal based on distance-to-half asymmetry.
+
+Use it for:
+
+- short shock-fade behavior
+- snapping back after abrupt local dislocations
+
+#### `s21` Cross-Asset Breadth Impulse
+
+Measures whether the whole monitored crypto set is moving together in the same direction on the same window.
+
+Use it for:
+
+- confirming local signals with market-wide synchronous flow
+- penalizing isolated calls that fight a strong cross-asset move
+
+### High Tier
+
+#### `s19` Recent Performance Hedge
+
+Reads bias from prior signals already emitted in the current evaluation path.
+
+Use it for:
+
+- meta-layer correction
+- damping overconfident one-sided internal consensus
+
+#### `s20` Online Logistic Blend
+
+Weighted blend of several core features plus prior-signal bias.
+
+Uses:
+
+- momentum
+- spot consensus momentum
+- token microprice
+- barrier timing
+- prior-signal bias
+
+Use it for:
+
+- final blended decision when the cheaper tiers still disagree or remain weak
+
+#### `s22` Leader-Laggard Catch-Up
+
+Looks for markets that are moving in the same direction as the broader regime but have not yet caught up to the leaders.
+
+Use it for:
+
+- follow-through entries in lagging assets after BTC, ETH, or another peer already accelerated
+- exploiting delayed propagation across correlated crypto assets
+
+## Prediction Lifecycle
+
+1. A market event triggers near `0.5` or across `0.5`.
+2. The strategy engine evaluates low-tier strategies first.
+3. If confidence is weak, medium tier is added.
+4. If still ambiguous, high tier is added.
+5. The ensemble aggregates a base direction and confidence.
+6. Active combos and trios are built from the currently participating strategies.
+7. The cross-asset regime is measured for breadth and leader-laggard context.
+8. Combo research effects may still boost score or penalize confidence.
+9. The best eligible combo gate candidate is selected.
+10. A prediction is stored as a research prediction.
+11. Execution decides whether that prediction is tradable.
+12. If a trade is opened, TP/SL and maker-vs-taker logic manage the position.
+13. Research metrics update from resolved predictions.
+14. Execution metrics update only from closed trades.
+
+## Execution Gate
+
+A prediction is blocked from trading when any of these classes of checks fail:
+
+- no prediction context
+- position already open
+- invalid direction
+- no reference price
+- combo gate failed
+- market not live
+- quality too low
+- confidence too low
+- price too far from `0.5`
+- spread too wide
+- market still warming up
+- insufficient execution history
+- bootstrap discount too low
+- execution score too low
+- order below minimum notional or share count
+
+This is intentionally conservative. Research may say “interesting”; execution still says “not yet.”
+
+## Dashboard Semantics
+
+The dashboard is designed for operator review, not just pretty metrics.
+
+Key panels:
+
+- `Markets`
+  Live token state, quality, cooldown, and market-level effective score context.
+
+- `Execution Now`
+  The current go/no-go decision for each market, including:
+  - research score
+  - execution score
+  - effective execution score
+  - selected combo
+  - combo gate state
+  - exact reason codes when blocked
+
+- `Resolved Predictions`
+  Predictions that have completed through TP/SL-style resolution.
+
+- `Strategies`
+  Market-local research weights plus research and execution proxy behavior.
+
+- `Top Combos`
+  Best dynamic pairs and trios, including research score and effective execution score.
+
+- `Market PnL`
+  Closed-trade execution performance per market.
 
 ## Installation
 
@@ -52,11 +459,11 @@ Minimal example:
 PORT=3300
 SNAPSHOT_INTERVAL_MS=500
 ENTRY_TARGET_PRICE=0.5
-ENTRY_BAND_HALF_WIDTH=0.02
-MIN_ORDER_USD=1
-MIN_ORDER_SHARES=5
-TAKE_PROFIT_DELTA=0.2
-STOP_LOSS_DELTA=0.2
+ENTRY_BAND_HALF_WIDTH=0.01
+MIN_ENTRY_CONFIDENCE=0.72
+MIN_EXECUTION_SCORE_FOR_ENTRY=0.68
+MIN_COMBO_EXECUTION_SCORE=0.68
+MAX_OPEN_POSITIONS_GLOBAL=3
 ```
 
 ## Running Locally
@@ -110,25 +517,25 @@ await serviceRuntime.stop();
 
 ## Examples
 
-Latest prediction:
+Latest prediction for one market:
 
 ```bash
 curl "http://localhost:3300/v1/predict?asset=btc&window=5m"
 ```
 
-Current execution decisions and open positions:
+Execution gate state:
 
 ```bash
 curl "http://localhost:3300/v1/execution"
 ```
 
-Recent paper trades:
+Recent trades:
 
 ```bash
 curl "http://localhost:3300/v1/trades?limit=10"
 ```
 
-Dashboard summary payload:
+Dashboard payload:
 
 ```bash
 curl "http://localhost:3300/v1/dashboard/summary"
@@ -166,20 +573,20 @@ Returns recent prediction history for one market.
 
 ### `GET /v1/strategies`
 
-Returns all strategies with rolling metrics and adaptive weights.
+Returns rolling strategy summaries with market-local adaptive weights.
 
 - status: `200`
 
-When `asset` and `window` are provided together, this returns the local market board for that market instead of the global aggregate.
+If `asset` and `window` are provided together, the endpoint returns the local market board for that market instead of the global aggregate.
 
 ### `GET /v1/combos?asset={btc|eth|sol|xrp}&window={5m|15m}&limit=N`
 
-Returns recent pair and trio combo summaries.
+Returns pair and trio combo summaries.
 
 - status: `200`
 - validation failure: `400`
 
-Without `asset` and `window`, the endpoint returns the global recent combo leaderboard across markets.
+Without `asset` and `window`, the endpoint returns the recent global combo leaderboard across markets.
 
 ### `GET /v1/markets`
 
@@ -198,7 +605,7 @@ Includes:
 - health
 - KPI strip data
 - market summaries
-- latest predictions
+- resolved predictions
 - global strategy summaries
 - per-market strategy boards
 - market PnL table
@@ -213,7 +620,7 @@ Includes:
 
 ### `GET /v1/execution`
 
-Returns the current paper execution state.
+Returns the current execution gate plus open positions.
 
 - status: `200`
 
@@ -230,7 +637,7 @@ Returns recent closed paper trades.
 - status: `200`
 - validation failure: `400`
 
-### Error shape
+### Error Shape
 
 Validation and not-found responses use:
 
@@ -245,222 +652,223 @@ Validation and not-found responses use:
 
 ### `ServiceRuntime`
 
-Public runtime entrypoint.
+Main runtime entrypoint.
 
-#### `createDefault()`
+#### `createDefault(): ServiceRuntime`
 
-Creates the fully wired service runtime with snapshot ingestion, prediction engine, paper execution overlay, dashboard summary service, and HTTP server.
+Creates the fully wired service runtime with:
 
-Returns:
-
-- `ServiceRuntime`
-
-#### `buildServer()`
-
-Builds the Node `ServerType` without binding a port.
-
-Returns:
-
-- `ServerType`
-
-#### `startServer()`
-
-Starts snapshot ingestion and binds the HTTP server on `config.DEFAULT_PORT`.
-
-Returns:
-
-- `ServerType`
-
-#### `ingestSnapshot()`
-
-Injects a flat snapshot into the runtime for deterministic tests or local simulation.
-
-Returns:
-
-- `void`
-
-#### `stop()`
-
-Stops the HTTP server and disconnects the underlying snapshot service.
-
-Returns:
-
-- `Promise<void>`
-
-### `HealthPayload`
-
-Public type used by `GET /v1/healthz`.
-
-### `DashboardSummaryPayload`
-
-Public type used by `GET /v1/dashboard/summary`.
-
-Contains the top-level dashboard sections including:
-
+- snapshot ingestion
 - market state
-- predictions
-- global strategy ranking
-- per-market strategy board
-- market PnL table
-- combo boards and combo leaders
-- combo influence on recent predictions
-- execution decisions
-- open positions
-- recent trades
-- paper execution performance
+- strategy engine
+- combo engine
+- prediction engine
+- paper execution layer
+- dashboard summary service
+- HTTP server
 
-### `MarketSummary`
+#### `buildServer(): ServerType`
 
-Public type used by `GET /v1/markets`.
+Builds the Hono-backed HTTP server without binding a port.
 
-Represents one `(asset, window)` market with:
+Behavior notes:
 
-- live token prices and midpoints
-- trigger proximity to `0.5`
-- cooldown state
-- quality diagnostics
+- does not start listening
+- useful for tests or custom orchestration
 
-### `PredictionResponse`
+#### `startServer(): ServerType`
 
-Public type used by `GET /v1/predict` and `GET /v1/predictions`.
+Attaches snapshot ingestion and starts the HTTP server on `DEFAULT_PORT`.
 
-Includes:
+Behavior notes:
 
-- direction
-- confidence
-- base and adjusted score/confidence
-- trigger origin
-- resolution status
-- full strategy breakdown
-- full combo breakdown
+- binds the port immediately
+- logs the listening address
 
-### `StrategySummary`
+#### `stop(): Promise<void>`
 
-Public type used by `GET /v1/strategies`.
+Stops the HTTP server and disconnects snapshot ingestion.
 
-Includes:
+Behavior notes:
 
-- adaptive weight
-- hit rate
-- calibration
-- cumulative and average PnL proxy
-- streak
-- recent participation
+- safe for controlled shutdown in tests and local runs
 
-### `ComboSummary`
+#### `ingestSnapshot(snapshot: InputSnapshot): void`
 
-Public type used by `GET /v1/combos`.
+Injects one snapshot directly into the runtime.
 
-Includes:
+Behavior notes:
 
-- combo key and member strategies
-- size (`2` for pair, `3` for trio)
-- combo score
-- hit rate and PnL proxy
-- lift versus the best member
-- combo status
-
-### `ComboUsage`
-
-Public type used inside prediction combo breakdowns.
-
-Includes:
-
-- combo identity and size
-- agreement or disagreement mode
-- applied boost or confidence penalty
-- whether the combo affected score or confidence
+- useful for deterministic tests
+- triggers market update, prediction generation, and execution handling
 
 ### `ComboBreakdown`
 
-Public type embedded in `PredictionResponse`.
+Describes the combo activity attached to one prediction.
 
 Includes:
 
-- active combos seen for that prediction
-- boost combos that changed the weighted score
-- disagreement combos that reduced confidence
-- total boost and total confidence-penalty amounts
+- `activeCombos`
+- `appliedBoostCombos`
+- `appliedDisagreementCombos`
+- `totalBoostApplied`
+- `totalConfidencePenaltyApplied`
+
+Use it when you need to explain how combos changed an ensemble decision.
+
+### `ComboSummary`
+
+Rolling summary for one strategy pair or trio on one market.
+
+Includes:
+
+- sample count
+- agreement purity
+- hit rate
+- cumulative and average PnL proxy
+- combo score
+- effective combo score
+- source of score trust
+- execution eligibility
+
+Use it when ranking combos or debugging why a combo gate passed or failed.
+
+### `ComboUsage`
+
+Per-prediction record of one combo that was active during evaluation.
+
+Includes:
+
+- combo key and members
+- size
+- direction
+- whether members agreed
+- score and confidence effects
+- reason code
+
+Use it when you want to inspect the exact combo footprint of a single prediction.
 
 ### `MarketComboBoard`
 
-Dashboard-facing public type for one market.
+Market-level combo dashboard payload.
 
 Includes:
 
 - top pairs
 - top trios
-- currently active combos
-- latest applied combos
+- active combos now
+- last applied combos
 - combo boost share
-- combo confidence-penalty share
+- combo confidence penalty share
+- actionable-combo flag
+
+Use it to render market-local combo boards or compare pair/trio strength by market.
+
+### `DashboardSummaryPayload`
+
+Top-level payload used by the HTML dashboard.
+
+Includes:
+
+- health
+- KPIs
+- markets
+- latest resolved predictions
+- strategy boards
+- execution decisions
+- combo boards
+- open positions
+- recent trades
+- portfolio stats
+
+Use it when integrating an external UI that wants the same operator view as the built-in dashboard.
+
+### `HealthPayload`
+
+Lightweight service health payload.
+
+Includes:
+
+- `ok`
+- `serviceName`
+- `snapshotAgeMs`
+- `isSnapshotHealthy`
+- `pendingEvaluationCount`
+- `monitoredMarketCount`
+- `startedAt`
+
+Use it for probes, dashboards, and ingestion-lag alerts.
 
 ### `ExecutionDecision`
 
-Public type describing whether a paper entry is currently allowed for a market.
+Decision object for one market at one moment.
 
 Includes:
 
-- buy side (`up` or `down`)
-- entry reference near `0.5`
-- TP and SL prices
-- chosen `maker` or `taker` style
-- urgency score
-- maker fill probability
-- gate failures when blocked
+- tradability flag
+- prediction direction
+- reference entry
+- TP and SL
+- execution style
+- research, execution, and effective execution scores
+- combo gate decision
+- reason codes when blocked
+
+Use it when you need a machine-readable explanation of why a market is or is not tradable.
 
 ### `MarketExecutionSummary`
 
-Public type for one market’s execution state.
+Execution summary for one market.
 
 Includes:
 
-- current `ExecutionDecision`
-- current `OpenPositionSummary` if a position is open
+- market identity
+- `decision`
+- optional `openPosition`
+
+Use it for execution tables or market-by-market operator reviews.
 
 ### `OpenPositionSummary`
 
-Public type for simulated live positions.
+Current mark-to-market view of one open paper position.
 
 Includes:
 
-- side held
-- lifecycle status
+- side
+- status
 - entry fill
 - live token price
-- unrealized token-price PnL
-- TP / SL
-- time remaining until forced flatten
+- unrealized PnL
+- TP and SL
+
+Use it to render open exposure and exit risk.
 
 ### `PaperPosition`
 
-Public type representing the full internal paper position lifecycle.
+Internal-style detail shape for an open or lifecycle-managed paper position.
 
-Includes:
+Includes full entry, exit, maker/taker, and realized-PnL fields.
 
-- entry and exit style
-- posted and filled prices
-- TP / SL
-- flatten deadline
-- realized PnL
-- maker attempts
-- taker fallback flag
+Use it if you need the detailed position state rather than the compressed summary view.
 
 ### `PaperTrade`
 
-Public type representing a closed paper trade.
+Closed trade record.
 
 Includes:
 
-- market and side
-- maker/taker on entry and exit
-- exit reason
-- hold time
+- entry and exit styles
+- fill prices
+- notional
 - realized PnL
+- hold time
+- exit reason
+
+Use it for trade logs, performance analysis, and PnL attribution.
 
 ### `PortfolioExecutionSummary`
 
-Public type summarizing the rolling paper execution overlay.
+Portfolio-level paper execution metrics.
 
 Includes:
 
@@ -469,99 +877,129 @@ Includes:
 - cumulative net PnL
 - average net PnL per trade
 - max drawdown
-- maker fill rate
-- forced flatten rate
-- maker/taker usage ratios
+- maker/taker usage
 - trade count
 
-## Dashboard
+Use it for top-line execution monitoring.
 
-The dashboard is served directly from `GET /` and polls `/v1/dashboard/summary`.
+### `MarketSummary`
 
-Main sections:
+Live market-state summary from the market-normalization layer.
 
-- top execution KPI strip
-- market state table
-- latest predictions
-- current execution decisions
-- strategy ranking
-- open positions
-- recent trades
-- health and maker/taker usage
+Includes token prices, midpoint freshness, cooldown, and quality information for one monitored market.
 
-Every operational label shown in the dashboard includes a hover hint.
+Use it when building market dashboards or alerting on degraded market quality.
+
+### `PredictionResponse`
+
+Prediction payload returned by `/v1/predict` and prediction-history endpoints.
+
+Includes:
+
+- direction
+- confidence
+- base and adjusted score
+- trigger information
+- TP and SL context
+- combo gate state
+- execution eligibility
+- execution gate failures
+- final result when resolved
+
+Use it when analyzing the lifecycle of one signal from research through execution eligibility.
+
+### `StrategySummary`
+
+Rolling summary for one strategy.
+
+Includes:
+
+- adaptive research weight
+- total resolved research signals
+- execution resolved count
+- hit rates
+- PnL proxies
+- calibration
+- recent streak
+- combo marker
+
+Use it when ranking strategies or auditing which strategies are driving a market.
 
 ## Configuration
 
-Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-crypto-prediction/src/config.ts).
+Configuration lives in [src/config.ts](/Users/jc/Documents/GitHub/polymarket-crypto-prediction/src/config.ts).
 
-- `RESPONSE_CONTENT_TYPE`: JSON content type used for REST responses.
-- `DEFAULT_PORT`: local port used by `startServer()`.
-- `SERVICE_NAME`: service name shown in health and dashboard payloads.
-- `SNAPSHOT_INTERVAL_MS`: snapshot interval passed to `SnapshotService`.
-- `CROSS_THRESHOLD`: tolerance around `0.5` for trigger detection.
-- `MARKET_COOLDOWN_MS`: minimum time between raw predictions for the same market.
-- `PREDICTION_HORIZON_MS`: delay before prediction resolution.
-- `SHORT_HISTORY_SECONDS`: short rolling horizon for recent feature context.
-- `LONG_HISTORY_SECONDS`: long rolling horizon for market memory.
-- `MAX_PREDICTION_HISTORY_PER_MARKET`: max stored prediction history per market.
-- `MAX_PREDICTION_QUERY_LIMIT`: max `limit` accepted on history endpoints.
-- `TOKEN_MAX_AGE_MS`: freshness cutoff for market token events.
+- `RESPONSE_CONTENT_TYPE`: content type used by JSON endpoints.
+- `DEFAULT_PORT`: HTTP port used by `startServer()`.
+- `SERVICE_NAME`: service identifier shown in health and dashboard payloads.
+- `SNAPSHOT_INTERVAL_MS`: polling interval passed to `SnapshotService`.
+- `CROSS_THRESHOLD`: tolerance around `0.5` used by trigger detection.
+- `MARKET_COOLDOWN_MS`: minimum time between raw predictions on the same market.
+- `PREDICTION_HORIZON_MS`: legacy prediction horizon field kept in the payload shape.
+- `SHORT_HISTORY_SECONDS`: short rolling history used by feature extraction.
+- `LONG_HISTORY_SECONDS`: long rolling history used by market memory.
+- `MAX_PREDICTION_HISTORY_PER_MARKET`: maximum stored prediction history per market.
+- `MAX_PREDICTION_QUERY_LIMIT`: maximum accepted `limit` for list endpoints.
+- `TOKEN_MAX_AGE_MS`: freshness cutoff for Polymarket token events.
 - `SPOT_MAX_AGE_MS`: freshness cutoff for spot venue events.
 - `CHAINLINK_MAX_AGE_MS`: freshness cutoff for Chainlink values.
-- `ENSEMBLE_MEDIUM_CONFIDENCE_THRESHOLD`: confidence threshold for escalating beyond low-cost strategies.
-- `ENSEMBLE_HIGH_CONFIDENCE_THRESHOLD`: high-confidence reference threshold for ensemble interpretation.
-- `ENSEMBLE_SCORE_ESCALATION_THRESHOLD`: absolute weighted-score threshold for ambiguity escalation.
-- `STRATEGY_ROLLING_WINDOW_SECONDS`: rolling time window in seconds used to score each strategy from recent outcomes only.
-- `COMBO_ROLLING_WINDOW_SECONDS`: rolling time window in seconds used to score pair and trio combos from recent outcomes only.
-- `COMBO_TOP_STRATEGIES_FOR_PAIRS`: number of highest-weight local strategies considered when generating combo pairs.
-- `COMBO_TOP_STRATEGIES_FOR_TRIOS`: number of highest-weight local strategies considered when generating combo trios.
-- `MIN_COMBO_SAMPLES_PAIR`: minimum pair sample count required before a pair can leave warm-up.
-- `MIN_COMBO_SAMPLES_TRIO`: minimum trio sample count required before a trio can leave warm-up.
-- `MIN_COMBO_EXECUTION_SAMPLES_PAIR`: minimum pair sample count required before a pair is allowed to open trades through the combo gate.
-- `MIN_COMBO_EXECUTION_SAMPLES_TRIO`: minimum trio sample count required before a trio is allowed to open trades through the combo gate.
-- `MIN_COMBO_LIFT_PNL`: minimum PnL lift over the best member required before a combo can boost the ensemble.
-- `MIN_COMBO_LIFT_HIT`: minimum hit-rate lift over the best member required before a combo can boost the ensemble.
-- `MIN_COMBO_SCORE_FOR_BOOST`: minimum combo score required before a combo becomes actionable.
-- `MIN_COMBO_EXECUTION_SCORE`: minimum effective combo score required before the execution gate accepts a combo.
+- `ENSEMBLE_MEDIUM_CONFIDENCE_THRESHOLD`: confidence threshold that triggers escalation into medium-tier strategies.
+- `ENSEMBLE_HIGH_CONFIDENCE_THRESHOLD`: high-confidence reference level used by the ensemble.
+- `ENSEMBLE_SCORE_ESCALATION_THRESHOLD`: absolute weighted-score threshold used to decide whether the current tier is still too ambiguous.
+- `STRATEGY_ROLLING_WINDOW_SECONDS`: rolling research window used for strategy metrics and adaptive weights.
+- `COMBO_ROLLING_WINDOW_SECONDS`: rolling window used for pair/trio combo metrics.
+- `COMBO_TOP_STRATEGIES_FOR_PAIRS`: number of top-weight participating strategies considered when building active pairs.
+- `COMBO_TOP_STRATEGIES_FOR_TRIOS`: number of top-weight participating strategies considered when building active trios.
+- `MIN_COMBO_SAMPLES_PAIR`: minimum pair sample count before a pair can leave warm-up in research scoring.
+- `MIN_COMBO_SAMPLES_TRIO`: minimum trio sample count before a trio can leave warm-up in research scoring.
+- `MIN_COMBO_EXECUTION_SAMPLES_PAIR`: minimum pair sample count before a pair is eligible to unlock execution.
+- `MIN_COMBO_EXECUTION_SAMPLES_TRIO`: minimum trio sample count before a trio is eligible to unlock execution.
+- `MIN_COMBO_LIFT_PNL`: minimum lift in PnL proxy versus the best member before a combo can be considered useful.
+- `MIN_COMBO_LIFT_HIT`: minimum hit-rate lift versus the best member before a combo can be considered useful.
+- `MIN_COMBO_SCORE_FOR_BOOST`: minimum research combo score before agreement can influence the ensemble.
+- `MIN_COMBO_EXECUTION_SCORE`: minimum effective combo score required by the combo execution gate.
 - `MIN_COMBO_AGREEMENT_PURITY_FOR_PENALTY`: minimum historical agreement purity required before disagreement can reduce confidence.
-- `MAX_PAIR_BOOST_ABS`: maximum absolute score boost contributed by one pair.
-- `MAX_TRIO_BOOST_ABS`: maximum absolute score boost contributed by one trio.
-- `MAX_TOTAL_COMBO_BOOST_ABS`: maximum total absolute score boost all combos together can add to one prediction.
-- `MAX_TOTAL_COMBO_CONFIDENCE_PENALTY`: maximum total confidence penalty all disagreeing combos together can apply to one prediction.
-- `ENABLE_COMBO_BOOST`: enables or disables agreement boosts while keeping combo analytics available.
-- `DASHBOARD_POLL_INTERVAL_MS`: dashboard polling interval.
-- `MARKET_SCORE_WINDOW_SECONDS`: rolling time window in seconds used to score each market from recent paper trades.
-- `MIN_MARKET_TRADES_FOR_SCORING`: minimum recent trade count before a market score is considered actionable.
-- `MIN_MARKET_SCORE_FOR_ENTRY`: minimum market score required before new entries are allowed in that market.
-- `MIN_EXECUTION_SCORE_FOR_ENTRY`: minimum effective execution score required before the execution gate can open a trade.
-- `MIN_RESEARCH_SCORE_FOR_BOOTSTRAP`: minimum research score required before the execution bootstrap can trust research-only evidence.
-- `MIN_MARKET_PREDICTIONS_BEFORE_ENTRY`: minimum prediction count required before a market leaves warm-up and paper trading is allowed.
-- `MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP`: minimum resolved research prediction count required before discounted research can bootstrap execution.
-- `ENTRY_TARGET_PRICE`: preferred entry anchor for the paper execution overlay.
+- `MAX_PAIR_BOOST_ABS`: maximum absolute score boost from a single pair.
+- `MAX_TRIO_BOOST_ABS`: maximum absolute score boost from a single trio.
+- `MAX_TOTAL_COMBO_BOOST_ABS`: global cap on total combo score boost for one prediction.
+- `MAX_TOTAL_COMBO_CONFIDENCE_PENALTY`: global cap on total combo disagreement penalty for one prediction.
+- `ENABLE_COMBO_BOOST`: enables or disables research-time combo boosts while keeping combo analytics available.
+- `DASHBOARD_POLL_INTERVAL_MS`: browser polling interval for the dashboard.
+- `MARKET_SCORE_WINDOW_SECONDS`: rolling window used by market-level research and execution scoring.
+- `MIN_MARKET_TRADES_FOR_SCORING`: minimum recent trade count before execution score is considered properly established.
+- `MIN_MARKET_SCORE_FOR_ENTRY`: legacy market score threshold retained for compatibility.
+- `MIN_EXECUTION_SCORE_FOR_ENTRY`: effective execution score threshold used by the execution gate.
+- `MIN_RESEARCH_SCORE_FOR_BOOTSTRAP`: minimum research score required before discounted research may bootstrap execution trust.
+- `MIN_MARKET_PREDICTIONS_BEFORE_ENTRY`: minimum raw prediction count before a market can leave initial warm-up.
+- `MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP`: minimum resolved research prediction count before research can bootstrap execution.
+- `ENTRY_TARGET_PRICE`: preferred entry anchor for the execution overlay.
 - `ENTRY_BAND_HALF_WIDTH`: allowed deviation around `ENTRY_TARGET_PRICE`.
-- `MIN_ORDER_USD`: minimum notional per paper trade so entries respect Polymarket sizing rules.
-- `MIN_ORDER_SHARES`: minimum share count per paper trade so entries respect Polymarket sizing rules.
-- `TAKE_PROFIT_DELTA`: token-price distance from entry to TP.
-- `STOP_LOSS_DELTA`: token-price distance from entry to SL.
-- `MIN_ENTRY_CONFIDENCE`: minimum ensemble confidence required for a paper entry.
-- `MIN_MARKET_QUALITY_FOR_ENTRY`: minimum market-quality score required for a paper entry.
-- `MIN_SPREAD_FOR_MAKER`: minimum spread where maker posting is preferred.
-- `MAX_SPREAD_FOR_ENTRY`: maximum spread tolerated for a new paper entry.
-- `MAKER_ENTRY_TIMEOUT_MS`: max time a maker entry may wait before fallback/cancel.
-- `MAKER_EXIT_TIMEOUT_MS`: max time a maker exit may wait before taker fallback.
+- `MIN_ORDER_USD`: minimum notional per paper trade.
+- `MIN_ORDER_SHARES`: minimum share count per paper trade.
+- `TAKE_PROFIT_DELTA`: TP distance from entry price.
+- `STOP_LOSS_DELTA`: SL distance from entry price.
+- `MIN_ENTRY_CONFIDENCE`: minimum confidence required before a prediction can be considered for execution.
+- `MIN_MARKET_QUALITY_FOR_ENTRY`: minimum live market-quality score required for execution.
+- `MIN_SPREAD_FOR_MAKER`: minimum spread where maker posting remains attractive.
+- `MAX_SPREAD_FOR_ENTRY`: maximum tolerated spread for a new trade.
+- `MAKER_ENTRY_TIMEOUT_MS`: maximum wait time for a maker entry before fallback or cancel.
+- `MAKER_EXIT_TIMEOUT_MS`: maximum wait time for a maker exit before taker fallback.
 - `MIN_DEPTH_FOR_MAKER`: minimum top-of-book depth required to prefer maker.
-- `MAKER_DRIFT_LIMIT`: maximum tolerated drift before maker becomes unattractive.
-- `TAKER_URGENCY_THRESHOLD`: urgency threshold where taker execution becomes preferred.
-- `LOW_DEPTH_SLIPPAGE_PROXY`: extra proxy slippage used in thin books.
-- `MAX_OPEN_POSITIONS_GLOBAL`: portfolio-wide cap for simultaneous open paper positions.
-- `EXECUTION_BOOTSTRAP_MIN_DISCOUNT`: lowest discount applied to research score when execution score still lacks enough real trades.
-- `EXECUTION_BOOTSTRAP_MAX_DISCOUNT`: highest bootstrap discount allowed even when research evidence is already strong.
+- `MAKER_DRIFT_LIMIT`: maximum tolerated book drift before maker becomes unattractive.
+- `TAKER_URGENCY_THRESHOLD`: urgency level where taker becomes preferred.
+- `LOW_DEPTH_SLIPPAGE_PROXY`: extra slippage proxy applied to thin books.
+- `MAX_OPEN_POSITIONS_GLOBAL`: portfolio-wide cap for simultaneous open positions.
+- `CROSS_ASSET_BREADTH_MOVE_THRESHOLD`: minimum normalized move required for one market to count toward the cross-asset breadth calculation.
+- `CROSS_ASSET_BREADTH_MIN_PARTICIPATION`: minimum share of qualifying markets that must agree before breadth is treated as a real regime.
+- `CROSS_ASSET_BREADTH_MIN_STRENGTH`: minimum breadth-strength score required before execution treats the regime as strong.
+- `CROSS_ASSET_LAGGARD_THRESHOLD`: minimum lag ratio required before the leader-laggard catch-up strategy activates.
+- `EXECUTION_BOOTSTRAP_MIN_DISCOUNT`: lowest discount applied to research score while bootstrapping execution trust.
+- `EXECUTION_BOOTSTRAP_MAX_DISCOUNT`: highest bootstrap discount allowed even after research quality improves.
 
 ## Scripts
 
 - `npm run start`: start the service with `tsx`
-- `npm run build`: compile the package to `dist/`
+- `npm run build`: compile to `dist/`
 - `npm run standards:check`: contract verification
 - `npm run lint`: Biome checks
 - `npm run format:check`: formatter verification
@@ -573,13 +1011,13 @@ Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-c
 
 - `src/app/`: runtime composition
 - `src/market/`: market normalization and rolling state
-- `src/strategy/`: strategy execution and weighting
-- `src/combo/`: pair/trio combo intelligence and rolling combo scoring
+- `src/strategy/`: strategy execution and rolling strategy metrics
+- `src/combo/`: dynamic pair/trio discovery and combo scoring
 - `src/prediction/`: prediction lifecycle and history
-- `src/execution/`: maker/taker policy and paper execution overlay
-- `src/dashboard/`: dashboard summary and HTML view
+- `src/execution/`: execution gate and paper-trading overlay
+- `src/dashboard/`: dashboard summary payloads and HTML view
 - `src/http/`: Hono transport layer
-- `test/`: deterministic runtime tests
+- `test/`: deterministic runtime and metrics tests
 
 ## Compatibility
 
@@ -589,23 +1027,50 @@ Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-c
 
 ## Troubleshooting
 
-### No execution decisions are tradable
+### No markets are tradable
 
-Check:
+Check these first:
 
-- `MIN_MARKET_PREDICTIONS_BEFORE_ENTRY`
-- `MIN_ENTRY_CONFIDENCE`
+- `MIN_EXECUTION_SCORE_FOR_ENTRY`
+- `MIN_RESEARCH_SCORE_FOR_BOOTSTRAP`
+- `MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP`
 - `MIN_MARKET_QUALITY_FOR_ENTRY`
 - `ENTRY_BAND_HALF_WIDTH`
 - `MAX_SPREAD_FOR_ENTRY`
+- combo execution thresholds
+
+If research is moving but execution stays blocked, the likely reason is that the combo gate or execution bootstrap is intentionally refusing to trust the market yet.
+
+### Predictions exist but no trades happen
+
+Check:
+
+- `combo_gate_failed`
+- `insufficient_execution_history`
+- `bootstrap_discount_too_low`
+- `execution_score_too_low`
+
+in `/v1/execution` or in the dashboard `Execution Now` panel.
+
+### Combos never become actionable
+
+Review:
+
+- `COMBO_TOP_STRATEGIES_FOR_PAIRS`
+- `COMBO_TOP_STRATEGIES_FOR_TRIOS`
+- `MIN_COMBO_EXECUTION_SAMPLES_PAIR`
+- `MIN_COMBO_EXECUTION_SAMPLES_TRIO`
+- `MIN_COMBO_EXECUTION_SCORE`
+- `MIN_COMBO_LIFT_PNL`
+- `MIN_COMBO_LIFT_HIT`
 
 ### Positions never close
 
-Check whether TP/SL levels are reachable under your chosen deltas and whether maker exits have enough time to complete:
+Check whether TP/SL levels are reachable and whether maker exits are being given too much or too little time:
 
 - `TAKE_PROFIT_DELTA`
 - `STOP_LOSS_DELTA`
-- maker exit timeout values
+- `MAKER_EXIT_TIMEOUT_MS`
 
 ### Maker usage is too high or too low
 
@@ -619,7 +1084,7 @@ Review:
 
 ### `npm run check` fails
 
-Run the stages separately:
+Run stages separately:
 
 ```bash
 npm run standards:check
@@ -631,7 +1096,15 @@ npm run test
 
 ## AI Workflow
 
-- Read `AGENTS.md`, `ai/contract.json`, and the active adapter before editing code.
-- Keep managed files under `ai/`, `prompts/`, and `skills/` read-only during feature work.
-- Update tests, docs, public exports, and HTTP notes in the same change whenever behavior changes.
-- Finish with `npm run check`.
+The repository uses a strict coding contract defined in:
+
+- [AGENTS.md](/Users/jc/Documents/GitHub/polymarket-crypto-prediction/AGENTS.md)
+- [ai/contract.json](/Users/jc/Documents/GitHub/polymarket-crypto-prediction/ai/contract.json)
+
+Important expectations:
+
+- keep implementation in TypeScript
+- respect class-first structure and section markers
+- avoid editing managed AI contract files unless the task is explicitly about standards
+- run `npm run standards:check` and `npm run check` before finishing behavior changes
+- keep README aligned with the actual package surface and configuration keys

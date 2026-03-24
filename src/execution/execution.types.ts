@@ -2,7 +2,7 @@
  * @section imports:internals
  */
 
-import type { AssetSymbol, MarketKey, MarketWindow, PredictionDirection } from "../market/market.types.ts";
+import type { AssetSymbol, CrossAssetBreadthDirection, MarketKey, MarketWindow, PredictionDirection } from "../market/market.types.ts";
 
 /**
  * @section types
@@ -37,6 +37,10 @@ export type ExecutionDecision = {
   makerFillProbability: number;
   bookRiskScore: number;
   positionSizeSuggestion: number;
+  breadthDirection: CrossAssetBreadthDirection;
+  breadthStrength: number | null;
+  hasStrongBreadth: boolean;
+  hasBreadthAlignment: boolean;
   hasComboGatePassed: boolean;
   selectedComboKey: string | null;
   selectedComboSize: 2 | 3 | null;

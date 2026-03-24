@@ -6,6 +6,7 @@ import config from "../config.ts";
 import logger from "../logger.ts";
 import type {
   AssetSymbol,
+  CrossAssetRegime,
   InputSnapshot,
   MarketEvaluationPrice,
   MarketHistoryEntry,
@@ -495,6 +496,93 @@ export class MarketStateService {
     return signedChange;
   }
 
+  private resolveReferencePrice(marketSlice: MarketSnapshotSlice | null): number | null {
+    const referencePrice = marketSlice?.spotConsensusPrice ?? marketSlice?.up.midpoint ?? marketSlice?.up.price ?? null;
+    return referencePrice;
+  }
+
+  private resolveSignedMove(currentSlice: MarketSnapshotSlice | null, previousSlice: MarketSnapshotSlice | null): number {
+    const previousReferencePrice = this.resolveReferencePrice(previousSlice);
+    const currentReferencePrice = this.resolveReferencePrice(currentSlice);
+    const signedMove = this.computeSignedChange(previousReferencePrice, currentReferencePrice);
+    return signedMove;
+  }
+
+  private buildWindowMarketKeys(window: MarketWindow): MarketKey[] {
+    const marketKeys: MarketKey[] = [];
+    for (const asset of SUPPORTED_ASSETS) {
+      marketKeys.push(this.buildMarketKey(asset, window));
+    }
+    return marketKeys;
+  }
+
+  private buildCrossAssetRegime(marketKey: MarketKey, window: MarketWindow): CrossAssetRegime {
+    const qualifyingMoves: Array<{ marketKey: MarketKey; signedMove: number }> = [];
+    const targetMarketRecord = this.requireMarketRecord(marketKey);
+    const targetSignedMove = this.resolveSignedMove(targetMarketRecord.latest, targetMarketRecord.previous);
+    for (const peerMarketKey of this.buildWindowMarketKeys(window)) {
+      const peerMarketRecord = this.requireMarketRecord(peerMarketKey);
+      const signedMove = this.resolveSignedMove(peerMarketRecord.latest, peerMarketRecord.previous);
+      if (peerMarketRecord.latest?.quality.hasLiveMarket && Math.abs(signedMove) >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD) {
+        qualifyingMoves.push({ marketKey: peerMarketKey, signedMove });
+      }
+    }
+    const positiveMoves = qualifyingMoves.filter((qualifyingMove) => qualifyingMove.signedMove > 0);
+    const negativeMoves = qualifyingMoves.filter((qualifyingMove) => qualifyingMove.signedMove < 0);
+    const dominantMoves = positiveMoves.length >= negativeMoves.length ? positiveMoves : negativeMoves;
+    const breadthDirection =
+      qualifyingMoves.length === 0
+        ? "NEUTRAL"
+        : positiveMoves.length === negativeMoves.length
+          ? "NEUTRAL"
+          : positiveMoves.length > negativeMoves.length
+            ? "UP"
+            : "DOWN";
+    const alignedMarketCount = dominantMoves.length;
+    const qualifyingMarketCount = qualifyingMoves.length;
+    const breadthParticipation = qualifyingMarketCount === 0 ? 0 : alignedMarketCount / qualifyingMarketCount;
+    const averageSignedMove =
+      dominantMoves.length === 0
+        ? 0
+        : dominantMoves.reduce((aggregatedMove, dominantMove) => aggregatedMove + dominantMove.signedMove, 0) / dominantMoves.length;
+    const peerAlignedMoves = dominantMoves.filter((dominantMove) => dominantMove.marketKey !== marketKey).map((dominantMove) => dominantMove.signedMove);
+    const peerAverageSignedMove =
+      peerAlignedMoves.length === 0
+        ? averageSignedMove
+        : peerAlignedMoves.reduce((aggregatedMove, signedMove) => aggregatedMove + signedMove, 0) / peerAlignedMoves.length;
+    const lagRatio =
+      breadthDirection === "NEUTRAL" || peerAverageSignedMove === 0
+        ? 0
+        : Math.max(0, (Math.abs(peerAverageSignedMove) - Math.abs(targetSignedMove)) / Math.abs(peerAverageSignedMove));
+    const normalizedMoveStrength = Math.max(0, Math.min(1, Math.abs(averageSignedMove) / Math.max(config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD * 3, 0.0001)));
+    const breadthStrength = breadthParticipation * normalizedMoveStrength;
+    const hasStrongBreadth =
+      breadthDirection !== "NEUTRAL" &&
+      alignedMarketCount >= 3 &&
+      breadthParticipation >= config.CROSS_ASSET_BREADTH_MIN_PARTICIPATION &&
+      breadthStrength >= config.CROSS_ASSET_BREADTH_MIN_STRENGTH;
+    const hasLeaderLaggardOpportunity =
+      hasStrongBreadth && Math.sign(targetSignedMove || 0) !== (breadthDirection === "UP" ? -1 : 1) && lagRatio >= config.CROSS_ASSET_LAGGARD_THRESHOLD;
+    const leaderMarketKey =
+      dominantMoves.length === 0
+        ? null
+        : ([...dominantMoves].sort((leftMove, rightMove) => Math.abs(rightMove.signedMove) - Math.abs(leftMove.signedMove))[0]?.marketKey ?? null);
+    return {
+      breadthDirection,
+      breadthStrength,
+      breadthParticipation,
+      averageSignedMove,
+      targetSignedMove,
+      peerAverageSignedMove,
+      lagRatio,
+      alignedMarketCount,
+      qualifyingMarketCount,
+      leaderMarketKey,
+      hasStrongBreadth,
+      hasLeaderLaggardOpportunity,
+    };
+  }
+
   private hasFreshToken(ageMs: number | null): boolean {
     const isFresh = ageMs !== null && ageMs <= config.TOKEN_MAX_AGE_MS;
     return isFresh;
@@ -564,6 +652,7 @@ export class MarketStateService {
         current: latestSlice,
         previous: marketRecord.previous,
         history: [...marketRecord.history],
+        crossAssetRegime: this.buildCrossAssetRegime(marketKey, latestSlice.window),
       };
     }
     return predictionContext;

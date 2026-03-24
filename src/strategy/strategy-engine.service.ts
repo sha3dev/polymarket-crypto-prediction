@@ -54,6 +54,8 @@ export class StrategyEngineService {
       { strategyId: "s18", name: "Liquidity Shock Fade", tier: "medium", description: "Short mean reversion." },
       { strategyId: "s19", name: "Recent Performance Hedge", tier: "high", description: "Meta performance hedge." },
       { strategyId: "s20", name: "Online Logistic Blend", tier: "high", description: "Feature-weighted blend." },
+      { strategyId: "s21", name: "Cross-Asset Breadth Impulse", tier: "medium", description: "Market-wide synchronous move confirmation." },
+      { strategyId: "s22", name: "Leader-Laggard Catch-Up", tier: "high", description: "Follow lagging asset after peer impulse." },
     ];
     return strategyDefinitions;
   }
@@ -128,6 +130,9 @@ export class StrategyEngineService {
       historySize: context.history.length,
       priorSignalCount: priorSignals.length,
       lastQualityScore: latestHistory?.qualityScore ?? null,
+      breadthDirection: context.crossAssetRegime.breadthDirection,
+      breadthStrength: context.crossAssetRegime.breadthStrength,
+      lagRatio: context.crossAssetRegime.lagRatio,
       finalScoreHint: weightedScore,
       strategyId,
     };
@@ -194,6 +199,12 @@ export class StrategyEngineService {
     }
     if (strategyId === "s20") {
       score = this.scoreOnlineLogisticBlend(context, priorSignals);
+    }
+    if (strategyId === "s21") {
+      score = this.scoreCrossAssetBreadthImpulse(context);
+    }
+    if (strategyId === "s22") {
+      score = this.scoreLeaderLaggardCatchUp(context);
     }
     return score;
   }
@@ -367,6 +378,28 @@ export class StrategyEngineService {
       this.scoreTokenMicroprice(context) * 0.2 +
       this.scoreBarrierTiming(context) * 0.15 +
       priorSignalBias * 0.1;
+    return score;
+  }
+
+  private scoreCrossAssetBreadthImpulse(context: PredictionContext): number {
+    const crossAssetRegime = context.crossAssetRegime;
+    let score = 0;
+    if (crossAssetRegime.hasStrongBreadth && crossAssetRegime.breadthDirection !== "NEUTRAL") {
+      const breadthDirectionSign = crossAssetRegime.breadthDirection === "UP" ? 1 : -1;
+      const alignmentBias =
+        Math.sign(crossAssetRegime.targetSignedMove) === 0 ? 0.85 : Math.sign(crossAssetRegime.targetSignedMove) === breadthDirectionSign ? 1 : -0.55;
+      score = breadthDirectionSign * crossAssetRegime.breadthStrength * alignmentBias;
+    }
+    return score;
+  }
+
+  private scoreLeaderLaggardCatchUp(context: PredictionContext): number {
+    const crossAssetRegime = context.crossAssetRegime;
+    let score = 0;
+    if (crossAssetRegime.hasLeaderLaggardOpportunity && crossAssetRegime.breadthDirection !== "NEUTRAL") {
+      const breadthDirectionSign = crossAssetRegime.breadthDirection === "UP" ? 1 : -1;
+      score = breadthDirectionSign * Math.min(1, crossAssetRegime.breadthStrength * Math.max(0.6, crossAssetRegime.lagRatio * 1.4));
+    }
     return score;
   }
 

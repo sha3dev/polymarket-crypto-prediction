@@ -185,6 +185,8 @@ export class ServiceRuntime {
       { strategyId: "s18", name: "Liquidity Shock Fade", tier: "medium", description: "Short mean reversion." },
       { strategyId: "s19", name: "Recent Performance Hedge", tier: "high", description: "Meta performance hedge." },
       { strategyId: "s20", name: "Online Logistic Blend", tier: "high", description: "Feature-weighted blend." },
+      { strategyId: "s21", name: "Cross-Asset Breadth Impulse", tier: "medium", description: "Market-wide synchronous move confirmation." },
+      { strategyId: "s22", name: "Leader-Laggard Catch-Up", tier: "high", description: "Follow lagging asset after peer impulse." },
     ];
     return strategyDefinitions;
   }
