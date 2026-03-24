@@ -136,11 +136,11 @@ export class DashboardViewService {
       .label-with-hint {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        flex-wrap: wrap;
       }
       .hint-label {
         color: inherit;
+        border-bottom: 1px dashed rgba(107, 114, 128, 0.65);
+        cursor: pointer;
       }
       .panel-intro {
         margin: -2px 0 12px;
@@ -187,13 +187,6 @@ export class DashboardViewService {
       }
       .code-chip:hover {
         background: rgba(13, 27, 42, 0.08);
-      }
-      .hint-chip {
-        min-width: 24px;
-        min-height: 22px;
-        padding: 2px 6px;
-        font-size: 10px;
-        letter-spacing: 0.05em;
       }
       .code-chip-group {
         display: inline-flex;
@@ -460,11 +453,15 @@ export class DashboardViewService {
 
       function renderHintLabel(label, hint) {
         const labelMarkup =
-          '<span class="label-with-hint"><span class="hint-label">' +
+          '<span class="label-with-hint"><span class="hint-label" data-full-label="' +
           escapeHtml(label) +
-          '</span>' +
-          renderInfoHintChip(label, hint) +
-          '</span>';
+          '" data-description="' +
+          escapeHtml(hint) +
+          '" aria-label="' +
+          escapeHtml(label + '. ' + hint) +
+          '">' +
+          escapeHtml(label) +
+          '</span></span>';
         return labelMarkup;
       }
 
@@ -497,30 +494,6 @@ export class DashboardViewService {
           '">' +
           escapeHtml(codeLabel) +
           '</button>';
-        return markup;
-      }
-
-      function renderInfoHintChip(fullLabel, description, chipLabel = 'INF') {
-        const markup =
-          '<button type="button" class="code-chip hint-chip" data-full-label="' +
-          escapeHtml(fullLabel) +
-          '" data-description="' +
-          escapeHtml(description) +
-          '" aria-label="' +
-          escapeHtml(fullLabel + '. ' + description) +
-          '">' +
-          escapeHtml(chipLabel) +
-          '</button>';
-        return markup;
-      }
-
-      function renderInfoTextWithHint(visibleLabel, fullLabel, description) {
-        const markup =
-          '<span class="label-with-hint"><span>' +
-          escapeHtml(visibleLabel) +
-          '</span>' +
-          renderInfoHintChip(fullLabel, description) +
-          '</span>';
         return markup;
       }
 
