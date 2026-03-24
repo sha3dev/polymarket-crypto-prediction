@@ -33,417 +33,752 @@ That split is the core design choice of the project:
 ## Main Capabilities
 
 - Watches BTC, ETH, SOL, and XRP on `5m` and `15m` Polymarket markets.
-- Generates event-driven predictions around the `0.5` zone instead of continuously spamming every tick.
-- Adapts twenty-two strategy weights online from rolling research outcomes.
-- Builds dynamic strategy pairs and trios per market.
-- Requires a combo or trio gate before execution is allowed.
-- Separates research quality from execution quality through distinct market scores.
-- Simulates conservative paper trading with TP/SL, maker/taker choice, and position caps.
-- Exposes REST endpoints plus a single-screen operator dashboard.
+- Creates predictions only on confirmed `0.5` crosses instead of emitting a view on every snapshot.
+- Uses the whole monitored crypto set as context, not just the local market.
+- Reorganizes the twenty-two raw strategies into explicit `signal engines`.
+- Chooses a `winning setup` and a `winning engine combination` instead of relying on a flat strategy average.
+- Keeps `research` and `execution` separate so the system can learn broadly without forcing capital deployment.
+- Preserves the legacy strategy combo gate as a secondary execution filter.
+- Exposes a dashboard built around regime, engines, winning combinations, and execution state.
 
 ## System Overview
 
-The runtime has four layers:
+The runtime now works as a five-step decision chain:
 
 1. `Market ingestion`
    Reads Polymarket token state plus spot and Chainlink context from `@sha3/polymarket-snapshot`.
 
-2. `Research prediction engine`
-   Generates predictions on trigger events around `0.5`, scores strategies, and tracks rolling prediction quality.
+2. `Regime engine`
+   Measures whether the monitored assets are neutral, broadly directional, fragmented, leader/laggard, or at reversal risk.
 
-3. `Combo intelligence`
-   Builds dynamic pairs and trios from currently participating strategies, scores them, and decides whether any combo is good enough to unlock execution.
+3. `Signal engines`
+   The twenty-two raw strategies are treated as sensors and grouped into higher-level engines such as breadth, propagation, momentum, microstructure, mispricing, reversion, and meta.
 
-4. `Execution overlay`
-   Applies a stricter gate based on:
-   - market quality
-   - prediction confidence
-   - combo gate
-   - `research score`
-   - `execution score`
-   - discounted bootstrap logic when there is not enough real trade history yet
+4. `Combination engine`
+   Evaluates plausible engine combinations, scores them by diversity plus regime fit, and chooses a single winning narrative.
+
+5. `Execution overlay`
+   Applies stricter, setup-specific rules plus market-quality and scoring gates before any paper or real trade is allowed.
+
+The important architectural change is this:
+
+- the raw strategies still exist
+- the raw strategy metrics still matter
+- but the final decision is no longer “what does the weighted strategy average say?”
+- it is now “which setup supported by which engine combination best fits the current regime?”
 
 ## Core Concepts
 
 ### Research vs Execution
 
-`Research` is the broad learning layer. A prediction can be generated and later resolved even if it never became a trade.
+`Research` is the broad learning layer.
 
-`Execution` is the capital-allocation layer. A prediction only becomes executable when all hard gates pass, especially:
+- A prediction can be created.
+- It can later resolve as `ok` or `ko`.
+- It can improve market and strategy learning.
+- It does not need to become a trade.
 
-- market quality
-- price proximity to the preferred entry anchor
-- spread and depth constraints
-- minimum effective execution score
-- combo or trio gate approval
+`Execution` is the capital-allocation layer.
 
-Only executed trades affect paper PnL. This keeps the model from confusing “interesting signal” with “tradable signal.”
+- It only sees predictions that already have a winning setup.
+- It still blocks most of them unless the full operational gate passes.
+- Only executed trades affect execution PnL and execution score.
+
+This is the key split:
+
+- `research` asks: “is this idea directionally interesting?”
+- `execution` asks: “is this idea clean enough to deserve capital right now?”
 
 ### Scores
 
-The service tracks three market-level notions of score:
+The service tracks three market-level score families:
 
 - `researchScore`
-  Derived from resolved predictions. It measures signal quality, signed edge, calibration, and sample size.
+  Derived from resolved predictions. It reflects directional quality, rolling edge, and sample size.
 
 - `executionScore`
-  Derived only from closed paper trades. It measures actual realized trade quality after costs and drawdown.
+  Derived only from closed trades. It reflects realized trade quality after costs and drawdown.
 
 - `effectiveExecutionScore`
-  The score used by the execution gate.
-  - if there are not enough trades yet, it uses discounted `researchScore`
-  - once trade history exists, it uses the more conservative of:
-    - the real `executionScore`
-    - the discounted `researchScore`
+  The score the execution gate actually uses.
+  - if there is not enough trade history, it bootstraps from discounted `researchScore`
+  - once trade history exists, it becomes conservative and favors the weaker of execution reality and discounted research optimism
 
-This design avoids cold-start paralysis without letting early optimistic research metrics immediately become full execution trust.
+Under the new architecture, these market scores are no longer the top of the hierarchy. They are downstream trust signals that sit below:
+
+1. regime
+2. winning setup
+3. winning engine combination
+4. market score
+5. execution score
 
 ### Cross-Asset Regime
 
-The engine also measures whether the whole crypto complex is moving together inside the same window.
+The new model treats cross-asset context as structural, not decorative.
 
-For each `5m` or `15m` slice it computes:
+For each `5m` or `15m` window, the regime engine measures:
 
-- directional breadth across BTC, ETH, SOL, and XRP
-- breadth strength from participation plus move magnitude
-- whether the current market is lagging a broader impulse led by peers
+- `breadthDirection`
+  `UP`, `DOWN`, or `NEUTRAL`
 
-This information is used in two places:
+- `breadthStrength`
+  How strong the dominant cross-asset move is
 
-- `research`
-  Through dedicated strategies that reward broad synchronous moves and leader-laggard catch-up setups.
+- `breadthParticipation`
+  What fraction of qualifying markets is aligned with that move
 
-- `execution`
-  Through a hard block when a local signal fights a strong market-wide breadth regime.
+- `leaderMarketKey`
+  Which market currently leads the impulse
 
-### Combos and Trios
+- `leaderGroup`
+  Top leading markets by signed move
 
-Combos are dynamic pairs or trios of strategies built from the highest-weight participating strategies on the current market.
+- `laggardGroup`
+  Markets lagging the dominant move and therefore relevant for catch-up setups
 
-For every active pair or trio, the engine tracks:
+- `synchronyScore`
+  How synchronized the monitored assets are
 
-- sample count
-- agreement purity
-- hit rate
-- PnL proxy
-- lift versus the best member
-- drawdown proxy
-- recent streak
-- calibration error
+- `accelerationScore`
+  Whether the move is broadening or gaining force
 
-Combos serve two roles:
+- `exhaustionScore`
+  Whether the move is looking stretched
 
-- `research role`
-  Agreement combos can still boost score and disagreement combos can still reduce confidence.
+- `reversalRiskScore`
+  Whether continuation logic is now at material risk of failing
 
-- `execution role`
-  A combo or trio must be historically strong enough to pass the combo gate, or the prediction is not tradable.
+The regime engine then classifies the state as one of:
 
-The execution gate prefers the best eligible combo by:
+- `neutral`
+- `broad_up_weak`
+- `broad_up_strong`
+- `broad_down_weak`
+- `broad_down_strong`
+- `leader_laggard_up`
+- `leader_laggard_down`
+- `fragmented`
+- `reversal_risk`
 
-- effective combo score
-- sample size
-- lower drawdown
-- lift over the best member
+That regime classification is used everywhere:
 
-If no combo or trio is good enough, the prediction may still exist in research, but execution is blocked.
+- it changes which engines are allowed to become strong
+- it changes which setups are plausible
+- it changes which engine combinations rank highest
+- it changes whether execution allows continuation or blocks it
 
-## Strategy Model
+### Engines
 
-The ensemble contains twenty-two strategies arranged in three escalation tiers:
+The raw strategies are now grouped into explicit engines.
 
-- `low`
-  Cheap, fast features that always run first.
+The goal is to stop treating twenty-two partially correlated features as twenty-two independent votes.
 
-- `medium`
-  Activated when the low-tier aggregate is not confident enough.
+The current engines are:
 
-- `high`
-  Activated when the low+medium aggregate is still ambiguous.
+- `breadth_engine`
+  Cross-asset direction and synchrony
 
-Each strategy emits:
+- `propagation_engine`
+  Leader/laggard and catch-up behavior
+
+- `local_momentum_engine`
+  Continuation and local breakout confirmation
+
+- `local_microstructure_engine`
+  Order-book pressure and local token structure
+
+- `mispricing_engine`
+  Basis, barrier mismatch, freshness and repricing
+
+- `reversion_engine`
+  Failed continuation, fade, exhaustion, and mean reversion
+
+- `meta_engine`
+  Quality and stabilizing meta influence
+
+Each engine emits:
 
 - direction
 - score
 - confidence
-- current market-local adaptive weight
-- debug context
+- state
+- regime fit
+- member strategies
+- explanation
 
-The final ensemble decision is a weighted aggregate of participating strategies. Strategy weights adapt online from rolling research outcomes, not from raw static constants.
+And each engine is explicitly tagged as:
+
+- `inactive`
+- `weak`
+- `active`
+- `dominant`
+- `avoid`
+
+This is the main interpretability improvement of the redesign.
+
+### Winning Setup and Winning Combination
+
+The prediction layer now produces a single winning narrative, not just a signed score.
+
+Important fields:
+
+- `winningSetupType`
+  The narrative class selected by the combination engine
+
+- `winningEngineIds`
+  The engines that support that narrative
+
+- `winningEngineComboKey`
+  Stable combo key such as `breadth_engine+propagation_engine+local_momentum_engine`
+
+- `winningEngineComboScore`
+  The signed score of the winning combination after diversity and regime-fit adjustment
+
+- `combinationReason`
+  Human-readable reason for why that combination won
+
+Current setup types:
+
+- `broad_continuation`
+- `leader_laggard_catchup`
+- `local_breakout_confirmed`
+- `mispricing_repricing`
+- `fade_failed_cross`
+- `research_probe`
+
+The selection logic prefers:
+
+- combinations whose engines agree on direction
+- combinations that mix different information sources
+- combinations that fit the current regime
+- combinations that tell a coherent story instead of stacking redundant micro-signals
+
+### Legacy Strategy Combos
+
+The project still keeps the older strategy pair/trio combo engine.
+
+That layer now has a narrower role:
+
+- it remains a secondary gate for execution
+- it still tracks historical lift of strategy pairs and trios
+- it can still boost or penalize research confidence
+
+But it is no longer the main narrative-selection mechanism.
+
+The main narrative now comes from engine combinations.
+
+## Strategy Model
+
+The twenty-two strategies are still present, but they should now be understood as feature sensors inside engines, not as the top-level decision-makers.
+
+At a high level:
+
+- low tier strategies are still cheap and broad
+- medium tier strategies are still more structural or conditional
+- high tier strategies are still meta and escalation-only
+
+What changed is not the existence of the strategies, but their role:
+
+- before: strategies competed directly for the final prediction
+- now: strategies mostly contribute to engines, and engines compete for the final prediction
 
 ## Strategy Reference
 
-### Low Tier
+The easiest way to understand the strategy catalog now is by engine family.
 
-#### `s01` Momentum EWMA
+### `local_momentum_engine`
 
-Looks at recent `up` midpoint drift over the last few slices and measures short continuation pressure.
+This engine is the continuation engine. It is strongest when the regime is directional and not yet exhausted.
 
-Use it for:
+Main member strategies:
 
-- local short-term trend continuation
-- confirming whether a move around `0.5` has momentum behind it
+- `s01` Momentum EWMA
+- `s09` Spot Consensus Momentum
+- `s12` Volatility Breakout
+- `s17` Regime Switch
 
-#### `s02` Token Microprice
+Interpretation:
 
-Uses token imbalance and distance-to-half to approximate top-of-book pressure.
+- if this engine dominates, the model believes the move is real and still traveling
+- if it is weak while breadth is strong, the system may still prefer propagation instead of local continuation
 
-Use it for:
+### `local_microstructure_engine`
 
-- immediate book-pressure reads
-- deciding whether local order-book shape favors `UP` or `DOWN`
+This engine is the local pressure engine. It answers: “what is the token and spot microstructure saying right now?”
 
-#### `s06` No-Arb Consistency
+Main member strategies:
 
-Checks whether `UP` and `DOWN` probabilities make sense together.
+- `s02` Token Microprice
+- `s03` Token Imbalance Band
+- `s05` Order Book Churn
+- `s07` Spread Compression
+- `s10` Spot Micropressure
+- `s13` Spot Slippage Skew
 
-Use it for:
+Interpretation:
 
-- identifying inconsistent token pricing
-- catching imbalance created by token-side mispricing rather than directional conviction
+- if this engine is strong and aligned with momentum, local continuation is healthier
+- if this engine fights the global regime, the market may still be noisy or early
 
-#### `s07` Spread Compression
+### `mispricing_engine`
 
-Combines relative token spread pressure with spot momentum.
+This engine handles “the market price looks wrong” situations rather than pure continuation.
 
-Use it for:
+Main member strategies:
 
-- situations where improved liquidity is aligning with directional spot flow
+- `s06` No-Arb Consistency
+- `s08` Barrier Timing
+- `s14` Chainlink Basis
+- `s15` Theoretical Probability Gap
+- `s16` Freshness Gap
 
-#### `s08` Barrier Timing
+Interpretation:
 
-Compares Chainlink price with the market’s `priceToBeat`.
+- a strong mispricing engine means the edge is repricing, not trend-following
+- these setups can still be valid when global breadth is weak or mixed
 
-Use it for:
+### `breadth_engine`
 
-- “who is on the correct side of the barrier” logic
-- detecting when the barrier itself is misread by token pricing
+This is the structural market-wide direction engine. It is deliberately central in the new design.
 
-#### `s09` Spot Consensus Momentum
+Main member strategies:
 
-Direct spot-consensus drift signal.
+- `s07` Spread Compression
+- `s17` Regime Switch
+- `s21` Cross-Asset Breadth Impulse
 
-Use it for:
+Interpretation:
 
-- fast cross-venue directional confirmation
+- if this engine is dominant, the whole market is moving together
+- this engine often drives `broad_continuation`
+- when it is strong, isolated local contrarian calls should be treated skeptically
 
-#### `s14` Chainlink Basis
+### `propagation_engine`
 
-Measures the gap between spot consensus and Chainlink.
+This is the leader/laggard engine. It tries to exploit the case where some assets have already moved and others are likely to follow.
 
-Use it for:
+Main member strategies:
 
-- oracle catch-up and basis normalization effects
+- `s04` Wall Proximity
+- `s16` Freshness Gap
+- `s22` Leader-Laggard Catch-Up
 
-#### `s16` Freshness Gap
+Interpretation:
 
-Compares token staleness with the freshest spot venues and projects spot momentum into stale-token situations.
+- if BTC and ETH are leading while SOL or XRP are lagging, this engine can become more important than the local engine
+- this is one of the most important additions of the redesign
 
-Use it for:
+### `reversion_engine`
 
-- lead-lag opportunities caused by slower token updates
+This engine handles “the continuation case is failing” logic.
 
-### Medium Tier
+Main member strategies:
 
-#### `s03` Token Imbalance Band
+- `s11` Spot Dispersion
+- `s13` Spot Slippage Skew
+- `s18` Liquidity Shock Fade
 
-Uses relative depth between `UP` and `DOWN`.
+Interpretation:
 
-Use it for:
+- strong reversion while regime shows `reversal_risk` is meaningful
+- strong reversion against `broad_up_strong` or `broad_down_strong` should usually be filtered out operationally
 
-- multi-level token book skew
-- asymmetric local liquidity
+### `meta_engine`
 
-#### `s04` Wall Proximity
-
-Looks at relative spreads and depth to infer liquidity barriers.
-
-Use it for:
-
-- wall-based directional bias
-- barrier pressure near relevant token levels
-
-#### `s05` Order Book Churn
-
-Measures recent change in `UP` vs `DOWN` midpoint dynamics.
-
-Use it for:
-
-- microstructure rotation
-- unstable local directional handoff
-
-#### `s10` Spot Micropressure
-
-Averages order-book imbalance across spot venues.
-
-Use it for:
-
-- cross-venue microstructure confirmation
-
-#### `s11` Spot Dispersion
-
-Penalizes noisy multi-venue moves, especially when spot momentum and venue dispersion disagree.
-
-Use it for:
-
-- avoiding weak consensus moves
-- preferring coordinated spot action
-
-#### `s12` Volatility Breakout
-
-Normalizes recent momentum by recent average absolute movement.
-
-Use it for:
-
-- regime transitions
-- detecting when a move is large relative to recent volatility
-
-#### `s13` Spot Slippage Skew
-
-Uses spread conditions across spot venues as a slope and friction proxy.
-
-Use it for:
-
-- rough directional pressure from venue execution friction
-
-#### `s15` Theoretical Probability Gap
-
-Compares a simple theoretical barrier probability with observed token probability.
-
-Use it for:
-
-- token-versus-barrier dislocations
-
-#### `s17` Regime Switch
-
-Switches between continuation and fade logic depending on available liquidity.
-
-Use it for:
-
-- adapting behavior to deep versus thin books
-
-#### `s18` Liquidity Shock Fade
-
-Mean-reversion signal based on distance-to-half asymmetry.
-
-Use it for:
-
-- short shock-fade behavior
-- snapping back after abrupt local dislocations
-
-#### `s21` Cross-Asset Breadth Impulse
-
-Measures whether the whole monitored crypto set is moving together in the same direction on the same window.
-
-Use it for:
-
-- confirming local signals with market-wide synchronous flow
-- penalizing isolated calls that fight a strong cross-asset move
-
-### High Tier
-
-#### `s19` Recent Performance Hedge
-
-Reads bias from prior signals already emitted in the current evaluation path.
-
-Use it for:
-
-- meta-layer correction
-- damping overconfident one-sided internal consensus
-
-#### `s20` Online Logistic Blend
-
-Weighted blend of several core features plus prior-signal bias.
-
-Uses:
-
-- momentum
-- spot consensus momentum
-- token microprice
-- barrier timing
-- prior-signal bias
-
-Use it for:
-
-- final blended decision when the cheaper tiers still disagree or remain weak
-
-#### `s22` Leader-Laggard Catch-Up
-
-Looks for markets that are moving in the same direction as the broader regime but have not yet caught up to the leaders.
-
-Use it for:
-
-- follow-through entries in lagging assets after BTC, ETH, or another peer already accelerated
-- exploiting delayed propagation across correlated crypto assets
+This engine is not a primary directional engine. It stabilizes and conditions trust.
+
+Main member strategies:
+
+- `s19` Recent Performance Hedge
+- `s20` Online Logistic Blend
+
+Interpretation:
+
+- use it as “how much should I trust the rest?”
+- not as the first directional story by itself
+
+### Full Strategy Reference by Id
+
+The raw ids still map to these niches:
+
+- `s01` Momentum EWMA: short local continuation
+- `s02` Token Microprice: immediate token book pressure
+- `s03` Token Imbalance Band: multi-level token depth skew
+- `s04` Wall Proximity: liquidity barrier bias
+- `s05` Order Book Churn: token-book rotation pressure
+- `s06` No-Arb Consistency: internal UP/DOWN consistency check
+- `s07` Spread Compression: liquidity improvement aligned with flow
+- `s08` Barrier Timing: Chainlink versus barrier timing
+- `s09` Spot Consensus Momentum: cross-venue spot drift
+- `s10` Spot Micropressure: spot top-of-book skew
+- `s11` Spot Dispersion: consensus versus noise
+- `s12` Volatility Breakout: normalized local breakout
+- `s13` Spot Slippage Skew: execution-friction slope
+- `s14` Chainlink Basis: oracle catch-up / basis
+- `s15` Theoretical Probability Gap: token-versus-barrier mispricing
+- `s16` Freshness Gap: stale token versus fresher spot
+- `s17` Regime Switch: adaptive continuation/fade
+- `s18` Liquidity Shock Fade: short mean reversion
+- `s19` Recent Performance Hedge: meta damping
+- `s20` Online Logistic Blend: blended meta read
+- `s21` Cross-Asset Breadth Impulse: synchronized market-wide flow
+- `s22` Leader-Laggard Catch-Up: propagation into lagging assets
 
 ## Prediction Lifecycle
 
-1. A market event triggers near `0.5` or across `0.5`.
-2. The strategy engine evaluates low-tier strategies first.
-3. If confidence is weak, medium tier is added.
-4. If still ambiguous, high tier is added.
-5. The ensemble aggregates a base direction and confidence.
-6. Active combos and trios are built from the currently participating strategies.
-7. The cross-asset regime is measured for breadth and leader-laggard context.
-8. Combo research effects may still boost score or penalize confidence.
-9. The best eligible combo gate candidate is selected.
-10. A prediction is stored as a research prediction.
-11. Execution decides whether that prediction is tradable.
-12. If a trade is opened, TP/SL and maker-vs-taker logic manage the position.
-13. Research metrics update from resolved predictions.
-14. Execution metrics update only from closed trades.
+The new lifecycle is:
+
+1. A token crosses `0.5`.
+2. The trigger is held in a pending state.
+3. The trigger must confirm after a delay:
+   - still on the new side of `0.5`
+   - sufficiently away from `0.5`
+   - enough momentum
+   - enough market quality
+   - enough breadth confirmation
+4. A `PredictionContext` is built.
+5. The `regime engine` classifies the market-wide context.
+6. The twenty-two strategies run through the tiered evaluation path.
+7. Their outputs are grouped into engines.
+8. Every engine gets a direction, score, confidence, state, and regime fit.
+9. The combination engine evaluates plausible setup narratives.
+10. One setup and one engine combo win.
+11. The legacy strategy combo engine still computes its own combo gate.
+12. A research prediction is stored with:
+    - setup
+    - regime
+    - engine breakdown
+    - winning engine combo
+13. Execution evaluates whether that prediction is tradable.
+14. If traded, the position resolves only on TP or SL.
+15. Research metrics update from resolved predictions.
+16. Execution metrics update only from executed trades.
 
 ## Execution Gate
 
-A prediction is blocked from trading when any of these classes of checks fail:
+Execution now operates on the winning setup, not just on a generic prediction score.
 
-- no prediction context
-- position already open
-- invalid direction
-- no reference price
-- combo gate failed
-- market not live
-- quality too low
-- confidence too low
-- price too far from `0.5`
-- spread too wide
-- market still warming up
-- insufficient execution history
-- bootstrap discount too low
-- execution score too low
-- order below minimum notional or share count
+First, the generic operational filters still apply:
 
-This is intentionally conservative. Research may say “interesting”; execution still says “not yet.”
+- live market required
+- sufficient market quality
+- minimum confidence
+- reference token price available
+- spread not too wide
+- minimum order size
+- market score / execution score good enough
+- no open position already blocking the market
+
+Then the setup-specific filters apply.
+
+### `broad_continuation`
+
+Requires:
+
+- directional regime
+- no excessive reversal risk
+- no strong conflict with cross-asset direction
+
+### `leader_laggard_catchup`
+
+Requires:
+
+- a clear leader
+- laggard structure present
+- meaningful lag ratio
+
+### `local_breakout_confirmed`
+
+Requires:
+
+- local momentum still present
+- local continuation not already dead
+
+### `mispricing_repricing`
+
+Requires:
+
+- basis or repricing evidence still present
+
+### `fade_failed_cross`
+
+Requires:
+
+- a regime where fade is not obviously suicidal
+- no strong breadth continuation still in force
+
+The legacy strategy combo gate still sits on top of all this as an extra safety filter.
+
+This means a prediction can be blocked for three very different reasons:
+
+- the regime does not support the setup
+- the market does not support execution
+- the legacy strategy combo gate still does not trust it
 
 ## Dashboard Semantics
 
-The dashboard is designed for operator review, not just pretty metrics.
+The dashboard is now meant to answer six operational questions:
 
-Key panels:
+1. What is the global market context?
+2. Which markets are structurally interesting?
+3. Which setup is winning on each market?
+4. Which engines are driving that setup?
+5. Why is execution still blocked?
+6. Is the discovery layer actually learning useful combinations?
 
-- `Markets`
-  Live token state, quality, cooldown, and market-level effective score context.
+### `Global Regime`
 
-- `Execution Now`
-  The current go/no-go decision for each market, including:
-  - research score
-  - execution score
-  - effective execution score
-  - selected combo
-  - combo gate state
-  - exact reason codes when blocked
+This is the starting panel.
 
-- `Resolved Predictions`
-  Predictions that have completed through TP/SL-style resolution.
+Read it first when the system feels wrong.
 
-- `Strategies`
-  Market-local research weights plus research and execution proxy behavior.
+It shows:
 
-- `Top Combos`
-  Best dynamic pairs and trios, including research score and effective execution score.
+- regime name
+- breadth label
+- participation
+- synchrony
+- leader group
+- laggard group
+- acceleration
+- reversal risk
 
-- `Market PnL`
-  Closed-trade execution performance per market.
+Interpretation:
+
+- `Broad Up Strong` or `Broad Down Strong`
+  Continuation setups should dominate. Contrarian local calls should be rare and heavily filtered.
+
+- `Leader/Laggard Up` or `Leader/Laggard Down`
+  Catch-up setups are the most interesting. Look at laggards, not just leaders.
+
+- `Fragmented`
+  The assets are not telling one coherent story. You should expect fewer executable trades.
+
+- `Reversal Risk`
+  A broad move may still exist, but continuation is getting stretched. Reversion and fade logic matter more.
+
+### `Markets`
+
+This is the compact market map.
+
+It shows:
+
+- token midpoints
+- cooldown
+- market score
+- regime
+- dominant setup
+- quality
+
+How to use it:
+
+- high quality + directional regime + meaningful setup
+  worth looking at
+
+- low quality
+  ignore almost everything downstream
+
+- setup is `—`
+  no recent resolved narrative yet for that market
+
+- cooldown is high
+  the engine recently emitted a prediction and cannot re-emit immediately
+
+### `Execution Now`
+
+This is the real go/no-go panel.
+
+It shows:
+
+- action
+- winning setup
+- winning engine combo
+- market scores
+- regime
+- market score / trade count
+- combo gate status
+- conviction
+- reason codes
+
+How to interpret it:
+
+- `NO TRADE` with a good-looking setup is normal if execution trust is still low
+- `combo gate BLOCK` means the old strategy-combo layer still vetoed the trade
+- `SDR`, `SRV`, `SLG`, `SLD`, `SMO`, `SBS`, `SFD`
+  are setup-specific blocks:
+  - `SDR`: setup needs directional regime
+  - `SRV`: reversal risk too high
+  - `SLG`: no laggard structure
+  - `SLD`: no clear leader
+  - `SMO`: local momentum too weak
+  - `SBS`: repricing evidence missing
+  - `SFD`: fade conflicts with strong breadth
+
+This panel tells you whether the system is not trading because:
+
+- it dislikes the market
+- it dislikes the setup
+- or the legacy combo gate still does not trust the idea
+
+### `Winning Combination`
+
+This is the best short explanation of the new prediction mechanism.
+
+For each recent idea it shows:
+
+- market
+- setup
+- engine combo
+- combo score
+- confidence
+- regime
+- narrative reason
+
+Read this panel when you want to know:
+
+- which mechanism is actually producing ideas
+- whether the system is overusing one setup
+- whether breadth is central or still underused
+
+If this panel is dominated by:
+
+- `breadth_engine+propagation_engine+local_momentum_engine`
+  the system is leaning into market-wide propagation
+
+- `mispricing_engine+meta_engine`
+  the system is seeing repricing rather than continuation
+
+- `reversion_engine+...`
+  the market may be stretched or noisy
+
+### `Resolved Predictions`
+
+This is not the same as execution performance.
+
+It shows resolved research ideas, including:
+
+- direction
+- confidence
+- trigger
+- winning setup
+- winning engine combo
+- final result
+
+Use it to judge:
+
+- whether a setup is directionally useful at all
+- whether a given engine combo is repeatedly wrong
+
+Do not confuse it with actual execution PnL.
+
+The correct reading is:
+
+- `Resolved Predictions` = research quality
+- `Recent Trades` + `Market PnL` = execution quality
+
+### `Engine Board`
+
+This is the most important panel for understanding why the model thinks what it thinks.
+
+For the selected market it shows:
+
+- engine
+- state
+- direction
+- score
+- confidence
+- regime fit
+- role / setup
+
+How to read it:
+
+- `dominant`
+  this engine is driving the market narrative
+
+- `active`
+  meaningful support, but not primary
+
+- `weak`
+  present, but not strong enough to dominate
+
+- `avoid`
+  the current regime says this engine should not be trusted now
+
+The real question to ask here is not “which strategy is best?” but:
+
+- are the active engines diverse?
+- are they all saying the same thing?
+- does the dominant engine make sense given the regime?
+
+### `Market PnL`
+
+This is still the market-level execution scorecard.
+
+Use it to separate:
+
+- markets that produce interesting research ideas
+- from markets that are actually earning execution trust
+
+If a market has:
+
+- decent research score
+- poor execution score
+
+that usually means the ideas are interesting but operationally messy.
+
+### `Discovery Board`
+
+This is the compact learning panel for the new mechanism.
+
+It groups recent resolved predictions by:
+
+- setup type
+- engine combo
+
+and shows:
+
+- hit rate
+- average confidence
+- sample count
+- markets where that combo recently appeared
+
+This panel answers:
+
+- is the engine-combination layer learning anything yet?
+- are some setups overrepresented but weak?
+- are some combos good on one market family only?
+
+### `Recent Trades`
+
+Closed executed trades only.
+
+Use it to confirm:
+
+- the system is actually trading
+- exits are happening through TP/SL as expected
+- maker/taker mix looks sane
+
+### `Open Positions`
+
+Current live or paper positions still open.
+
+Use it to understand:
+
+- current exposure
+- where TP and SL are
+- whether you are already committed on a market that looks interesting again
+
+### `Health`
+
+Use this panel before trusting any other panel.
+
+If the dashboard looks strange, check:
+
+- snapshot freshness
+- runtime health
+- execution mode
+- balance status
+- maker/taker usage
 
 ## Installation
 
