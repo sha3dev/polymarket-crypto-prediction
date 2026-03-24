@@ -116,24 +116,24 @@ export class StrategyMetricsService {
 
   private buildMetricsRecord(strategyId: string, tier: StrategyTier, scope: StrategyMetricsScope): StrategyMetricsRecord {
     const mutableMetricsState = this.requireState(strategyId, scope);
-    const resolvedOutcomes = mutableMetricsState.outcomes.filter((outcome) => outcome.wasCorrect !== null);
+    const windowedOutcomes = this.readWindowedOutcomes(mutableMetricsState);
+    const resolvedOutcomes = windowedOutcomes.filter((outcome) => outcome.wasCorrect !== null);
     const wins = resolvedOutcomes.filter((outcome) => outcome.wasCorrect).length;
     const losses = resolvedOutcomes.filter((outcome) => outcome.wasCorrect === false).length;
-    const voids = mutableMetricsState.outcomes.length - resolvedOutcomes.length;
+    const voids = windowedOutcomes.length - resolvedOutcomes.length;
     const totalResolved = resolvedOutcomes.length;
     const hitRate = totalResolved === 0 ? 0.5 : wins / totalResolved;
     const averageSignedEdge = totalResolved === 0 ? 0 : resolvedOutcomes.reduce((totalEdge, outcome) => totalEdge + outcome.signedEdge, 0) / totalResolved;
     const averageCalibrationError =
-      mutableMetricsState.outcomes.length === 0
+      windowedOutcomes.length === 0
         ? 0.5
-        : mutableMetricsState.outcomes.reduce((totalError, outcome) => totalError + outcome.calibrationError, 0) / mutableMetricsState.outcomes.length;
+        : windowedOutcomes.reduce((totalError, outcome) => totalError + outcome.calibrationError, 0) / windowedOutcomes.length;
     const recentStreak = this.computeRecentStreak(resolvedOutcomes);
     const trustFactor = Math.min(1, totalResolved / 10);
     const baseWeight = this.readBaseWeight(tier);
     const adaptiveWeight = baseWeight + ((hitRate - 0.5) * 1.6 + averageSignedEdge * 0.8 - averageCalibrationError * 0.25) * trustFactor;
     const weight = Math.max(0.2, Math.min(2.5, adaptiveWeight));
-    const lastResolvedAt =
-      mutableMetricsState.outcomes.length === 0 ? null : (mutableMetricsState.outcomes[mutableMetricsState.outcomes.length - 1]?.resolvedAt ?? null);
+    const lastResolvedAt = windowedOutcomes.length === 0 ? null : (windowedOutcomes[windowedOutcomes.length - 1]?.resolvedAt ?? null);
     return {
       strategyId,
       totalResolved,
@@ -202,6 +202,22 @@ export class StrategyMetricsService {
     return comparison;
   }
 
+  private readRollingCutoff(mutableMetricsState: MutableMetricsState): number | null {
+    const latestResolvedAt =
+      mutableMetricsState.outcomes.length === 0 ? null : (mutableMetricsState.outcomes[mutableMetricsState.outcomes.length - 1]?.resolvedAt ?? null);
+    const rollingCutoff = latestResolvedAt === null ? null : latestResolvedAt - config.STRATEGY_ROLLING_WINDOW_SECONDS * 1_000;
+    return rollingCutoff;
+  }
+
+  private readWindowedOutcomes(mutableMetricsState: MutableMetricsState): StrategyOutcomeEntry[] {
+    const rollingCutoff = this.readRollingCutoff(mutableMetricsState);
+    const windowedOutcomes =
+      rollingCutoff === null
+        ? [...mutableMetricsState.outcomes]
+        : mutableMetricsState.outcomes.filter((outcome) => outcome.resolvedAt === null || outcome.resolvedAt >= rollingCutoff);
+    return windowedOutcomes;
+  }
+
   private recordOutcomeEntry(
     mutableMetricsState: MutableMetricsState,
     wasCorrect: boolean | null,
@@ -215,8 +231,9 @@ export class StrategyMetricsService {
       calibrationError,
       resolvedAt,
     });
-    if (mutableMetricsState.outcomes.length > config.STRATEGY_ROLLING_WINDOW_SIZE) {
-      mutableMetricsState.outcomes.splice(0, mutableMetricsState.outcomes.length - config.STRATEGY_ROLLING_WINDOW_SIZE);
+    const rollingCutoff = this.readRollingCutoff(mutableMetricsState);
+    if (rollingCutoff !== null) {
+      mutableMetricsState.outcomes = mutableMetricsState.outcomes.filter((outcome) => outcome.resolvedAt === null || outcome.resolvedAt >= rollingCutoff);
     }
   }
 

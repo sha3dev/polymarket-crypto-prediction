@@ -14,6 +14,7 @@ import type {
   ExecutionDecision,
   ExecutionStyle,
   MarketExecutionSummary,
+  MarketPerformanceSummary,
   OpenPositionSummary,
   PaperPosition,
   PaperTrade,
@@ -44,6 +45,7 @@ export class PaperExecutionService {
   private readonly openPositions: Map<MarketKey, PaperPosition>;
   private readonly recentTrades: PaperTrade[];
   private readonly consumedSignalTimestamps: Map<MarketKey, number>;
+  private latestObservedAt: number | null;
 
   /**
    * @section constructor
@@ -57,6 +59,7 @@ export class PaperExecutionService {
     this.openPositions = new Map<MarketKey, PaperPosition>();
     this.recentTrades = [];
     this.consumedSignalTimestamps = new Map<MarketKey, number>();
+    this.latestObservedAt = null;
   }
 
   /**
@@ -87,17 +90,56 @@ export class PaperExecutionService {
     return tokenMetrics.bestAsk;
   }
 
-  private applyEntryCosts(entryFillPrice: number, executionStyle: ExecutionStyle, marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number {
+  private roundPolymarketFeePrecision(rawFee: number): number {
+    const roundedFee = Math.round(rawFee * 10_000) / 10_000;
+    const normalizedFee = roundedFee < 0.0001 ? 0 : roundedFee;
+    return normalizedFee;
+  }
+
+  private computePolymarketCryptoTakerFee(fillPrice: number, shareCount: number): number {
+    const feeRate = 0.25;
+    const exponent = 2;
+    const fee = shareCount * fillPrice * feeRate * (fillPrice * (1 - fillPrice)) ** exponent;
+    const normalizedFee = this.roundPolymarketFeePrecision(fee);
+    return normalizedFee;
+  }
+
+  private computeExecutionSlippageCost(
+    spread: number,
+    executionStyle: ExecutionStyle,
+    marketSlice: MarketSnapshotSlice,
+    positionSide: PositionSide,
+    shareCount: number,
+  ): number {
+    const tokenMetrics = positionSide === "up" ? marketSlice.up : marketSlice.down;
+    const depthPenalty = tokenMetrics.depthTop < config.MIN_DEPTH_FOR_MAKER ? config.LOW_DEPTH_SLIPPAGE_PROXY : 0;
+    const slippageCost = (executionStyle === "taker" ? spread * 0.5 + depthPenalty : spread * 0.1) * shareCount;
+    return slippageCost;
+  }
+
+  private applyEntryCosts(
+    entryFillPrice: number,
+    executionStyle: ExecutionStyle,
+    marketSlice: MarketSnapshotSlice,
+    positionSide: PositionSide,
+    shareCount: number,
+  ): number {
     const spread = positionSide === "up" ? (marketSlice.up.spread ?? 0) : (marketSlice.down.spread ?? 0);
-    const bpsCost = executionStyle === "maker" ? config.ENTRY_COST_PROXY_BPS * 0.5 : config.ENTRY_COST_PROXY_BPS;
-    const cost = entryFillPrice * (bpsCost / 10_000) + (executionStyle === "taker" ? spread * 0.5 : spread * 0.1);
+    const exchangeFee = executionStyle === "taker" ? this.computePolymarketCryptoTakerFee(entryFillPrice, shareCount) : 0;
+    const cost = exchangeFee + this.computeExecutionSlippageCost(spread, executionStyle, marketSlice, positionSide, shareCount);
     return cost;
   }
 
-  private applyExitCosts(exitFillPrice: number, executionStyle: ExecutionStyle, marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number {
+  private applyExitCosts(
+    exitFillPrice: number,
+    executionStyle: ExecutionStyle,
+    marketSlice: MarketSnapshotSlice,
+    positionSide: PositionSide,
+    shareCount: number,
+  ): number {
     const spread = positionSide === "up" ? (marketSlice.up.spread ?? 0) : (marketSlice.down.spread ?? 0);
-    const bpsCost = executionStyle === "maker" ? config.EXIT_COST_PROXY_BPS * 0.5 : config.EXIT_COST_PROXY_BPS;
-    const cost = exitFillPrice * (bpsCost / 10_000) + (executionStyle === "taker" ? spread * 0.5 : spread * 0.1);
+    const exchangeFee = executionStyle === "taker" ? this.computePolymarketCryptoTakerFee(exitFillPrice, shareCount) : 0;
+    const cost = exchangeFee + this.computeExecutionSlippageCost(spread, executionStyle, marketSlice, positionSide, shareCount);
     return cost;
   }
 
@@ -116,7 +158,6 @@ export class PaperExecutionService {
   }
 
   private buildPosition(marketSlice: MarketSnapshotSlice, executionDecision: ExecutionDecision, signalTimestamp: number): PaperPosition {
-    const forcedFlattenAt = marketSlice.marketEnd === null ? null : Date.parse(marketSlice.marketEnd) - config.FORCE_FLATTEN_LEAD_MS;
     return {
       positionId: randomUUID(),
       marketKey: marketSlice.marketKey,
@@ -125,12 +166,12 @@ export class PaperExecutionService {
       positionSide: executionDecision.positionSide as PositionSide,
       entryDecisionAt: marketSlice.generatedAt,
       entryExecutionStyle: executionDecision.executionStyle as ExecutionStyle,
+      shareCount: executionDecision.orderShareCount,
       entryPostedPrice: executionDecision.executionStyle === "maker" ? executionDecision.entryReferencePrice : null,
       entryFillPrice: null,
       entryFilledAt: null,
       takeProfitPrice: executionDecision.takeProfitPrice as number,
       stopLossPrice: executionDecision.stopLossPrice as number,
-      forcedFlattenAt,
       status: executionDecision.executionStyle === "maker" ? "entry_pending_maker" : "open",
       exitDecisionAt: null,
       exitExecutionStyle: null,
@@ -231,9 +272,15 @@ export class PaperExecutionService {
     const entryFillPrice = paperPosition.entryFillPrice;
     const entryFilledAt = paperPosition.entryFilledAt;
     if (entryFillPrice !== null && entryFilledAt !== null) {
-      const grossMove = exitFillPrice - entryFillPrice;
-      const entryCost = this.applyEntryCosts(entryFillPrice, paperPosition.entryExecutionStyle, marketSlice, paperPosition.positionSide);
-      const exitCost = this.applyExitCosts(exitFillPrice, exitExecutionStyle, marketSlice, paperPosition.positionSide);
+      const grossMove = (exitFillPrice - entryFillPrice) * paperPosition.shareCount;
+      const entryCost = this.applyEntryCosts(
+        entryFillPrice,
+        paperPosition.entryExecutionStyle,
+        marketSlice,
+        paperPosition.positionSide,
+        paperPosition.shareCount,
+      );
+      const exitCost = this.applyExitCosts(exitFillPrice, exitExecutionStyle, marketSlice, paperPosition.positionSide, paperPosition.shareCount);
       paperPosition.exitFillPrice = exitFillPrice;
       paperPosition.exitFilledAt = marketSlice.generatedAt;
       paperPosition.exitExecutionStyle = exitExecutionStyle;
@@ -247,8 +294,11 @@ export class PaperExecutionService {
         asset: paperPosition.asset,
         window: paperPosition.window,
         positionSide: paperPosition.positionSide,
+        shareCount: paperPosition.shareCount,
         entryExecutionStyle: paperPosition.entryExecutionStyle,
         exitExecutionStyle,
+        entryNotionalUsd: entryFillPrice * paperPosition.shareCount,
+        exitNotionalUsd: exitFillPrice * paperPosition.shareCount,
         entryFillPrice,
         exitFillPrice,
         entryFilledAt,
@@ -269,20 +319,19 @@ export class PaperExecutionService {
   private buildOpenPositionSummary(marketSlice: MarketSnapshotSlice, paperPosition: PaperPosition): OpenPositionSummary {
     const liveTokenPrice = this.resolveLiveTokenPrice(marketSlice, paperPosition.positionSide);
     const unrealizedPnlTokenPrice = paperPosition.entryFillPrice === null || liveTokenPrice === null ? null : liveTokenPrice - paperPosition.entryFillPrice;
-    const timeToForcedFlattenMs = paperPosition.forcedFlattenAt === null ? null : Math.max(0, paperPosition.forcedFlattenAt - marketSlice.generatedAt);
     return {
       marketKey: paperPosition.marketKey,
       asset: paperPosition.asset,
       window: paperPosition.window,
       positionSide: paperPosition.positionSide,
       status: paperPosition.status,
+      shareCount: paperPosition.shareCount,
       entryExecutionStyle: paperPosition.entryExecutionStyle,
       entryFillPrice: paperPosition.entryFillPrice,
       liveTokenPrice,
-      unrealizedPnlTokenPrice,
+      unrealizedPnlTokenPrice: unrealizedPnlTokenPrice === null ? null : unrealizedPnlTokenPrice * paperPosition.shareCount,
       takeProfitPrice: paperPosition.takeProfitPrice,
       stopLossPrice: paperPosition.stopLossPrice,
-      timeToForcedFlattenMs,
       suggestedExitStyle: paperPosition.exitExecutionStyle,
     };
   }
@@ -292,7 +341,6 @@ export class PaperExecutionService {
     let makerEntries = 0;
     let takerEntries = 0;
     let makerTrades = 0;
-    let forcedFlattenTrades = 0;
     for (const paperTrade of [...this.recentTrades].reverse()) {
       equityState.running += paperTrade.realizedPnlAfterCosts;
       if (equityState.running > equityState.peak) {
@@ -310,9 +358,6 @@ export class PaperExecutionService {
       if (paperTrade.entryExecutionStyle === "maker" || paperTrade.exitExecutionStyle === "maker") {
         makerTrades += 1;
       }
-      if (paperTrade.exitReason === "flatten_before_expiry") {
-        forcedFlattenTrades += 1;
-      }
     }
     const tradeCount = this.recentTrades.length;
     return {
@@ -322,10 +367,91 @@ export class PaperExecutionService {
       averageNetPnlPerTrade: tradeCount === 0 ? 0 : equityState.running / tradeCount,
       maxDrawdown: equityState.maxDrawdown,
       makerFillRate: tradeCount === 0 ? 0 : makerTrades / tradeCount,
-      forcedFlattenRate: tradeCount === 0 ? 0 : forcedFlattenTrades / tradeCount,
       makerUsageRatio: tradeCount === 0 ? 0 : makerEntries / tradeCount,
       takerUsageRatio: tradeCount === 0 ? 0 : takerEntries / tradeCount,
       tradeCount,
+    };
+  }
+
+  private readRollingTradeCutoff(nowTimestamp: number | null): number | null {
+    const rollingTradeCutoff = nowTimestamp === null ? null : nowTimestamp - config.MARKET_SCORE_WINDOW_SECONDS * 1_000;
+    return rollingTradeCutoff;
+  }
+
+  private readWindowedTrades(marketKey: MarketKey): PaperTrade[] {
+    const rollingTradeCutoff = this.readRollingTradeCutoff(this.latestObservedAt);
+    const windowedTrades = this.recentTrades.filter((paperTrade) => {
+      const isSameMarket = paperTrade.marketKey === marketKey;
+      const isInsideWindow = rollingTradeCutoff === null || paperTrade.exitFilledAt >= rollingTradeCutoff;
+      return isSameMarket && isInsideWindow;
+    });
+    return windowedTrades;
+  }
+
+  private computeMarketScore(windowedTrades: PaperTrade[]): number {
+    let marketScore = 0.5;
+    if (windowedTrades.length > 0) {
+      const winCount = windowedTrades.filter((paperTrade) => paperTrade.realizedPnlAfterCosts > 0).length;
+      const hitRate = winCount / windowedTrades.length;
+      const cumulativeNetPnl = windowedTrades.reduce((aggregatedPnl, paperTrade) => aggregatedPnl + paperTrade.realizedPnlAfterCosts, 0);
+      const averageNetPnlPerTrade = cumulativeNetPnl / windowedTrades.length;
+      const marketEquityState: EquityState = { peak: 0, running: 0, maxDrawdown: 0 };
+      for (const paperTrade of windowedTrades) {
+        marketEquityState.running += paperTrade.realizedPnlAfterCosts;
+        if (marketEquityState.running > marketEquityState.peak) {
+          marketEquityState.peak = marketEquityState.running;
+        }
+        const drawdown = marketEquityState.peak - marketEquityState.running;
+        if (drawdown > marketEquityState.maxDrawdown) {
+          marketEquityState.maxDrawdown = drawdown;
+        }
+      }
+      const sampleTrust = Math.min(1, windowedTrades.length / Math.max(1, config.MIN_MARKET_TRADES_FOR_SCORING * 2));
+      const pnlComponent = Math.max(-1, Math.min(1, averageNetPnlPerTrade / 0.1));
+      const drawdownPenalty = Math.max(0, Math.min(1, marketEquityState.maxDrawdown / 0.6));
+      marketScore = 0.5 + ((hitRate - 0.5) * 0.5 + pnlComponent * 0.35 - drawdownPenalty * 0.25) * sampleTrust;
+    }
+    return Math.max(0, Math.min(1, marketScore));
+  }
+
+  private buildMarketPerformanceSummary(asset: AssetSymbol, window: MarketWindow): MarketPerformanceSummary {
+    const marketKey = this.buildMarketKey(asset, window);
+    const windowedTrades = this.readWindowedTrades(marketKey).sort((leftTrade, rightTrade) => {
+      return leftTrade.exitFilledAt - rightTrade.exitFilledAt;
+    });
+    const tradeCount = windowedTrades.length;
+    const winCount = windowedTrades.filter((paperTrade) => paperTrade.realizedPnlAfterCosts > 0).length;
+    const cumulativeNetPnl = windowedTrades.reduce((aggregatedPnl, paperTrade) => aggregatedPnl + paperTrade.realizedPnlAfterCosts, 0);
+    const averageNetPnlPerTrade = tradeCount === 0 ? 0 : cumulativeNetPnl / tradeCount;
+    const marketEquityState: EquityState = { peak: 0, running: 0, maxDrawdown: 0 };
+    for (const paperTrade of windowedTrades) {
+      marketEquityState.running += paperTrade.realizedPnlAfterCosts;
+      if (marketEquityState.running > marketEquityState.peak) {
+        marketEquityState.peak = marketEquityState.running;
+      }
+      const drawdown = marketEquityState.peak - marketEquityState.running;
+      if (drawdown > marketEquityState.maxDrawdown) {
+        marketEquityState.maxDrawdown = drawdown;
+      }
+    }
+    const hasSufficientHistory = tradeCount >= config.MIN_MARKET_TRADES_FOR_SCORING;
+    const score = this.computeMarketScore(windowedTrades);
+    let status: MarketPerformanceSummary["status"] = "warming_up";
+    if (hasSufficientHistory) {
+      status = score >= config.MIN_MARKET_SCORE_FOR_ENTRY ? "good" : "avoid";
+    }
+    return {
+      marketKey,
+      asset,
+      window,
+      score,
+      tradeCount,
+      winRate: tradeCount === 0 ? 0.5 : winCount / tradeCount,
+      cumulativeNetPnl,
+      averageNetPnlPerTrade,
+      maxDrawdown: marketEquityState.maxDrawdown,
+      hasSufficientHistory,
+      status,
     };
   }
 
@@ -333,7 +459,8 @@ export class PaperExecutionService {
    * @section public:methods
    */
 
-  public handleSnapshot(_generatedAt: number): void {
+  public handleSnapshot(generatedAt: number): void {
+    this.latestObservedAt = generatedAt;
     for (const asset of SUPPORTED_ASSETS) {
       for (const window of SUPPORTED_WINDOWS) {
         const marketKey = this.buildMarketKey(asset, window);
@@ -341,7 +468,8 @@ export class PaperExecutionService {
         if (marketSlice !== null) {
           const latestPrediction = this.resolvePrediction(asset, window);
           const openPosition = this.openPositions.get(marketKey) ?? null;
-          const executionDecision = this.executionPolicyService.buildEntryDecision(marketSlice, latestPrediction, openPosition);
+          const marketPerformanceSummary = this.buildMarketPerformanceSummary(asset, window);
+          const executionDecision = this.executionPolicyService.buildEntryDecision(marketSlice, latestPrediction, openPosition, marketPerformanceSummary);
           if (executionDecision !== null) {
             this.executionDecisions.set(marketKey, executionDecision);
           }
@@ -382,7 +510,12 @@ export class PaperExecutionService {
           isEntryAllowed: false,
           positionSide: null,
           predictionDirection: null,
+          marketScore: null,
+          marketTradeCount: 0,
+          hasSufficientMarketHistory: false,
           entryReferencePrice: null,
+          orderShareCount: 0,
+          orderNotionalUsd: null,
           takeProfitPrice: null,
           stopLossPrice: null,
           executionStyle: null,
@@ -425,5 +558,15 @@ export class PaperExecutionService {
 
   public getPortfolioSummary(): PortfolioExecutionSummary {
     return this.buildPortfolioSummary();
+  }
+
+  public getMarketPerformanceSummaries(): MarketPerformanceSummary[] {
+    const marketPerformanceSummaries: MarketPerformanceSummary[] = [];
+    for (const asset of SUPPORTED_ASSETS) {
+      for (const window of SUPPORTED_WINDOWS) {
+        marketPerformanceSummaries.push(this.buildMarketPerformanceSummary(asset, window));
+      }
+    }
+    return marketPerformanceSummaries;
   }
 }

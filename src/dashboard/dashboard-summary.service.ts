@@ -3,7 +3,13 @@
  */
 
 import config from "../config.ts";
-import type { MarketExecutionSummary, OpenPositionSummary, PaperTrade, PortfolioExecutionSummary } from "../execution/execution.types.ts";
+import type {
+  MarketExecutionSummary,
+  MarketPerformanceSummary,
+  OpenPositionSummary,
+  PaperTrade,
+  PortfolioExecutionSummary,
+} from "../execution/execution.types.ts";
 import type { PaperExecutionService } from "../execution/paper-execution.service.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { MarketSummary } from "../market/market.types.ts";
@@ -42,12 +48,12 @@ export type DashboardSummaryPayload = {
   executionNow: MarketExecutionSummary[];
   openPositions: OpenPositionSummary[];
   recentTrades: PaperTrade[];
+  marketPerformance: MarketPerformanceSummary[];
   paperExecutionPerformance: PortfolioExecutionSummary;
   makerTakerStats: {
     makerFillRate: number;
     makerUsageRatio: number;
     takerUsageRatio: number;
-    forcedFlattenRate: number;
   };
 };
 
@@ -106,6 +112,7 @@ export class DashboardSummaryService {
     const executionNow = this.paperExecutionService.getExecutionSummaries();
     const openPositions = this.paperExecutionService.getOpenPositions();
     const recentTrades = this.paperExecutionService.getRecentTrades(20);
+    const marketPerformance = this.paperExecutionService.getMarketPerformanceSummaries();
     const paperExecutionPerformance = this.paperExecutionService.getPortfolioSummary();
     const resolvedPredictions = latestPredictions.filter((prediction) => prediction.result.status !== "pending");
     const okPredictions = resolvedPredictions.filter((prediction) => prediction.result.status === "ok");
@@ -131,12 +138,12 @@ export class DashboardSummaryService {
       executionNow,
       openPositions,
       recentTrades,
+      marketPerformance,
       paperExecutionPerformance,
       makerTakerStats: {
         makerFillRate: paperExecutionPerformance.makerFillRate,
         makerUsageRatio: paperExecutionPerformance.makerUsageRatio,
         takerUsageRatio: paperExecutionPerformance.takerUsageRatio,
-        forcedFlattenRate: paperExecutionPerformance.forcedFlattenRate,
       },
     };
   }

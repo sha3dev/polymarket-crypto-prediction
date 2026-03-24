@@ -4,7 +4,7 @@ Real-time Node.js service for Polymarket crypto Up/Down markets with three layer
 
 - market monitoring from `@sha3/polymarket-snapshot`
 - event-driven 30-second prediction and rolling strategy scoring
-- paper execution overlay for near-`0.5` entries, TP/SL exits, maker-vs-taker choice, and forced flatten before expiry
+- paper execution overlay for near-`0.5` entries, TP/SL exits, and maker-vs-taker choice
 
 ## TL;DR
 
@@ -34,7 +34,7 @@ Use this package when you want one service that can answer both:
 - Scores twenty strategies and adapts ensemble weights online.
 - Simulates execution for token entries near `0.5` with token-price TP/SL.
 - Decides `maker` vs `taker` from order-book conditions and urgency.
-- Forces flattening before market expiry to avoid ending with inventory.
+- Sizes paper trades so they respect Polymarket minimums of `5` shares and `$1` notional.
 - Exposes REST APIs plus a single-screen Hono dashboard with hover hints.
 
 ## Installation
@@ -52,9 +52,10 @@ PORT=3300
 SNAPSHOT_INTERVAL_MS=500
 ENTRY_TARGET_PRICE=0.5
 ENTRY_BAND_HALF_WIDTH=0.02
+MIN_ORDER_USD=1
+MIN_ORDER_SHARES=5
 TAKE_PROFIT_DELTA=0.2
 STOP_LOSS_DELTA=0.2
-FORCE_FLATTEN_LEAD_MS=30000
 ```
 
 ## Running Locally
@@ -439,25 +440,26 @@ Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-c
 - `ENSEMBLE_MEDIUM_CONFIDENCE_THRESHOLD`: confidence threshold for escalating beyond low-cost strategies.
 - `ENSEMBLE_HIGH_CONFIDENCE_THRESHOLD`: high-confidence reference threshold for ensemble interpretation.
 - `ENSEMBLE_SCORE_ESCALATION_THRESHOLD`: absolute weighted-score threshold for ambiguity escalation.
-- `STRATEGY_ROLLING_WINDOW_SIZE`: rolling outcome window size per strategy.
+- `STRATEGY_ROLLING_WINDOW_SECONDS`: rolling time window in seconds used to score each strategy from recent outcomes only.
 - `DASHBOARD_POLL_INTERVAL_MS`: dashboard polling interval.
+- `MARKET_SCORE_WINDOW_SECONDS`: rolling time window in seconds used to score each market from recent paper trades.
+- `MIN_MARKET_TRADES_FOR_SCORING`: minimum recent trade count before a market score is considered actionable.
+- `MIN_MARKET_SCORE_FOR_ENTRY`: minimum market score required before new entries are allowed in that market.
 - `ENTRY_TARGET_PRICE`: preferred entry anchor for the paper execution overlay.
 - `ENTRY_BAND_HALF_WIDTH`: allowed deviation around `ENTRY_TARGET_PRICE`.
+- `MIN_ORDER_USD`: minimum notional per paper trade so entries respect Polymarket sizing rules.
+- `MIN_ORDER_SHARES`: minimum share count per paper trade so entries respect Polymarket sizing rules.
 - `TAKE_PROFIT_DELTA`: token-price distance from entry to TP.
 - `STOP_LOSS_DELTA`: token-price distance from entry to SL.
-- `FORCE_FLATTEN_LEAD_MS`: milliseconds before market end when all positions must be closed.
 - `MIN_ENTRY_CONFIDENCE`: minimum ensemble confidence required for a paper entry.
 - `MIN_MARKET_QUALITY_FOR_ENTRY`: minimum market-quality score required for a paper entry.
 - `MIN_SPREAD_FOR_MAKER`: minimum spread where maker posting is preferred.
 - `MAX_SPREAD_FOR_ENTRY`: maximum spread tolerated for a new paper entry.
 - `MAKER_ENTRY_TIMEOUT_MS`: max time a maker entry may wait before fallback/cancel.
 - `MAKER_EXIT_TIMEOUT_MS`: max time a maker exit may wait before taker fallback.
-- `MIN_TIME_TO_END_FOR_NEW_ENTRY_MS`: minimum time-to-expiry required to open a new position.
 - `MIN_DEPTH_FOR_MAKER`: minimum top-of-book depth required to prefer maker.
 - `MAKER_DRIFT_LIMIT`: maximum tolerated drift before maker becomes unattractive.
 - `TAKER_URGENCY_THRESHOLD`: urgency threshold where taker execution becomes preferred.
-- `ENTRY_COST_PROXY_BPS`: proxy entry cost used in paper PnL.
-- `EXIT_COST_PROXY_BPS`: proxy exit cost used in paper PnL.
 - `LOW_DEPTH_SLIPPAGE_PROXY`: extra proxy slippage used in thin books.
 - `MAX_OPEN_POSITIONS_GLOBAL`: portfolio-wide cap for simultaneous open paper positions.
 
@@ -499,15 +501,13 @@ Check:
 - `MIN_MARKET_QUALITY_FOR_ENTRY`
 - `ENTRY_BAND_HALF_WIDTH`
 - `MAX_SPREAD_FOR_ENTRY`
-- `MIN_TIME_TO_END_FOR_NEW_ENTRY_MS`
 
 ### Positions never close
 
-Check whether TP/SL levels are reachable under your chosen deltas and whether the market is entering the force-flatten window:
+Check whether TP/SL levels are reachable under your chosen deltas and whether maker exits have enough time to complete:
 
 - `TAKE_PROFIT_DELTA`
 - `STOP_LOSS_DELTA`
-- `FORCE_FLATTEN_LEAD_MS`
 - maker exit timeout values
 
 ### Maker usage is too high or too low

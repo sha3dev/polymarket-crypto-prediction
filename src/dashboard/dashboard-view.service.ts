@@ -271,7 +271,7 @@ export class DashboardViewService {
             <div id="trades" class="loading panel-scroll">Loading recent trades…</div>
           </article>
           <article class="panel panel-compact">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Simulated open positions, their TP/SL levels, and time left before forced flatten.">Open Positions</span></span></h2>
+            <h2><span class="label-with-hint"><span class="hint-text" title="Simulated open positions with their TP/SL levels and current marked value.">Open Positions</span></span></h2>
             <div id="positions" class="loading panel-scroll">Loading open positions…</div>
           </article>
           <article class="panel panel-compact">
@@ -300,6 +300,194 @@ export class DashboardViewService {
         return '<div class="panel-scroll">' + tableHtml + '</div>';
       }
 
+      function renderConvictionLabel(positionSizeSuggestion) {
+        let convictionLabel = '<span class="pill">LOW</span>';
+        if (positionSizeSuggestion >= 0.7) {
+          convictionLabel = '<span class="pill up">HIGH</span>';
+        } else {
+          if (positionSizeSuggestion >= 0.45) {
+            convictionLabel = '<span class="pill">MED</span>';
+          }
+        }
+        return convictionLabel;
+      }
+
+      function renderActionLabel(decision) {
+        let actionLabel = '<span class="pill down">NO TRADE</span>';
+        if (decision.isEntryAllowed && decision.positionSide === 'up') {
+          actionLabel = '<span class="pill up">BUY UP</span>';
+        }
+        if (decision.isEntryAllowed && decision.positionSide === 'down') {
+          actionLabel = '<span class="pill down">BUY DOWN</span>';
+        }
+        return actionLabel;
+      }
+
+      function humanizeReason(reasonCode) {
+        let humanReason = reasonCode;
+        if (reasonCode === 'no_prediction') {
+          humanReason = 'no valid prediction';
+        }
+        if (reasonCode === 'position_already_open') {
+          humanReason = 'position already open';
+        }
+        if (reasonCode === 'invalid_direction') {
+          humanReason = 'invalid direction';
+        }
+        if (reasonCode === 'no_reference_price') {
+          humanReason = 'missing reference price';
+        }
+        if (reasonCode === 'market_not_live') {
+          humanReason = 'market not live';
+        }
+        if (reasonCode === 'quality_too_low') {
+          humanReason = 'data quality too low';
+        }
+        if (reasonCode === 'confidence_too_low') {
+          humanReason = 'prediction too weak';
+        }
+        if (reasonCode === 'outside_entry_band') {
+          humanReason = 'price too far from 0.5';
+        }
+        if (reasonCode === 'spread_too_wide') {
+          humanReason = 'spread too wide';
+        }
+        if (reasonCode === 'market_score_too_low') {
+          humanReason = 'market score too low';
+        }
+        if (reasonCode === 'order_notional_too_low') {
+          humanReason = 'order below $1 minimum';
+        }
+        if (reasonCode === 'order_share_count_too_low') {
+          humanReason = 'order below 5-share minimum';
+        }
+        if (reasonCode === 'maker_preferred') {
+          humanReason = 'passive entry preferred';
+        }
+        if (reasonCode === 'tight_spread_take_liquidity') {
+          humanReason = 'tight spread, cross now';
+        }
+        if (reasonCode === 'urgency_take_liquidity') {
+          humanReason = 'urgent move, do not wait';
+        }
+        if (reasonCode === 'low_fill_probability') {
+          humanReason = 'maker fill unlikely';
+        }
+        if (reasonCode === 'book_drift_take_liquidity') {
+          humanReason = 'book moving away';
+        }
+        return humanReason;
+      }
+
+      function renderWhyNot(decision) {
+        let whyNot = 'ready to trade';
+        if (decision.isEntryAllowed) {
+          if (decision.executionReason !== null) {
+            whyNot = humanizeReason(decision.executionReason);
+          }
+        } else {
+          if (decision.gateFailures.length > 0) {
+            whyNot = decision.gateFailures.map((reasonCode) => humanizeReason(reasonCode)).join(', ');
+          }
+        }
+        return whyNot;
+      }
+
+      function renderTriggerCode(triggerType) {
+        let triggerCode = triggerType;
+        if (triggerType === 'crossed_half') {
+          triggerCode = 'XH';
+        }
+        if (triggerType === 'near_half') {
+          triggerCode = 'NH';
+        }
+        return triggerCode;
+      }
+
+      function renderExecutionStyleCode(executionStyle) {
+        let executionStyleCode = '—';
+        if (executionStyle === 'maker') {
+          executionStyleCode = 'M';
+        }
+        if (executionStyle === 'taker') {
+          executionStyleCode = 'T';
+        }
+        return executionStyleCode;
+      }
+
+      function renderReasonCode(reasonCode) {
+        let reasonShortCode = reasonCode;
+        if (reasonCode === 'ready to trade') {
+          reasonShortCode = 'READY';
+        }
+        if (reasonCode === 'no valid prediction') {
+          reasonShortCode = 'NP';
+        }
+        if (reasonCode === 'position already open') {
+          reasonShortCode = 'OPEN';
+        }
+        if (reasonCode === 'invalid direction') {
+          reasonShortCode = 'DIR';
+        }
+        if (reasonCode === 'missing reference price') {
+          reasonShortCode = 'NOREF';
+        }
+        if (reasonCode === 'market not live') {
+          reasonShortCode = 'LIVE';
+        }
+        if (reasonCode === 'data quality too low') {
+          reasonShortCode = 'QUAL';
+        }
+        if (reasonCode === 'prediction too weak') {
+          reasonShortCode = 'CONF';
+        }
+        if (reasonCode === 'price too far from 0.5') {
+          reasonShortCode = 'BAND';
+        }
+        if (reasonCode === 'spread too wide') {
+          reasonShortCode = 'SPR';
+        }
+        if (reasonCode === 'market score too low') {
+          reasonShortCode = 'MS';
+        }
+        if (reasonCode === 'order below $1 minimum') {
+          reasonShortCode = 'MIN$';
+        }
+        if (reasonCode === 'order below 5-share minimum') {
+          reasonShortCode = 'MIN5';
+        }
+        if (reasonCode === 'passive entry preferred') {
+          reasonShortCode = 'M';
+        }
+        if (reasonCode === 'tight spread, cross now') {
+          reasonShortCode = 'T-SPR';
+        }
+        if (reasonCode === 'urgent move, do not wait') {
+          reasonShortCode = 'T-URG';
+        }
+        if (reasonCode === 'maker fill unlikely') {
+          reasonShortCode = 'T-FILL';
+        }
+        if (reasonCode === 'book moving away') {
+          reasonShortCode = 'T-DRIFT';
+        }
+        if (reasonCode === 'take_profit_hit') {
+          reasonShortCode = 'TP';
+        }
+        if (reasonCode === 'stop_loss_hit') {
+          reasonShortCode = 'SL';
+        }
+        return reasonShortCode;
+      }
+
+      function createMarketPerformanceMap(summary) {
+        const marketPerformanceMap = {};
+        for (const marketPerformance of summary.marketPerformance) {
+          marketPerformanceMap[marketPerformance.marketKey] = marketPerformance;
+        }
+        return marketPerformanceMap;
+      }
+
       function renderResultBadge(result) {
         let resultBadge = '<span class="pill">' + result.status.toUpperCase() + '</span>';
         if (result.status === "ok") {
@@ -318,41 +506,48 @@ export class DashboardViewService {
           ["Paper PnL", "Cumulative simulated net PnL after proxy execution costs.", formatNumber(summary.paperExecutionPerformance.cumulativeNetPnl)],
           ["Max DD", "Maximum rolling drawdown of the paper execution curve.", formatNumber(summary.paperExecutionPerformance.maxDrawdown)],
           ["Maker fill %", "Share of simulated trades where maker logic achieved a passive fill on at least one side.", (summary.paperExecutionPerformance.makerFillRate * 100).toFixed(1) + "%"],
-          ["Flatten %", "Share of closed trades that were forced out near market expiry.", (summary.paperExecutionPerformance.forcedFlattenRate * 100).toFixed(1) + "%"],
         ];
         document.getElementById("kpis").innerHTML = entries.map(([label, hint, value]) => '<div class="kpi"><div class="tiny">' + renderHintLabel(label, hint) + '</div><strong>' + value + '</strong></div>').join("");
       }
 
       function renderMarkets(summary) {
+        const marketPerformanceMap = createMarketPerformanceMap(summary);
         const rows = summary.markets.map((market) => {
           const qualityWidth = Math.max(0, Math.min(100, market.quality.score * 100));
           const qualityDetails = 'score ' + formatNumber(market.quality.score, 3) + (market.quality.issues.length === 0 ? ' · healthy' : ' · ' + market.quality.issues.join(', '));
+          const marketPerformance = marketPerformanceMap[market.marketKey];
+          const marketScore = marketPerformance ? formatNumber(marketPerformance.score, 2) : '—';
+          const marketStatus = marketPerformance ? marketPerformance.status.replace('_', ' ') : 'warming up';
           return '<tr>' +
             '<td><strong>' + market.asset.toUpperCase() + '</strong> <span class="tiny">' + market.window + '</span></td>' +
             '<td>' + formatNumber(market.latestUpMidpoint) + '</td>' +
             '<td>' + formatNumber(market.latestDownMidpoint) + '</td>' +
             '<td>' + formatNumber(market.cooldownRemainingMs, 0) + '</td>' +
+            '<td><span title="' + marketStatus + '">' + marketScore + '</span></td>' +
             '<td><span class="quality-cell" title="' + qualityDetails + '"><span>' + formatNumber(market.quality.score, 2) + '</span><div class="quality-bar"><span style="width:' + qualityWidth + '%"></span></div></span></td>' +
             '</tr>';
         }).join("");
         document.getElementById("markets").classList.remove("loading");
-        document.getElementById("markets").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP mid', 'Current midpoint for the UP token. Falls back to price only outside the midpoint field, not in this display.') + '</th><th>' + renderHintLabel('DOWN mid', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        document.getElementById("markets").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP mid', 'Current midpoint for the UP token. Falls back to price only outside the midpoint field, not in this display.') + '</th><th>' + renderHintLabel('DOWN mid', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent trading score for this market only. It reflects local hit rate, PnL, drawdown, and sample size over the rolling market-score window.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderPredictions(summary) {
         const rows = summary.latestPredictions.map((prediction) => {
           const directionClass = prediction.direction === "UP" ? "up" : "down";
+          const triggerLabel = humanizeReason(prediction.trigger.triggerType) === prediction.trigger.triggerType
+            ? prediction.trigger.triggerType.replace('_', ' ')
+            : humanizeReason(prediction.trigger.triggerType);
           return '<tr>' +
             '<td><strong>' + prediction.asset.toUpperCase() + '</strong> <span class="tiny">' + prediction.window + '</span></td>' +
             '<td><span class="pill ' + directionClass + '">' + prediction.direction + '</span></td>' +
             '<td>' + formatNumber(prediction.confidence) + '</td>' +
-            '<td>' + prediction.trigger.triggerType + '</td>' +
+            '<td><span title="' + triggerLabel + '">' + renderTriggerCode(prediction.trigger.triggerType) + '</span></td>' +
             '<td>' + renderResultBadge(prediction.result) + '</td>' +
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
             '</tr>';
         }).join("");
         document.getElementById("predictions").classList.remove("loading");
-        document.getElementById("predictions").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final ensemble direction predicted for the next 30 seconds.') + '</th><th>' + renderHintLabel('Conf', 'Normalized ensemble confidence between 0 and 1.') + '</th><th>' + renderHintLabel('Trigger', 'Reason the prediction fired: proximity to 0.5 or a cross through that zone.') + '</th><th>' + renderHintLabel('Result', 'Pending until resolved, then OK for a win, KO for a loss, or VOID if data was insufficient.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        document.getElementById("predictions").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final ensemble direction predicted for the next 30 seconds.') + '</th><th>' + renderHintLabel('Conf', 'Normalized ensemble confidence between 0 and 1.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. NH = near half, XH = crossed half.') + '</th><th>' + renderHintLabel('Result', 'Pending until resolved, then OK for a win, KO for a loss, or VOID if data was insufficient.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderStrategies(summary) {
@@ -370,24 +565,27 @@ export class DashboardViewService {
 
       function renderExecution(summary) {
         const rows = summary.executionNow.map((marketExecution) => {
-          const sideLabel = marketExecution.decision.positionSide === null ? '—' : marketExecution.decision.positionSide.toUpperCase();
-          const styleLabel = marketExecution.decision.executionStyle === null ? '—' : marketExecution.decision.executionStyle.toUpperCase();
-          const allowedLabel = marketExecution.decision.isEntryAllowed ? '<span class="pill up">YES</span>' : '<span class="pill down">NO</span>';
-          const blockReason = marketExecution.decision.gateFailures.length === 0 ? '—' : marketExecution.decision.gateFailures.join(', ');
+          const whyNot = renderWhyNot(marketExecution.decision);
+          const reasonCode = renderReasonCode(whyNot);
+          const marketScoreLabel =
+            marketExecution.decision.marketScore === null
+              ? '—'
+              : formatNumber(marketExecution.decision.marketScore, 2) + ' / ' + marketExecution.decision.marketTradeCount;
           return '<tr>' +
             '<td><strong>' + marketExecution.asset.toUpperCase() + '</strong> <span class="tiny">' + marketExecution.window + '</span></td>' +
-            '<td>' + allowedLabel + '</td>' +
-            '<td>' + sideLabel + '</td>' +
+            '<td>' + renderActionLabel(marketExecution.decision) + '</td>' +
             '<td>' + formatNumber(marketExecution.decision.entryReferencePrice) + '</td>' +
+            '<td>' + marketExecution.decision.orderShareCount + ' sh / ' + formatNumber(marketExecution.decision.orderNotionalUsd, 2) + '</td>' +
             '<td>' + formatNumber(marketExecution.decision.takeProfitPrice) + '</td>' +
             '<td>' + formatNumber(marketExecution.decision.stopLossPrice) + '</td>' +
-            '<td>' + styleLabel + '</td>' +
-            '<td>' + formatNumber(marketExecution.decision.urgencyScore) + '</td>' +
-            '<td><span class="truncate-cell" title="' + blockReason + '">' + blockReason + '</span></td>' +
+            '<td><span title="' + (marketExecution.decision.executionStyle === null ? 'no execution style' : marketExecution.decision.executionStyle) + '">' + renderExecutionStyleCode(marketExecution.decision.executionStyle) + '</span></td>' +
+            '<td>' + marketScoreLabel + '</td>' +
+            '<td>' + renderConvictionLabel(marketExecution.decision.positionSizeSuggestion) + '</td>' +
+            '<td><span class="truncate-cell" title="' + whyNot + '">' + reasonCode + '</span></td>' +
             '</tr>';
         }).join("");
         document.getElementById("execution").classList.remove("loading");
-        document.getElementById("execution").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Executable', 'Whether the current market passes all entry gates right now.') + '</th><th>' + renderHintLabel('Side', 'Which token would be bought now: UP or DOWN.') + '</th><th>' + renderHintLabel('Entry', 'Reference price used for a potential entry near the 0.5 zone.') + '</th><th>' + renderHintLabel('TP', 'Take-profit token price for the simulated trade.') + '</th><th>' + renderHintLabel('SL', 'Stop-loss token price for the simulated trade.') + '</th><th>' + renderHintLabel('Style', 'Preferred execution style: maker or taker.') + '</th><th>' + renderHintLabel('Urgency', 'Higher values mean the model prefers not to wait passively.') + '</th><th>' + renderHintLabel('Reason', 'If blocked, the gate failure list. If active, the execution rationale.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        document.getElementById("execution").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Action', 'Clear action right now: BUY UP, BUY DOWN, or NO TRADE.') + '</th><th>' + renderHintLabel('Ref px', 'Current token price the execution overlay uses as the reference entry level.') + '</th><th>' + renderHintLabel('Size', 'Planned order size in shares and notional. Polymarket minimums require at least 5 shares and at least $1.') + '</th><th>' + renderHintLabel('Target', 'Take-profit price for this potential trade.') + '</th><th>' + renderHintLabel('Risk', 'Stop-loss price for this potential trade.') + '</th><th>' + renderHintLabel('Exec', 'Compact execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent market-only score followed by recent trade count. Low scored markets can be blocked even if the signal is valid.') + '</th><th>' + renderHintLabel('Conviction', 'Simplified trade strength derived from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderPositions(summary) {
@@ -396,18 +594,18 @@ export class DashboardViewService {
             '<td><strong>' + position.asset.toUpperCase() + '</strong> <span class="tiny">' + position.window + '</span></td>' +
             '<td>' + position.positionSide.toUpperCase() + '</td>' +
             '<td>' + position.status + '</td>' +
+            '<td>' + position.shareCount + '</td>' +
             '<td>' + formatNumber(position.entryFillPrice) + '</td>' +
             '<td>' + formatNumber(position.liveTokenPrice) + '</td>' +
             '<td>' + formatNumber(position.unrealizedPnlTokenPrice) + '</td>' +
             '<td>' + formatNumber(position.takeProfitPrice) + '</td>' +
             '<td>' + formatNumber(position.stopLossPrice) + '</td>' +
-            '<td>' + formatNumber(position.timeToForcedFlattenMs, 0) + '</td>' +
             '</tr>';
         }).join("");
         document.getElementById("positions").classList.remove("loading");
         document.getElementById("positions").innerHTML = summary.openPositions.length === 0
           ? '<div class="tiny">No open paper positions.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the open paper position.') + '</th><th>' + renderHintLabel('Side', 'Token currently held: UP or DOWN.') + '</th><th>' + renderHintLabel('Status', 'Position lifecycle state, including maker-pending statuses.') + '</th><th>' + renderHintLabel('Entry fill', 'Simulated fill price used to open the position.') + '</th><th>' + renderHintLabel('Live px', 'Current token midpoint or fallback price for mark-to-market.') + '</th><th>' + renderHintLabel('uPnL', 'Unrealized token-price PnL before paper execution costs.') + '</th><th>' + renderHintLabel('TP', 'Take-profit target for this open position.') + '</th><th>' + renderHintLabel('SL', 'Stop-loss level for this open position.') + '</th><th>' + renderHintLabel('Flatten', 'Milliseconds left before forced flatten near expiry.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the open paper position.') + '</th><th>' + renderHintLabel('Side', 'Token currently held: UP or DOWN.') + '</th><th>' + renderHintLabel('Status', 'Position lifecycle state, including maker-pending statuses.') + '</th><th>' + renderHintLabel('Qty', 'Position size in shares. The execution overlay respects the 5-share minimum.') + '</th><th>' + renderHintLabel('Entry fill', 'Simulated fill price used to open the position.') + '</th><th>' + renderHintLabel('Live px', 'Current token midpoint or fallback price for mark-to-market.') + '</th><th>' + renderHintLabel('uPnL', 'Unrealized token-price PnL after scaling by the current share count, before paper execution costs.') + '</th><th>' + renderHintLabel('TP', 'Take-profit target for this open position.') + '</th><th>' + renderHintLabel('SL', 'Stop-loss level for this open position.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderTrades(summary) {
@@ -415,9 +613,10 @@ export class DashboardViewService {
           return '<tr>' +
             '<td><strong>' + trade.asset.toUpperCase() + '</strong> <span class="tiny">' + trade.window + '</span></td>' +
             '<td>' + trade.positionSide.toUpperCase() + '</td>' +
-            '<td>' + trade.entryExecutionStyle.toUpperCase() + '</td>' +
-            '<td>' + trade.exitExecutionStyle.toUpperCase() + '</td>' +
-            '<td>' + trade.exitReason + '</td>' +
+            '<td>' + trade.shareCount + '</td>' +
+            '<td><span title="' + trade.entryExecutionStyle + '">' + renderExecutionStyleCode(trade.entryExecutionStyle) + '</span></td>' +
+            '<td><span title="' + trade.exitExecutionStyle + '">' + renderExecutionStyleCode(trade.exitExecutionStyle) + '</span></td>' +
+            '<td><span title="' + trade.exitReason.replace('_', ' ') + '">' + renderReasonCode(trade.exitReason) + '</span></td>' +
             '<td>' + formatNumber(trade.realizedPnlAfterCosts) + '</td>' +
             '<td>' + formatNumber(trade.holdTimeMs, 0) + '</td>' +
             '</tr>';
@@ -425,7 +624,7 @@ export class DashboardViewService {
         document.getElementById("trades").classList.remove("loading");
         document.getElementById("trades").innerHTML = summary.recentTrades.length === 0
           ? '<div class="tiny">No closed paper trades yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the closed paper trade.') + '</th><th>' + renderHintLabel('Side', 'Token that was bought for the trade.') + '</th><th>' + renderHintLabel('Maker in', 'Execution style used on entry.') + '</th><th>' + renderHintLabel('Maker out', 'Execution style used on exit.') + '</th><th>' + renderHintLabel('Exit reason', 'Why the trade closed: TP, SL, flatten, or fallback logic.') + '</th><th>' + renderHintLabel('Net PnL', 'Realized simulated PnL after proxy entry and exit costs.') + '</th><th>' + renderHintLabel('Hold time', 'Milliseconds between entry fill and exit fill.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the closed paper trade.') + '</th><th>' + renderHintLabel('Side', 'Token that was bought for the trade.') + '</th><th>' + renderHintLabel('Qty', 'Filled share count used for the trade. Polymarket minimums require at least 5 shares and at least $1 of notional.') + '</th><th>' + renderHintLabel('In', 'Entry execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Out', 'Exit execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Exit', 'Exit reason code. TP = take profit, SL = stop loss.') + '</th><th>' + renderHintLabel('Net PnL', 'Realized simulated PnL after proxy entry and exit costs, scaled by the executed share count.') + '</th><th>' + renderHintLabel('Hold time', 'Milliseconds between entry fill and exit fill.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderHealth(summary) {

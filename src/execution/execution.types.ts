@@ -11,15 +11,20 @@ import type { AssetSymbol, MarketKey, MarketWindow, PredictionDirection } from "
 export type ExecutionStyle = "maker" | "taker";
 export type PositionSide = "up" | "down";
 export type TradeLifecycleStatus = "idle" | "entry_pending_maker" | "open" | "exit_pending_maker" | "closed";
-export type TradeExitReason = "take_profit_hit" | "stop_loss_hit" | "flatten_before_expiry" | "signal_invalidation" | "maker_timeout" | "max_holding_time_hit";
+export type TradeExitReason = "take_profit_hit" | "stop_loss_hit";
 export type ExecutionDecision = {
   marketKey: MarketKey;
   asset: AssetSymbol;
   window: MarketWindow;
   isEntryAllowed: boolean;
+  marketScore: number | null;
+  marketTradeCount: number;
+  hasSufficientMarketHistory: boolean;
   positionSide: PositionSide | null;
   predictionDirection: PredictionDirection | null;
   entryReferencePrice: number | null;
+  orderShareCount: number;
+  orderNotionalUsd: number | null;
   takeProfitPrice: number | null;
   stopLossPrice: number | null;
   executionStyle: ExecutionStyle | null;
@@ -39,12 +44,12 @@ export type PaperPosition = {
   positionSide: PositionSide;
   entryDecisionAt: number;
   entryExecutionStyle: ExecutionStyle;
+  shareCount: number;
   entryPostedPrice: number | null;
   entryFillPrice: number | null;
   entryFilledAt: number | null;
   takeProfitPrice: number;
   stopLossPrice: number;
-  forcedFlattenAt: number | null;
   status: TradeLifecycleStatus;
   exitDecisionAt: number | null;
   exitExecutionStyle: ExecutionStyle | null;
@@ -64,8 +69,11 @@ export type PaperTrade = {
   asset: AssetSymbol;
   window: MarketWindow;
   positionSide: PositionSide;
+  shareCount: number;
   entryExecutionStyle: ExecutionStyle;
   exitExecutionStyle: ExecutionStyle;
+  entryNotionalUsd: number;
+  exitNotionalUsd: number;
   entryFillPrice: number;
   exitFillPrice: number;
   entryFilledAt: number;
@@ -82,13 +90,13 @@ export type OpenPositionSummary = {
   window: MarketWindow;
   positionSide: PositionSide;
   status: TradeLifecycleStatus;
+  shareCount: number;
   entryExecutionStyle: ExecutionStyle;
   entryFillPrice: number | null;
   liveTokenPrice: number | null;
   unrealizedPnlTokenPrice: number | null;
   takeProfitPrice: number;
   stopLossPrice: number;
-  timeToForcedFlattenMs: number | null;
   suggestedExitStyle: ExecutionStyle | null;
 };
 export type MarketExecutionSummary = {
@@ -98,6 +106,19 @@ export type MarketExecutionSummary = {
   decision: ExecutionDecision;
   openPosition: OpenPositionSummary | null;
 };
+export type MarketPerformanceSummary = {
+  marketKey: MarketKey;
+  asset: AssetSymbol;
+  window: MarketWindow;
+  score: number;
+  tradeCount: number;
+  winRate: number;
+  cumulativeNetPnl: number;
+  averageNetPnlPerTrade: number;
+  maxDrawdown: number;
+  hasSufficientHistory: boolean;
+  status: "warming_up" | "good" | "avoid";
+};
 export type PortfolioExecutionSummary = {
   openPositionCount: number;
   executableEntryCount: number;
@@ -105,7 +126,6 @@ export type PortfolioExecutionSummary = {
   averageNetPnlPerTrade: number;
   maxDrawdown: number;
   makerFillRate: number;
-  forcedFlattenRate: number;
   makerUsageRatio: number;
   takerUsageRatio: number;
   tradeCount: number;

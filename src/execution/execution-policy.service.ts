@@ -5,7 +5,7 @@
 import config from "../config.ts";
 import type { MarketSnapshotSlice, PredictionDirection } from "../market/market.types.ts";
 import type { PredictionResponse } from "../prediction/prediction.types.ts";
-import type { ExecutionDecision, ExecutionStyle, PaperPosition, PositionSide, TradeExitReason } from "./execution.types.ts";
+import type { ExecutionDecision, ExecutionStyle, MarketPerformanceSummary, PaperPosition, PositionSide, TradeExitReason } from "./execution.types.ts";
 
 /**
  * @section class
@@ -16,9 +16,16 @@ export class ExecutionPolicyService {
    * @section private:methods
    */
 
-  private buildBlockedDecision(marketSlice: MarketSnapshotSlice, prediction: PredictionResponse | null, gateFailures: string[]): ExecutionDecision {
+  private buildBlockedDecision(
+    marketSlice: MarketSnapshotSlice,
+    prediction: PredictionResponse | null,
+    marketPerformanceSummary: MarketPerformanceSummary | null,
+    gateFailures: string[],
+  ): ExecutionDecision {
     const positionSide = this.resolvePositionSide(prediction?.direction ?? null);
     const referencePrice = positionSide === null ? null : this.resolveTokenPrice(marketSlice, positionSide);
+    const orderShareCount = referencePrice === null ? 0 : this.computeMinimumShareCount(referencePrice);
+    const orderNotionalUsd = referencePrice === null ? null : this.computeOrderNotionalUsd(referencePrice, orderShareCount);
     const takeProfitPrice = referencePrice === null ? null : this.clampTokenPrice(referencePrice + config.TAKE_PROFIT_DELTA);
     const stopLossPrice = referencePrice === null ? null : this.clampTokenPrice(referencePrice - config.STOP_LOSS_DELTA);
     return {
@@ -26,9 +33,14 @@ export class ExecutionPolicyService {
       asset: marketSlice.asset,
       window: marketSlice.window,
       isEntryAllowed: false,
+      marketScore: marketPerformanceSummary?.score ?? null,
+      marketTradeCount: marketPerformanceSummary?.tradeCount ?? 0,
+      hasSufficientMarketHistory: marketPerformanceSummary?.hasSufficientHistory ?? false,
       positionSide,
       predictionDirection: prediction?.direction ?? null,
       entryReferencePrice: referencePrice,
+      orderShareCount,
+      orderNotionalUsd,
       takeProfitPrice,
       stopLossPrice,
       executionStyle: null,
@@ -59,6 +71,17 @@ export class ExecutionPolicyService {
     return tokenPrice;
   }
 
+  private computeMinimumShareCount(referencePrice: number): number {
+    const shareCountFromUsd = Math.ceil(config.MIN_ORDER_USD / Math.max(referencePrice, 0.0001));
+    const minimumShareCount = Math.max(config.MIN_ORDER_SHARES, shareCountFromUsd);
+    return minimumShareCount;
+  }
+
+  private computeOrderNotionalUsd(referencePrice: number, orderShareCount: number): number {
+    const orderNotionalUsd = referencePrice * orderShareCount;
+    return orderNotionalUsd;
+  }
+
   private resolveSpread(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number {
     const tokenMetrics = positionSide === "up" ? marketSlice.up : marketSlice.down;
     const spread = tokenMetrics.spread ?? 1;
@@ -73,12 +96,6 @@ export class ExecutionPolicyService {
   private resolveImbalance(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number {
     const tokenMetrics = positionSide === "up" ? marketSlice.up : marketSlice.down;
     return tokenMetrics.imbalance;
-  }
-
-  private computeTimeToMarketEndMs(marketSlice: MarketSnapshotSlice): number | null {
-    const marketEndTimestamp = marketSlice.marketEnd === null ? Number.NaN : Date.parse(marketSlice.marketEnd);
-    const timeToMarketEndMs = Number.isNaN(marketEndTimestamp) ? null : marketEndTimestamp - marketSlice.generatedAt;
-    return timeToMarketEndMs;
   }
 
   private computeRecentMidpointDrift(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number {
@@ -102,18 +119,11 @@ export class ExecutionPolicyService {
     return makerFillProbability;
   }
 
-  private computeUrgencyScore(
-    marketSlice: MarketSnapshotSlice,
-    prediction: PredictionResponse,
-    referencePrice: number,
-    timeToMarketEndMs: number | null,
-  ): number {
+  private computeUrgencyScore(marketSlice: MarketSnapshotSlice, prediction: PredictionResponse, referencePrice: number): number {
     const distanceToTarget = Math.abs(referencePrice - config.ENTRY_TARGET_PRICE);
-    const timePressure =
-      timeToMarketEndMs === null ? 0 : Math.max(0, Math.min(1, 1 - timeToMarketEndMs / Math.max(config.MIN_TIME_TO_END_FOR_NEW_ENTRY_MS, 1)));
     const confidencePressure = Math.max(0, Math.min(1, (prediction.confidence - config.MIN_ENTRY_CONFIDENCE) / 0.35));
     const qualityPressure = 1 - marketSlice.quality.score;
-    const urgencyScore = Math.max(0, Math.min(1, distanceToTarget * 12 + timePressure * 0.4 + confidencePressure * 0.35 + qualityPressure * 0.25));
+    const urgencyScore = Math.max(0, Math.min(1, distanceToTarget * 12 + confidencePressure * 0.45 + qualityPressure * 0.25));
     return urgencyScore;
   }
 
@@ -125,21 +135,10 @@ export class ExecutionPolicyService {
     return bookRiskScore;
   }
 
-  private resolveExecutionStyle(
-    spread: number,
-    depth: number,
-    urgencyScore: number,
-    makerFillProbability: number,
-    timeToMarketEndMs: number | null,
-    midpointDrift: number,
-  ): ExecutionStyle {
+  private resolveExecutionStyle(spread: number, depth: number, urgencyScore: number, makerFillProbability: number, midpointDrift: number): ExecutionStyle {
     let executionStyle: ExecutionStyle = "maker";
     const isTakerRequired =
-      spread <= 0.01 ||
-      urgencyScore >= config.TAKER_URGENCY_THRESHOLD ||
-      makerFillProbability <= 0.35 ||
-      (timeToMarketEndMs !== null && timeToMarketEndMs <= 90_000) ||
-      Math.abs(midpointDrift) > config.MAKER_DRIFT_LIMIT;
+      spread <= 0.01 || urgencyScore >= config.TAKER_URGENCY_THRESHOLD || makerFillProbability <= 0.35 || Math.abs(midpointDrift) > config.MAKER_DRIFT_LIMIT;
     if (isTakerRequired) {
       executionStyle = "taker";
     }
@@ -152,13 +151,7 @@ export class ExecutionPolicyService {
     return executionStyle;
   }
 
-  private buildExecutionReason(
-    executionStyle: ExecutionStyle,
-    spread: number,
-    makerFillProbability: number,
-    urgencyScore: number,
-    timeToMarketEndMs: number | null,
-  ): string {
+  private buildExecutionReason(executionStyle: ExecutionStyle, spread: number, makerFillProbability: number, urgencyScore: number): string {
     let executionReason = "maker_preferred";
     if (executionStyle === "taker") {
       if (spread <= 0.01) {
@@ -170,11 +163,7 @@ export class ExecutionPolicyService {
           if (makerFillProbability <= 0.35) {
             executionReason = "low_fill_probability";
           } else {
-            if (timeToMarketEndMs !== null && timeToMarketEndMs <= 90_000) {
-              executionReason = "expiry_urgency";
-            } else {
-              executionReason = "book_drift_take_liquidity";
-            }
+            executionReason = "book_drift_take_liquidity";
           }
         }
       }
@@ -195,18 +184,23 @@ export class ExecutionPolicyService {
     marketSlice: MarketSnapshotSlice | null,
     prediction: PredictionResponse | null,
     openPosition: PaperPosition | null,
+    marketPerformanceSummary: MarketPerformanceSummary | null,
   ): ExecutionDecision | null {
     let executionDecision: ExecutionDecision | null = null;
     if (marketSlice !== null) {
       if (prediction === null || openPosition !== null) {
-        executionDecision = this.buildBlockedDecision(marketSlice, prediction, prediction === null ? ["no_prediction"] : ["position_already_open"]);
+        executionDecision = this.buildBlockedDecision(
+          marketSlice,
+          prediction,
+          marketPerformanceSummary,
+          prediction === null ? ["no_prediction"] : ["position_already_open"],
+        );
       } else {
         const positionSide = this.resolvePositionSide(prediction.direction);
         if (positionSide === null) {
-          executionDecision = this.buildBlockedDecision(marketSlice, prediction, ["invalid_direction"]);
+          executionDecision = this.buildBlockedDecision(marketSlice, prediction, marketPerformanceSummary, ["invalid_direction"]);
         } else {
           const referencePrice = this.resolveTokenPrice(marketSlice, positionSide);
-          const timeToMarketEndMs = this.computeTimeToMarketEndMs(marketSlice);
           const gateFailures: string[] = [];
           if (referencePrice === null) {
             gateFailures.push("no_reference_price");
@@ -223,36 +217,49 @@ export class ExecutionPolicyService {
           if (referencePrice !== null && Math.abs(referencePrice - config.ENTRY_TARGET_PRICE) > config.ENTRY_BAND_HALF_WIDTH) {
             gateFailures.push("outside_entry_band");
           }
-          if (timeToMarketEndMs !== null && timeToMarketEndMs <= config.MIN_TIME_TO_END_FOR_NEW_ENTRY_MS) {
-            gateFailures.push("too_close_to_expiry");
-          }
           const spread = this.resolveSpread(marketSlice, positionSide);
           if (spread > config.MAX_SPREAD_FOR_ENTRY) {
             gateFailures.push("spread_too_wide");
           }
+          if (marketPerformanceSummary?.hasSufficientHistory && marketPerformanceSummary.score < config.MIN_MARKET_SCORE_FOR_ENTRY) {
+            gateFailures.push("market_score_too_low");
+          }
+          const orderShareCount = referencePrice === null ? 0 : this.computeMinimumShareCount(referencePrice);
+          const orderNotionalUsd = referencePrice === null ? null : this.computeOrderNotionalUsd(referencePrice, orderShareCount);
+          if (orderNotionalUsd !== null && orderNotionalUsd < config.MIN_ORDER_USD) {
+            gateFailures.push("order_notional_too_low");
+          }
+          if (orderShareCount < config.MIN_ORDER_SHARES) {
+            gateFailures.push("order_share_count_too_low");
+          }
           if (gateFailures.length > 0 || referencePrice === null) {
-            executionDecision = this.buildBlockedDecision(marketSlice, prediction, gateFailures);
+            executionDecision = this.buildBlockedDecision(marketSlice, prediction, marketPerformanceSummary, gateFailures);
           } else {
             const depth = this.resolveDepth(marketSlice, positionSide);
             const imbalance = this.resolveImbalance(marketSlice, positionSide);
             const midpointDrift = this.computeRecentMidpointDrift(marketSlice, positionSide);
-            const urgencyScore = this.computeUrgencyScore(marketSlice, prediction, referencePrice, timeToMarketEndMs);
+            const urgencyScore = this.computeUrgencyScore(marketSlice, prediction, referencePrice);
             const makerFillProbability = this.computeMakerFillProbability(spread, depth, urgencyScore, midpointDrift);
             const bookRiskScore = this.computeBookRiskScore(spread, depth, imbalance);
-            const executionStyle = this.resolveExecutionStyle(spread, depth, urgencyScore, makerFillProbability, timeToMarketEndMs, midpointDrift);
+            const executionStyle = this.resolveExecutionStyle(spread, depth, urgencyScore, makerFillProbability, midpointDrift);
             const positionSizeSuggestion = Math.max(0, Math.min(1, prediction.confidence * marketSlice.quality.score * (1 - bookRiskScore)));
             executionDecision = {
               marketKey: marketSlice.marketKey,
               asset: marketSlice.asset,
               window: marketSlice.window,
               isEntryAllowed: true,
+              marketScore: marketPerformanceSummary?.score ?? null,
+              marketTradeCount: marketPerformanceSummary?.tradeCount ?? 0,
+              hasSufficientMarketHistory: marketPerformanceSummary?.hasSufficientHistory ?? false,
               positionSide,
               predictionDirection: prediction.direction,
               entryReferencePrice: referencePrice,
+              orderShareCount,
+              orderNotionalUsd,
               takeProfitPrice: this.clampTokenPrice(referencePrice + config.TAKE_PROFIT_DELTA),
               stopLossPrice: this.clampTokenPrice(referencePrice - config.STOP_LOSS_DELTA),
               executionStyle,
-              executionReason: this.buildExecutionReason(executionStyle, spread, makerFillProbability, urgencyScore, timeToMarketEndMs),
+              executionReason: this.buildExecutionReason(executionStyle, spread, makerFillProbability, urgencyScore),
               urgencyScore,
               makerFillProbability,
               bookRiskScore,
@@ -272,7 +279,6 @@ export class ExecutionPolicyService {
     paperPosition: PaperPosition,
   ): { exitReason: TradeExitReason | null; executionStyle: ExecutionStyle | null; exitPrice: number | null } {
     const liveTokenPrice = this.resolveTokenPrice(marketSlice, paperPosition.positionSide);
-    const timeToMarketEndMs = this.computeTimeToMarketEndMs(marketSlice);
     const spread = this.resolveSpread(marketSlice, paperPosition.positionSide);
     const depth = this.resolveDepth(marketSlice, paperPosition.positionSide);
     const imbalance = this.resolveImbalance(marketSlice, paperPosition.positionSide);
@@ -284,10 +290,7 @@ export class ExecutionPolicyService {
     if (liveTokenPrice !== null && liveTokenPrice <= paperPosition.stopLossPrice) {
       exitReason = "stop_loss_hit";
     }
-    if (timeToMarketEndMs !== null && timeToMarketEndMs <= config.FORCE_FLATTEN_LEAD_MS) {
-      exitReason = "flatten_before_expiry";
-    }
-    const urgencyScore = exitReason === "stop_loss_hit" || exitReason === "flatten_before_expiry" ? 1 : Math.max(0, Math.min(1, bookRiskScore + spread * 8));
+    const urgencyScore = exitReason === "stop_loss_hit" ? 1 : Math.max(0, Math.min(1, bookRiskScore + spread * 8));
     let executionStyle: ExecutionStyle | null = null;
     if (exitReason !== null) {
       executionStyle = urgencyScore >= config.TAKER_URGENCY_THRESHOLD || spread <= 0.01 ? "taker" : "maker";

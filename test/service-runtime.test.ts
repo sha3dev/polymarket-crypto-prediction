@@ -184,12 +184,17 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves outcomes, 
   const executionJson = await executionResponse.json();
   assert.equal(executionResponse.status, 200);
   assert.equal(executionJson.executionNow.length, 8);
+  assert.equal(typeof executionJson.executionNow[0].decision.marketTradeCount, "number");
+  assert.equal(executionJson.executionNow[0].decision.orderShareCount >= 5, true);
+  assert.equal(executionJson.executionNow[0].decision.orderNotionalUsd === null || executionJson.executionNow[0].decision.orderNotionalUsd >= 1, true);
 
   const tradesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/trades?limit=10`);
   const tradesJson = await tradesResponse.json();
   assert.equal(tradesResponse.status, 200);
   assert.ok(tradesJson.length >= 1);
   assert.equal(tradesJson[0].exitReason, "take_profit_hit");
+  assert.equal(tradesJson[0].shareCount >= 5, true);
+  assert.equal(tradesJson[0].entryNotionalUsd >= 1, true);
 
   const summaryResponse = await fetch(`http://127.0.0.1:${address.port}/v1/dashboard/summary`);
   const summaryJson = await summaryResponse.json();
@@ -197,6 +202,8 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves outcomes, 
   assert.ok(summaryJson.kpis.totalPredictions >= 2);
   assert.equal(summaryJson.markets.length, 8);
   assert.ok(summaryJson.executionNow.length === 8);
+  assert.equal(summaryJson.marketPerformance.length, 8);
+  assert.ok(summaryJson.marketPerformance.some((market: { tradeCount: number }) => market.tradeCount >= 1));
   assert.ok(summaryJson.paperExecutionPerformance.tradeCount >= 1);
 
   const invalidLimitResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=999`);
