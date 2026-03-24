@@ -49,9 +49,6 @@ export class DashboardViewService {
         padding: 24px 0 32px;
       }
       .hero {
-        display: grid;
-        grid-template-columns: 1.5fr 1fr;
-        gap: 18px;
         margin-bottom: 18px;
       }
       .hero-card, .panel {
@@ -64,6 +61,16 @@ export class DashboardViewService {
         color: var(--text-light);
         padding: 22px 24px;
       }
+      .hero-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
+        gap: 22px;
+        align-items: start;
+      }
+      .hero-copy {
+        display: grid;
+        gap: 10px;
+      }
       .hero-card h1 {
         margin: 0 0 8px;
         font-size: clamp(28px, 3vw, 40px);
@@ -71,11 +78,11 @@ export class DashboardViewService {
       .hero-card p {
         margin: 0;
         opacity: 0.84;
-        max-width: 60ch;
+        max-width: 54ch;
       }
       .kpi-strip {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 12px;
       }
       .kpi {
@@ -83,6 +90,7 @@ export class DashboardViewService {
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 14px;
         padding: 14px;
+        min-height: 78px;
       }
       .kpi strong {
         display: block;
@@ -90,16 +98,34 @@ export class DashboardViewService {
       }
       .grid {
         display: grid;
-        grid-template-columns: 1.6fr 1fr;
+        grid-template-columns: minmax(0, 1.75fr) minmax(360px, 1.05fr);
         gap: 18px;
+        align-items: start;
       }
       .stack {
         display: grid;
         gap: 18px;
+        align-content: start;
       }
       .panel {
         background: var(--panel);
         padding: 18px;
+      }
+      .panel-tall { min-height: 420px; }
+      .panel-medium { min-height: 308px; }
+      .panel-compact { min-height: 132px; }
+      .panel-scroll {
+        overflow: auto;
+        max-height: 100%;
+        padding-right: 4px;
+      }
+      .panel-scroll::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      .panel-scroll::-webkit-scrollbar-thumb {
+        background: rgba(13, 27, 42, 0.16);
+        border-radius: 999px;
       }
       h2 {
         margin: 0 0 12px;
@@ -110,21 +136,6 @@ export class DashboardViewService {
       .label-with-hint {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-      }
-      .hint-badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 16px;
-        height: 16px;
-        border-radius: 999px;
-        background: rgba(31, 162, 255, 0.14);
-        color: var(--accent-2);
-        font-size: 10px;
-        font-weight: 800;
-        cursor: help;
-        border: 1px solid rgba(31, 162, 255, 0.22);
       }
       .hint-text {
         border-bottom: 1px dashed rgba(107, 114, 128, 0.65);
@@ -171,6 +182,26 @@ export class DashboardViewService {
         font-size: 11px;
         color: var(--muted);
       }
+      .health-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 16px;
+      }
+      .health-item {
+        min-width: 0;
+      }
+      .health-item strong {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 16px;
+      }
+      .truncate-cell {
+        display: inline-block;
+        max-width: 230px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: bottom;
+      }
       .loading {
         animation: pulse 1.6s ease-in-out infinite;
       }
@@ -179,12 +210,15 @@ export class DashboardViewService {
         50% { opacity: 1; }
       }
       @media (max-width: 1100px) {
-        .hero, .grid { grid-template-columns: 1fr; }
+        .hero-head, .grid { grid-template-columns: 1fr; }
         .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .panel-tall, .panel-medium, .panel-compact { min-height: 0; }
+        .panel-scroll { max-height: none; }
       }
       @media (max-width: 700px) {
         .shell { width: min(100vw - 20px, 1600px); }
         .kpi-strip { grid-template-columns: 1fr; }
+        .health-grid { grid-template-columns: 1fr; }
         table { font-size: 12px; }
       }
     </style>
@@ -193,47 +227,50 @@ export class DashboardViewService {
     <div class="shell">
       <section class="hero">
         <article class="hero-card">
-          <div class="tiny">
-            <span class="label-with-hint">
-              <span class="hint-text" title="Compact live operator view for the ensemble, market state, and strategy health.">Live ensemble monitor</span>
-              <span class="hint-badge" title="Compact live operator view for the ensemble, market state, and strategy health.">?</span>
-            </span>
+          <div class="hero-head">
+            <div class="hero-copy">
+              <div class="tiny">
+                <span class="label-with-hint">
+                  <span class="hint-text" title="Compact live operator view for the ensemble, market state, strategy health, and execution overlay.">Live ensemble monitor</span>
+                </span>
+              </div>
+              <h1>Polymarket 5m / 15m predictor</h1>
+              <p>Event-driven crypto prediction surface with rolling weights, market quality scoring, strategy attribution, and paper execution across BTC, ETH, SOL, and XRP.</p>
+            </div>
+            <div class="kpi-strip" id="kpis"></div>
           </div>
-          <h1>Polymarket 5m / 15m predictor</h1>
-          <p>Event-driven crypto prediction surface with rolling weights, market quality scoring, and per-strategy attribution across BTC, ETH, SOL, and XRP.</p>
         </article>
-        <div class="kpi-strip" id="kpis"></div>
       </section>
       <section class="grid">
         <div class="stack">
-          <article class="panel">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Current state for all eight monitored markets, including midpoint proximity to 0.5 and cooldown.">Markets</span><span class="hint-badge" title="Current state for all eight monitored markets, including midpoint proximity to 0.5 and cooldown.">?</span></span></h2>
-            <div id="markets" class="loading">Loading market state…</div>
+          <article class="panel panel-compact">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Current state for all eight monitored markets, including token midpoints, cooldown, and data quality.">Markets</span></span></h2>
+            <div id="markets" class="loading panel-scroll">Loading market state…</div>
           </article>
-          <article class="panel">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Newest ensemble calls with their trigger, confidence, and realized outcome when available.">Latest Predictions</span><span class="hint-badge" title="Newest ensemble calls with their trigger, confidence, and realized outcome when available.">?</span></span></h2>
-            <div id="predictions" class="loading">Loading prediction history…</div>
+          <article class="panel panel-medium">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Current executable entry decision per market: side, TP, SL, and maker versus taker choice.">Execution Now</span></span></h2>
+            <div id="execution" class="loading panel-scroll">Loading execution decisions…</div>
           </article>
-          <article class="panel">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Current executable entry decision per market: side, TP, SL, and maker versus taker choice.">Execution Now</span><span class="hint-badge" title="Current executable entry decision per market: side, TP, SL, and maker versus taker choice.">?</span></span></h2>
-            <div id="execution" class="loading">Loading execution decisions…</div>
+          <article class="panel panel-tall">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Newest ensemble calls with their trigger, confidence, and realized outcome when available.">Latest Predictions</span></span></h2>
+            <div id="predictions" class="loading panel-scroll">Loading prediction history…</div>
           </article>
         </div>
         <div class="stack">
-          <article class="panel">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Rolling ranking of strategies by adaptive weight and recent online performance.">Strategies</span><span class="hint-badge" title="Rolling ranking of strategies by adaptive weight and recent online performance.">?</span></span></h2>
-            <div id="strategies" class="loading">Loading strategy ranking…</div>
+          <article class="panel panel-tall">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Rolling ranking of strategies by adaptive weight and recent online performance.">Strategies</span></span></h2>
+            <div id="strategies" class="loading panel-scroll">Loading strategy ranking…</div>
           </article>
-          <article class="panel">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Simulated open positions, their TP/SL levels, and time left before forced flatten.">Open Positions</span><span class="hint-badge" title="Simulated open positions, their TP/SL levels, and time left before forced flatten.">?</span></span></h2>
-            <div id="positions" class="loading">Loading open positions…</div>
+          <article class="panel panel-medium">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Most recent closed paper trades, including maker/taker styles and exit reasons.">Recent Trades</span></span></h2>
+            <div id="trades" class="loading panel-scroll">Loading recent trades…</div>
           </article>
-          <article class="panel">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Most recent closed paper trades, including maker/taker styles and exit reasons.">Recent Trades</span><span class="hint-badge" title="Most recent closed paper trades, including maker/taker styles and exit reasons.">?</span></span></h2>
-            <div id="trades" class="loading">Loading recent trades…</div>
+          <article class="panel panel-compact">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Simulated open positions, their TP/SL levels, and time left before forced flatten.">Open Positions</span></span></h2>
+            <div id="positions" class="loading panel-scroll">Loading open positions…</div>
           </article>
-          <article class="panel">
-            <h2><span class="label-with-hint"><span class="hint-text" title="Ingestion freshness and service runtime health indicators.">Health</span><span class="hint-badge" title="Ingestion freshness and service runtime health indicators.">?</span></span></h2>
+          <article class="panel panel-compact">
+            <h2><span class="label-with-hint"><span class="hint-text" title="Ingestion freshness and service runtime health indicators.">Health</span></span></h2>
             <div id="health" class="loading">Loading service health…</div>
           </article>
         </div>
@@ -251,7 +288,11 @@ export class DashboardViewService {
       }
 
       function renderHintLabel(label, hint) {
-        return '<span class="label-with-hint"><span class="hint-text" title="' + hint + '">' + label + '</span><span class="hint-badge" title="' + hint + '">?</span></span>';
+        return '<span class="label-with-hint"><span class="hint-text" title="' + hint + '">' + label + '</span></span>';
+      }
+
+      function renderTableShell(tableHtml) {
+        return '<div class="panel-scroll">' + tableHtml + '</div>';
       }
 
       function renderResultBadge(result) {
@@ -284,14 +325,12 @@ export class DashboardViewService {
             '<td><strong>' + market.asset.toUpperCase() + '</strong> <span class="tiny">' + market.window + '</span></td>' +
             '<td>' + formatNumber(market.latestUpMidpoint) + '</td>' +
             '<td>' + formatNumber(market.latestDownMidpoint) + '</td>' +
-            '<td>' + formatNumber(market.upDistanceToHalf) + '</td>' +
-            '<td>' + formatNumber(market.downDistanceToHalf) + '</td>' +
             '<td>' + formatNumber(market.cooldownRemainingMs, 0) + '</td>' +
             '<td><div class="quality-bar" title="' + market.quality.issues.join(", ") + '"><span style="width:' + qualityWidth + '%"></span></div></td>' +
             '</tr>';
         }).join("");
         document.getElementById("markets").classList.remove("loading");
-        document.getElementById("markets").innerHTML = '<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP mid', 'Current midpoint for the UP token. Falls back to price only outside the midpoint field, not in this display.') + '</th><th>' + renderHintLabel('DOWN mid', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('UP dist', 'Absolute distance between the UP midpoint and the 0.5 trigger zone.') + '</th><th>' + renderHintLabel('DOWN dist', 'Absolute distance between the DOWN midpoint and the 0.5 trigger zone.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Quality', 'Aggregate data quality score based on freshness, spreads, and market availability.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        document.getElementById("markets").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP mid', 'Current midpoint for the UP token. Falls back to price only outside the midpoint field, not in this display.') + '</th><th>' + renderHintLabel('DOWN mid', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Quality', 'Aggregate data quality score based on freshness, spreads, and market availability.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderPredictions(summary) {
@@ -307,20 +346,20 @@ export class DashboardViewService {
             '</tr>';
         }).join("");
         document.getElementById("predictions").classList.remove("loading");
-        document.getElementById("predictions").innerHTML = '<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final ensemble direction predicted for the next 30 seconds.') + '</th><th>' + renderHintLabel('Conf', 'Normalized ensemble confidence between 0 and 1.') + '</th><th>' + renderHintLabel('Trigger', 'Reason the prediction fired: proximity to 0.5 or a cross through that zone.') + '</th><th>' + renderHintLabel('Result', 'Pending until resolved, then OK for a win, KO for a loss, or VOID if data was insufficient.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        document.getElementById("predictions").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final ensemble direction predicted for the next 30 seconds.') + '</th><th>' + renderHintLabel('Conf', 'Normalized ensemble confidence between 0 and 1.') + '</th><th>' + renderHintLabel('Trigger', 'Reason the prediction fired: proximity to 0.5 or a cross through that zone.') + '</th><th>' + renderHintLabel('Result', 'Pending until resolved, then OK for a win, KO for a loss, or VOID if data was insufficient.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderStrategies(summary) {
         const rows = summary.strategies.map((strategy) => {
           return '<tr>' +
-            '<td><strong>' + strategy.name + '</strong><div class="tiny">' + strategy.strategyId + ' · ' + strategy.tier + '</div></td>' +
+            '<td><strong title="' + strategy.description + '">' + strategy.name + '</strong><div class="tiny"><span class="hint-text" title="' + strategy.description + '">' + strategy.strategyId + ' · ' + strategy.tier + '</span></div></td>' +
             '<td>' + formatNumber(strategy.weight) + '</td>' +
             '<td>' + formatNumber(strategy.hitRate) + '</td>' +
             '<td>' + strategy.recentStreak + '</td>' +
             '</tr>';
         }).join("");
         document.getElementById("strategies").classList.remove("loading");
-        document.getElementById("strategies").innerHTML = '<table><thead><tr><th>' + renderHintLabel('Strategy', 'Strategy name, internal id, and cost tier.') + '</th><th>' + renderHintLabel('Weight', 'Current adaptive ensemble weight after rolling online evaluation.') + '</th><th>' + renderHintLabel('Hit rate', 'Share of resolved predictions this strategy got right inside the rolling window.') + '</th><th>' + renderHintLabel('Streak', 'Positive for consecutive wins, negative for consecutive losses.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        document.getElementById("strategies").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Strategy', 'Strategy name, internal id, cost tier, and hover hint with its role in the ensemble.') + '</th><th>' + renderHintLabel('Weight', 'Current adaptive ensemble weight after rolling online evaluation.') + '</th><th>' + renderHintLabel('Hit rate', 'Share of resolved predictions this strategy got right inside the rolling window.') + '</th><th>' + renderHintLabel('Streak', 'Positive for consecutive wins, negative for consecutive losses.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderExecution(summary) {
@@ -338,11 +377,11 @@ export class DashboardViewService {
             '<td>' + formatNumber(marketExecution.decision.stopLossPrice) + '</td>' +
             '<td>' + styleLabel + '</td>' +
             '<td>' + formatNumber(marketExecution.decision.urgencyScore) + '</td>' +
-            '<td>' + blockReason + '</td>' +
+            '<td><span class="truncate-cell" title="' + blockReason + '">' + blockReason + '</span></td>' +
             '</tr>';
         }).join("");
         document.getElementById("execution").classList.remove("loading");
-        document.getElementById("execution").innerHTML = '<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Executable', 'Whether the current market passes all entry gates right now.') + '</th><th>' + renderHintLabel('Side', 'Which token would be bought now: UP or DOWN.') + '</th><th>' + renderHintLabel('Entry', 'Reference price used for a potential entry near the 0.5 zone.') + '</th><th>' + renderHintLabel('TP', 'Take-profit token price for the simulated trade.') + '</th><th>' + renderHintLabel('SL', 'Stop-loss token price for the simulated trade.') + '</th><th>' + renderHintLabel('Style', 'Preferred execution style: maker or taker.') + '</th><th>' + renderHintLabel('Urgency', 'Higher values mean the model prefers not to wait passively.') + '</th><th>' + renderHintLabel('Reason', 'If blocked, the gate failure list. If active, the execution rationale.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        document.getElementById("execution").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Executable', 'Whether the current market passes all entry gates right now.') + '</th><th>' + renderHintLabel('Side', 'Which token would be bought now: UP or DOWN.') + '</th><th>' + renderHintLabel('Entry', 'Reference price used for a potential entry near the 0.5 zone.') + '</th><th>' + renderHintLabel('TP', 'Take-profit token price for the simulated trade.') + '</th><th>' + renderHintLabel('SL', 'Stop-loss token price for the simulated trade.') + '</th><th>' + renderHintLabel('Style', 'Preferred execution style: maker or taker.') + '</th><th>' + renderHintLabel('Urgency', 'Higher values mean the model prefers not to wait passively.') + '</th><th>' + renderHintLabel('Reason', 'If blocked, the gate failure list. If active, the execution rationale.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderPositions(summary) {
@@ -362,7 +401,7 @@ export class DashboardViewService {
         document.getElementById("positions").classList.remove("loading");
         document.getElementById("positions").innerHTML = summary.openPositions.length === 0
           ? '<div class="tiny">No open paper positions.</div>'
-          : '<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the open paper position.') + '</th><th>' + renderHintLabel('Side', 'Token currently held: UP or DOWN.') + '</th><th>' + renderHintLabel('Status', 'Position lifecycle state, including maker-pending statuses.') + '</th><th>' + renderHintLabel('Entry fill', 'Simulated fill price used to open the position.') + '</th><th>' + renderHintLabel('Live px', 'Current token midpoint or fallback price for mark-to-market.') + '</th><th>' + renderHintLabel('uPnL', 'Unrealized token-price PnL before paper execution costs.') + '</th><th>' + renderHintLabel('TP', 'Take-profit target for this open position.') + '</th><th>' + renderHintLabel('SL', 'Stop-loss level for this open position.') + '</th><th>' + renderHintLabel('Flatten', 'Milliseconds left before forced flatten near expiry.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the open paper position.') + '</th><th>' + renderHintLabel('Side', 'Token currently held: UP or DOWN.') + '</th><th>' + renderHintLabel('Status', 'Position lifecycle state, including maker-pending statuses.') + '</th><th>' + renderHintLabel('Entry fill', 'Simulated fill price used to open the position.') + '</th><th>' + renderHintLabel('Live px', 'Current token midpoint or fallback price for mark-to-market.') + '</th><th>' + renderHintLabel('uPnL', 'Unrealized token-price PnL before paper execution costs.') + '</th><th>' + renderHintLabel('TP', 'Take-profit target for this open position.') + '</th><th>' + renderHintLabel('SL', 'Stop-loss level for this open position.') + '</th><th>' + renderHintLabel('Flatten', 'Milliseconds left before forced flatten near expiry.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderTrades(summary) {
@@ -380,19 +419,20 @@ export class DashboardViewService {
         document.getElementById("trades").classList.remove("loading");
         document.getElementById("trades").innerHTML = summary.recentTrades.length === 0
           ? '<div class="tiny">No closed paper trades yet.</div>'
-          : '<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the closed paper trade.') + '</th><th>' + renderHintLabel('Side', 'Token that was bought for the trade.') + '</th><th>' + renderHintLabel('Maker in', 'Execution style used on entry.') + '</th><th>' + renderHintLabel('Maker out', 'Execution style used on exit.') + '</th><th>' + renderHintLabel('Exit reason', 'Why the trade closed: TP, SL, flatten, or fallback logic.') + '</th><th>' + renderHintLabel('Net PnL', 'Realized simulated PnL after proxy entry and exit costs.') + '</th><th>' + renderHintLabel('Hold time', 'Milliseconds between entry fill and exit fill.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the closed paper trade.') + '</th><th>' + renderHintLabel('Side', 'Token that was bought for the trade.') + '</th><th>' + renderHintLabel('Maker in', 'Execution style used on entry.') + '</th><th>' + renderHintLabel('Maker out', 'Execution style used on exit.') + '</th><th>' + renderHintLabel('Exit reason', 'Why the trade closed: TP, SL, flatten, or fallback logic.') + '</th><th>' + renderHintLabel('Net PnL', 'Realized simulated PnL after proxy entry and exit costs.') + '</th><th>' + renderHintLabel('Hold time', 'Milliseconds between entry fill and exit fill.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderHealth(summary) {
         document.getElementById("health").classList.remove("loading");
         document.getElementById("health").innerHTML =
-          '<div><strong>' + summary.health.serviceName + '</strong></div>' +
-          '<div class="tiny">' + renderHintLabel('Started', 'Timestamp when the current service runtime booted.') + ': ' + formatTimestamp(summary.health.startedAt) + '</div>' +
-          '<div class="tiny">' + renderHintLabel('Snapshot age', 'Milliseconds since the last snapshot was processed by the service.') + ': ' + formatNumber(summary.health.snapshotAgeMs, 0) + ' ms</div>' +
-          '<div class="tiny">' + renderHintLabel('Healthy', 'True when the latest snapshot is fresh enough according to configured freshness thresholds.') + ': ' + summary.health.isSnapshotHealthy + '</div>' +
-          '<div class="tiny">' + renderHintLabel('Pending evals', 'Number of predictions still waiting for automatic 30-second resolution.') + ': ' + summary.health.pendingEvaluationCount + '</div>' +
-          '<div class="tiny">' + renderHintLabel('Maker usage', 'Share of recent trades opened as maker.') + ': ' + (summary.makerTakerStats.makerUsageRatio * 100).toFixed(1) + '%</div>' +
-          '<div class="tiny">' + renderHintLabel('Taker usage', 'Share of recent trades opened as taker.') + ': ' + (summary.makerTakerStats.takerUsageRatio * 100).toFixed(1) + '%</div>';
+          '<div class="health-grid">' +
+            '<div class="health-item"><strong>' + summary.health.serviceName + '</strong><div class="tiny">' + renderHintLabel('Started', 'Timestamp when the current service runtime booted.') + ': ' + formatTimestamp(summary.health.startedAt) + '</div></div>' +
+            '<div class="health-item"><strong>' + formatNumber(summary.health.snapshotAgeMs, 0) + ' ms</strong><div class="tiny">' + renderHintLabel('Snapshot age', 'Milliseconds since the last snapshot was processed by the service.') + '</div></div>' +
+            '<div class="health-item"><strong>' + summary.health.isSnapshotHealthy + '</strong><div class="tiny">' + renderHintLabel('Healthy', 'True when the latest snapshot is fresh enough according to configured freshness thresholds.') + '</div></div>' +
+            '<div class="health-item"><strong>' + summary.health.pendingEvaluationCount + '</strong><div class="tiny">' + renderHintLabel('Pending evals', 'Number of predictions still waiting for automatic 30-second resolution.') + '</div></div>' +
+            '<div class="health-item"><strong>' + (summary.makerTakerStats.makerUsageRatio * 100).toFixed(1) + '%</strong><div class="tiny">' + renderHintLabel('Maker usage', 'Share of recent trades opened as maker.') + '</div></div>' +
+            '<div class="health-item"><strong>' + (summary.makerTakerStats.takerUsageRatio * 100).toFixed(1) + '%</strong><div class="tiny">' + renderHintLabel('Taker usage', 'Share of recent trades opened as taker.') + '</div></div>' +
+          '</div>';
       }
 
       async function refresh() {

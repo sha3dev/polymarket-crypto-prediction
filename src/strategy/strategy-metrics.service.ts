@@ -73,6 +73,7 @@ export class StrategyMetricsService {
       strategyId,
       name: strategyDefinition.name,
       tier: strategyDefinition.tier,
+      description: strategyDefinition.description,
       weight: strategyRecord.weight,
       isEnabled: true,
       totalResolved: strategyRecord.totalResolved,

@@ -39,6 +39,7 @@ export type StrategySummary = {
   strategyId: string;
   name: string;
   tier: StrategyTier;
+  description: string;
   weight: number;
   isEnabled: boolean;
   totalResolved: number;
