@@ -2,6 +2,7 @@
  * @section imports:internals
  */
 
+import type { ComboSource } from "../execution/execution.types.ts";
 import type { MarketKey, PredictionDirection } from "../market/market.types.ts";
 
 /**
@@ -48,7 +49,10 @@ export type ComboSummary = {
   liftVsBestMemberHitRate: number;
   liftVsBestMemberPnl: number;
   comboScore: number;
+  effectiveComboScore: number;
   status: ComboStatus;
+  scoreSource: ComboSource;
+  isExecutionEligible: boolean;
   lastResolvedAt: number | null;
 };
 export type MarketComboBoard = {
@@ -67,4 +71,12 @@ export type ComboBreakdown = {
   appliedDisagreementCombos: ComboUsage[];
   totalBoostApplied: number;
   totalConfidencePenaltyApplied: number;
+};
+export type ComboGateDecision = {
+  hasComboGatePassed: boolean;
+  selectedComboKey: string | null;
+  selectedComboSize: ComboSize | null;
+  selectedComboSource: ComboSource | null;
+  effectiveComboScore: number | null;
+  gateReason: string | null;
 };

@@ -10,6 +10,7 @@ import type { StrategyDefinition, StrategyMetricsRecord, StrategySignal, Strateg
  * @section types
  */
 
+type MetricsSource = "research" | "execution";
 type StrategyOutcomeEntry = {
   wasCorrect: boolean | null;
   signedEdge: number;
@@ -34,8 +35,10 @@ export class StrategyMetricsService {
    */
 
   private readonly definitions: StrategyDefinition[];
-  private readonly globalMutableState: Map<string, MutableMetricsState>;
-  private readonly marketMutableState: Map<string, MutableMetricsState>;
+  private readonly globalResearchState: Map<string, MutableMetricsState>;
+  private readonly marketResearchState: Map<string, MutableMetricsState>;
+  private readonly globalExecutionState: Map<string, MutableMetricsState>;
+  private readonly marketExecutionState: Map<string, MutableMetricsState>;
 
   /**
    * @section constructor
@@ -43,8 +46,10 @@ export class StrategyMetricsService {
 
   public constructor(definitions: StrategyDefinition[]) {
     this.definitions = definitions;
-    this.globalMutableState = this.createInitialState(definitions);
-    this.marketMutableState = new Map<string, MutableMetricsState>();
+    this.globalResearchState = this.createInitialState(definitions);
+    this.marketResearchState = new Map<string, MutableMetricsState>();
+    this.globalExecutionState = this.createInitialState(definitions);
+    this.marketExecutionState = new Map<string, MutableMetricsState>();
   }
 
   /**
@@ -67,9 +72,17 @@ export class StrategyMetricsService {
     return marketStateKey;
   }
 
-  private requireState(strategyId: string, scope: StrategyMetricsScope): MutableMetricsState {
+  private resolveStateMap(scope: StrategyMetricsScope, source: MetricsSource): Map<string, MutableMetricsState> {
+    let targetStateMap = source === "research" ? this.globalResearchState : this.globalExecutionState;
+    if (scope !== "global") {
+      targetStateMap = source === "research" ? this.marketResearchState : this.marketExecutionState;
+    }
+    return targetStateMap;
+  }
+
+  private requireState(strategyId: string, scope: StrategyMetricsScope, source: MetricsSource): MutableMetricsState {
     const stateKey = scope === "global" ? strategyId : this.createMarketStateKey(strategyId, scope);
-    const targetStateMap = scope === "global" ? this.globalMutableState : this.marketMutableState;
+    const targetStateMap = this.resolveStateMap(scope, source);
     let strategyState = targetStateMap.get(stateKey);
     if (!strategyState) {
       const createdState: MutableMetricsState = {
@@ -84,27 +97,31 @@ export class StrategyMetricsService {
 
   private getSummary(strategyId: string, scope: StrategyMetricsScope): StrategySummary {
     const strategyDefinition = this.requireDefinition(strategyId);
-    const strategyRecord = this.buildMetricsRecord(strategyId, strategyDefinition.tier, scope);
+    const researchRecord = this.buildMetricsRecord(strategyId, strategyDefinition.tier, scope, "research");
+    const executionRecord = this.buildMetricsRecord(strategyId, strategyDefinition.tier, scope, "execution");
     return {
       strategyId,
       name: strategyDefinition.name,
       tier: strategyDefinition.tier,
       description: strategyDefinition.description,
       marketKey: scope === "global" ? null : scope,
-      weight: strategyRecord.weight,
+      weight: researchRecord.weight,
       isEnabled: true,
-      totalResolved: strategyRecord.totalResolved,
-      wins: strategyRecord.wins,
-      losses: strategyRecord.losses,
-      voids: strategyRecord.voids,
-      hitRate: strategyRecord.hitRate,
-      cumulativePnlProxy: strategyRecord.cumulativePnlProxy,
-      averagePnlProxy: strategyRecord.averagePnlProxy,
-      averageSignedEdge: strategyRecord.averageSignedEdge,
-      averageCalibrationError: strategyRecord.averageCalibrationError,
-      recentStreak: strategyRecord.recentStreak,
-      lastResolvedAt: strategyRecord.lastResolvedAt,
-      lastParticipatedAt: strategyRecord.lastParticipatedAt,
+      totalResolved: researchRecord.totalResolved,
+      executionTotalResolved: executionRecord.totalResolved,
+      wins: researchRecord.wins,
+      losses: researchRecord.losses,
+      voids: researchRecord.voids,
+      hitRate: researchRecord.hitRate,
+      cumulativePnlProxy: researchRecord.cumulativePnlProxy,
+      averagePnlProxy: researchRecord.averagePnlProxy,
+      executionHitRate: executionRecord.hitRate,
+      executionAveragePnlProxy: executionRecord.averagePnlProxy,
+      averageSignedEdge: researchRecord.averageSignedEdge,
+      averageCalibrationError: researchRecord.averageCalibrationError,
+      recentStreak: researchRecord.recentStreak,
+      lastResolvedAt: researchRecord.lastResolvedAt,
+      lastParticipatedAt: researchRecord.lastParticipatedAt,
     };
   }
 
@@ -116,8 +133,8 @@ export class StrategyMetricsService {
     return strategyDefinition;
   }
 
-  private buildMetricsRecord(strategyId: string, tier: StrategyTier, scope: StrategyMetricsScope): StrategyMetricsRecord {
-    const mutableMetricsState = this.requireState(strategyId, scope);
+  private buildMetricsRecord(strategyId: string, tier: StrategyTier, scope: StrategyMetricsScope, source: MetricsSource): StrategyMetricsRecord {
+    const mutableMetricsState = this.requireState(strategyId, scope, source);
     const windowedOutcomes = this.readWindowedOutcomes(mutableMetricsState);
     const resolvedOutcomes = windowedOutcomes.filter((outcome) => outcome.wasCorrect !== null);
     const wins = resolvedOutcomes.filter((outcome) => outcome.wasCorrect).length;
@@ -169,7 +186,8 @@ export class StrategyMetricsService {
         } else {
           break;
         }
-      } else {
+      }
+      if (outcome.wasCorrect === false) {
         if (recentStreak <= 0) {
           recentStreak -= 1;
         } else {
@@ -195,6 +213,9 @@ export class StrategyMetricsService {
     let comparison = rightSummary.weight - leftSummary.weight;
     if (comparison === 0) {
       comparison = rightSummary.hitRate - leftSummary.hitRate;
+    }
+    if (comparison === 0) {
+      comparison = rightSummary.executionHitRate - leftSummary.executionHitRate;
     }
     if (comparison === 0) {
       comparison = rightSummary.averageSignedEdge - leftSummary.averageSignedEdge;
@@ -255,8 +276,8 @@ export class StrategyMetricsService {
   public markParticipated(marketKey: MarketKey, strategySignals: StrategySignal[], participatedAt: number): void {
     for (const strategySignal of strategySignals) {
       if (strategySignal.didRun) {
-        const globalState = this.requireState(strategySignal.strategyId, "global");
-        const marketState = this.requireState(strategySignal.strategyId, marketKey);
+        const globalState = this.requireState(strategySignal.strategyId, "global", "research");
+        const marketState = this.requireState(strategySignal.strategyId, marketKey, "research");
         globalState.lastParticipatedAt = participatedAt;
         marketState.lastParticipatedAt = participatedAt;
       }
@@ -268,6 +289,7 @@ export class StrategyMetricsService {
     strategySignals: StrategySignal[],
     resolvedDirection: PredictionDirection | null,
     resolvedAt: number | null,
+    source: MetricsSource,
   ): void {
     for (const strategySignal of strategySignals) {
       const wasCorrect = resolvedDirection === null ? null : strategySignal.direction === resolvedDirection;
@@ -275,8 +297,8 @@ export class StrategyMetricsService {
         resolvedDirection === null ? 0 : strategySignal.direction === resolvedDirection ? strategySignal.confidence : strategySignal.confidence * -1;
       const targetConfidence = wasCorrect === null ? strategySignal.confidence : wasCorrect ? 1 : 0;
       const calibrationError = Math.abs(strategySignal.confidence - targetConfidence);
-      this.recordOutcomeEntry(this.requireState(strategySignal.strategyId, "global"), wasCorrect, signedEdge, calibrationError, resolvedAt);
-      this.recordOutcomeEntry(this.requireState(strategySignal.strategyId, marketKey), wasCorrect, signedEdge, calibrationError, resolvedAt);
+      this.recordOutcomeEntry(this.requireState(strategySignal.strategyId, "global", source), wasCorrect, signedEdge, calibrationError, resolvedAt);
+      this.recordOutcomeEntry(this.requireState(strategySignal.strategyId, marketKey, source), wasCorrect, signedEdge, calibrationError, resolvedAt);
     }
   }
 

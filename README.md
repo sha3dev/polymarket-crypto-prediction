@@ -518,9 +518,12 @@ Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-c
 - `COMBO_TOP_STRATEGIES_FOR_TRIOS`: number of highest-weight local strategies considered when generating combo trios.
 - `MIN_COMBO_SAMPLES_PAIR`: minimum pair sample count required before a pair can leave warm-up.
 - `MIN_COMBO_SAMPLES_TRIO`: minimum trio sample count required before a trio can leave warm-up.
+- `MIN_COMBO_EXECUTION_SAMPLES_PAIR`: minimum pair sample count required before a pair is allowed to open trades through the combo gate.
+- `MIN_COMBO_EXECUTION_SAMPLES_TRIO`: minimum trio sample count required before a trio is allowed to open trades through the combo gate.
 - `MIN_COMBO_LIFT_PNL`: minimum PnL lift over the best member required before a combo can boost the ensemble.
 - `MIN_COMBO_LIFT_HIT`: minimum hit-rate lift over the best member required before a combo can boost the ensemble.
 - `MIN_COMBO_SCORE_FOR_BOOST`: minimum combo score required before a combo becomes actionable.
+- `MIN_COMBO_EXECUTION_SCORE`: minimum effective combo score required before the execution gate accepts a combo.
 - `MIN_COMBO_AGREEMENT_PURITY_FOR_PENALTY`: minimum historical agreement purity required before disagreement can reduce confidence.
 - `MAX_PAIR_BOOST_ABS`: maximum absolute score boost contributed by one pair.
 - `MAX_TRIO_BOOST_ABS`: maximum absolute score boost contributed by one trio.
@@ -531,7 +534,10 @@ Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-c
 - `MARKET_SCORE_WINDOW_SECONDS`: rolling time window in seconds used to score each market from recent paper trades.
 - `MIN_MARKET_TRADES_FOR_SCORING`: minimum recent trade count before a market score is considered actionable.
 - `MIN_MARKET_SCORE_FOR_ENTRY`: minimum market score required before new entries are allowed in that market.
+- `MIN_EXECUTION_SCORE_FOR_ENTRY`: minimum effective execution score required before the execution gate can open a trade.
+- `MIN_RESEARCH_SCORE_FOR_BOOTSTRAP`: minimum research score required before the execution bootstrap can trust research-only evidence.
 - `MIN_MARKET_PREDICTIONS_BEFORE_ENTRY`: minimum prediction count required before a market leaves warm-up and paper trading is allowed.
+- `MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP`: minimum resolved research prediction count required before discounted research can bootstrap execution.
 - `ENTRY_TARGET_PRICE`: preferred entry anchor for the paper execution overlay.
 - `ENTRY_BAND_HALF_WIDTH`: allowed deviation around `ENTRY_TARGET_PRICE`.
 - `MIN_ORDER_USD`: minimum notional per paper trade so entries respect Polymarket sizing rules.
@@ -549,6 +555,8 @@ Configuration lives in [`src/config.ts`](/Users/jc/Documents/GitHub/polymarket-c
 - `TAKER_URGENCY_THRESHOLD`: urgency threshold where taker execution becomes preferred.
 - `LOW_DEPTH_SLIPPAGE_PROXY`: extra proxy slippage used in thin books.
 - `MAX_OPEN_POSITIONS_GLOBAL`: portfolio-wide cap for simultaneous open paper positions.
+- `EXECUTION_BOOTSTRAP_MIN_DISCOUNT`: lowest discount applied to research score when execution score still lacks enough real trades.
+- `EXECUTION_BOOTSTRAP_MAX_DISCOUNT`: highest bootstrap discount allowed even when research evidence is already strong.
 
 ## Scripts
 

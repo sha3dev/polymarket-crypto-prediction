@@ -2,7 +2,9 @@
  * @section imports:internals
  */
 
+import type { ComboGateDecision } from "../combo/combo.types.ts";
 import type { ComboBreakdown } from "../combo/combo.types.ts";
+import type { ComboSource, PositionSide } from "../execution/execution.types.ts";
 import type { AssetSymbol, MarketKey, MarketTrigger, MarketWindow, PredictionDirection } from "../market/market.types.ts";
 import type { StrategySignal } from "../strategy/strategy.types.ts";
 
@@ -35,10 +37,19 @@ export type PredictionRecord = {
   trigger: MarketTrigger;
   createdAt: number;
   evaluationDueAt: number;
+  positionSide: PositionSide;
+  entryReferencePrice: number | null;
+  takeProfitPrice: number | null;
+  stopLossPrice: number | null;
   baselineUpPrice: number | null;
   baselineUpMidpoint: number | null;
   strategyBreakdown: StrategySignal[];
   comboBreakdown: ComboBreakdown;
+  comboGate: ComboGateDecision;
+  isExecutionEligible: boolean;
+  executionGateFailures: string[];
+  wasExecuted: boolean;
+  executionComboSource: ComboSource | null;
   isResolved: boolean;
   outcome: PredictionOutcome;
 };
@@ -56,7 +67,16 @@ export type PredictionResponse = {
   timestamp: number;
   trigger: MarketTrigger;
   evaluationDueAt: number;
+  positionSide: PositionSide;
+  entryReferencePrice: number | null;
+  takeProfitPrice: number | null;
+  stopLossPrice: number | null;
   isResolved: boolean;
+  comboGate: ComboGateDecision;
+  isExecutionEligible: boolean;
+  executionGateFailures: string[];
+  wasExecuted: boolean;
+  executionComboSource: ComboSource | null;
   result: PredictionOutcome;
   strategyBreakdown: StrategySignal[];
   comboBreakdown: ComboBreakdown;

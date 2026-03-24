@@ -247,7 +247,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
     summaryJson.latestPredictions.every((prediction: { result: { status: string } }) => prediction.result.status !== "pending"),
     true,
   );
-  assert.equal(summaryJson.health.pendingEvaluationCount, summaryJson.openPositions.length);
+  assert.equal(summaryJson.health.pendingEvaluationCount, summaryJson.openPositions?.length ?? 0);
   assert.equal(summaryJson.markets.length, 8);
   assert.ok(summaryJson.executionNow.length === 8);
   assert.equal(summaryJson.marketPerformance.length, 8);

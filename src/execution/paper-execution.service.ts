@@ -3,12 +3,12 @@
  */
 
 import { randomUUID } from "node:crypto";
-
 import config from "../config.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketKey, MarketSnapshotSlice, MarketWindow } from "../market/market.types.ts";
 import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
 import type { PredictionEngineService } from "../prediction/prediction-engine.service.ts";
+import type { PredictionResponse } from "../prediction/prediction.types.ts";
 import type { ExecutionPolicyService } from "./execution-policy.service.ts";
 import type {
   ExecutionDecision,
@@ -71,8 +71,9 @@ export class PaperExecutionService {
     return marketKey;
   }
 
-  private resolvePrediction(asset: AssetSymbol, window: MarketWindow) {
-    return this.predictionEngineService.getLatestPrediction(asset, window);
+  private resolvePrediction(asset: AssetSymbol, window: MarketWindow): PredictionResponse | null {
+    const predictionResponse = this.predictionEngineService.getLatestPrediction(asset, window);
+    return predictionResponse;
   }
 
   private resolveLiveTokenPrice(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number | null {
@@ -187,7 +188,8 @@ export class PaperExecutionService {
     };
   }
 
-  private maybeOpenPosition(marketSlice: MarketSnapshotSlice, executionDecision: ExecutionDecision, signalTimestamp: number): void {
+  private maybeOpenPosition(marketSlice: MarketSnapshotSlice, executionDecision: ExecutionDecision, signalTimestamp: number): boolean {
+    let hasOpenedPosition = false;
     const canOpenPosition =
       executionDecision.isEntryAllowed && !this.openPositions.has(marketSlice.marketKey) && this.openPositions.size < config.MAX_OPEN_POSITIONS_GLOBAL;
     if (canOpenPosition) {
@@ -201,7 +203,10 @@ export class PaperExecutionService {
       }
       this.openPositions.set(marketSlice.marketKey, paperPosition);
       this.consumedSignalTimestamps.set(marketSlice.marketKey, signalTimestamp);
+      this.predictionEngineService.markPredictionExecuted(marketSlice.marketKey, signalTimestamp);
+      hasOpenedPosition = true;
     }
+    return hasOpenedPosition;
   }
 
   private maybeFillPendingEntry(marketSlice: MarketSnapshotSlice, paperPosition: PaperPosition): void {
@@ -395,8 +400,20 @@ export class PaperExecutionService {
     return windowedTrades;
   }
 
-  private computeMarketScore(windowedTrades: PaperTrade[]): number {
-    let marketScore = 0.5;
+  private readWindowedResearchPredictions(asset: AssetSymbol, window: MarketWindow): PredictionResponse[] {
+    const rollingTradeCutoff = this.readRollingTradeCutoff(this.latestObservedAt);
+    const researchPredictions = this.predictionEngineService
+      .getPredictions(asset, window, config.MAX_PREDICTION_HISTORY_PER_MARKET)
+      .filter((prediction) => prediction.isResolved);
+    const windowedResearchPredictions = researchPredictions.filter((prediction) => {
+      const resolvedAt = prediction.result.resolvedAt;
+      return rollingTradeCutoff === null || resolvedAt === null || resolvedAt >= rollingTradeCutoff;
+    });
+    return windowedResearchPredictions;
+  }
+
+  private computeExecutionScore(windowedTrades: PaperTrade[]): number | null {
+    let executionScore: number | null = null;
     if (windowedTrades.length > 0) {
       const winCount = windowedTrades.filter((paperTrade) => paperTrade.realizedPnlAfterCosts > 0).length;
       const hitRate = winCount / windowedTrades.length;
@@ -416,17 +433,52 @@ export class PaperExecutionService {
       const sampleTrust = Math.min(1, windowedTrades.length / Math.max(1, config.MIN_MARKET_TRADES_FOR_SCORING * 2));
       const pnlComponent = Math.max(-1, Math.min(1, averageNetPnlPerTrade / 0.1));
       const drawdownPenalty = Math.max(0, Math.min(1, marketEquityState.maxDrawdown / 0.6));
-      marketScore = 0.5 + ((hitRate - 0.5) * 0.5 + pnlComponent * 0.35 - drawdownPenalty * 0.25) * sampleTrust;
+      executionScore = Math.max(0, Math.min(1, 0.5 + ((hitRate - 0.5) * 0.5 + pnlComponent * 0.35 - drawdownPenalty * 0.25) * sampleTrust));
     }
-    return Math.max(0, Math.min(1, marketScore));
+    return executionScore;
+  }
+
+  private computeResearchScore(windowedPredictions: PredictionResponse[]): number {
+    let researchScore = 0.5;
+    if (windowedPredictions.length > 0) {
+      const resolvedPredictions = windowedPredictions.filter((prediction) => prediction.result.status !== "void");
+      const winCount = resolvedPredictions.filter((prediction) => prediction.result.status === "ok").length;
+      const hitRate = resolvedPredictions.length === 0 ? 0.5 : winCount / resolvedPredictions.length;
+      const cumulativeSignedEdge = resolvedPredictions.reduce((aggregatedEdge, prediction) => {
+        const signedEdge = prediction.result.status === "ok" ? prediction.confidence : prediction.confidence * -1;
+        return aggregatedEdge + signedEdge;
+      }, 0);
+      const averageSignedEdge = resolvedPredictions.length === 0 ? 0 : cumulativeSignedEdge / resolvedPredictions.length;
+      const calibrationError =
+        windowedPredictions.length === 0
+          ? 0.5
+          : windowedPredictions.reduce((aggregatedError, prediction) => {
+              const targetConfidence = prediction.result.status === "ok" ? 1 : prediction.result.status === "ko" ? 0 : prediction.confidence;
+              return aggregatedError + Math.abs(prediction.confidence - targetConfidence);
+            }, 0) / windowedPredictions.length;
+      const sampleTrust = Math.min(1, windowedPredictions.length / Math.max(1, config.MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP * 2));
+      researchScore = Math.max(0, Math.min(1, 0.5 + ((hitRate - 0.5) * 0.6 + averageSignedEdge * 0.35 - calibrationError * 0.2) * sampleTrust));
+    }
+    return researchScore;
+  }
+
+  private computeBootstrapDiscount(researchPredictionCount: number, tradeCount: number, qualityScore: number): number {
+    const researchProgress = Math.max(0, Math.min(1, researchPredictionCount / Math.max(1, config.MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP)));
+    const tradeProgress = Math.max(0, Math.min(1, tradeCount / Math.max(1, config.MIN_MARKET_TRADES_FOR_SCORING)));
+    const bootstrapDiscount =
+      config.EXECUTION_BOOTSTRAP_MIN_DISCOUNT +
+      (config.EXECUTION_BOOTSTRAP_MAX_DISCOUNT - config.EXECUTION_BOOTSTRAP_MIN_DISCOUNT) * (researchProgress * 0.7 + tradeProgress * 0.2 + qualityScore * 0.1);
+    return bootstrapDiscount;
   }
 
   private buildMarketPerformanceSummary(asset: AssetSymbol, window: MarketWindow): MarketPerformanceSummary {
     const marketKey = this.buildMarketKey(asset, window);
+    const latestPrediction = this.resolvePrediction(asset, window);
     const predictionCount = this.predictionEngineService.getPredictionCount(asset, window);
     const windowedTrades = this.readWindowedTrades(marketKey).sort((leftTrade, rightTrade) => {
       return leftTrade.exitFilledAt - rightTrade.exitFilledAt;
     });
+    const windowedResearchPredictions = this.readWindowedResearchPredictions(asset, window);
     const tradeCount = windowedTrades.length;
     const winCount = windowedTrades.filter((paperTrade) => paperTrade.realizedPnlAfterCosts > 0).length;
     const cumulativeNetPnl = windowedTrades.reduce((aggregatedPnl, paperTrade) => aggregatedPnl + paperTrade.realizedPnlAfterCosts, 0);
@@ -442,26 +494,45 @@ export class PaperExecutionService {
         marketEquityState.maxDrawdown = drawdown;
       }
     }
+    const researchScore = this.computeResearchScore(windowedResearchPredictions);
+    const executionScore = this.computeExecutionScore(windowedTrades);
+    const marketSlice = this.marketStateService.getLatestSlice(marketKey);
+    const bootstrapDiscount = this.computeBootstrapDiscount(windowedResearchPredictions.length, tradeCount, marketSlice?.quality.score ?? 0);
+    const discountedResearchScore = researchScore * bootstrapDiscount;
+    const effectiveExecutionScore = executionScore === null ? discountedResearchScore : Math.min(executionScore, discountedResearchScore);
     const hasSufficientHistory = tradeCount >= config.MIN_MARKET_TRADES_FOR_SCORING;
-    const hasWarmupComplete = predictionCount >= config.MIN_MARKET_PREDICTIONS_BEFORE_ENTRY;
-    const score = this.computeMarketScore(windowedTrades);
+    const hasWarmupComplete =
+      predictionCount >= config.MIN_MARKET_PREDICTIONS_BEFORE_ENTRY && windowedResearchPredictions.length >= config.MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP;
+    const hasComboReadiness = latestPrediction?.comboGate.hasComboGatePassed ?? false;
     let status: MarketPerformanceSummary["status"] = "warming_up";
-    if (hasWarmupComplete && hasSufficientHistory) {
-      status = score >= config.MIN_MARKET_SCORE_FOR_ENTRY ? "good" : "avoid";
+    if (hasWarmupComplete) {
+      status = "research_only";
+      if (effectiveExecutionScore < config.MIN_EXECUTION_SCORE_FOR_ENTRY || researchScore < config.MIN_RESEARCH_SCORE_FOR_BOOTSTRAP) {
+        status = "avoid";
+      }
+      if (effectiveExecutionScore >= config.MIN_EXECUTION_SCORE_FOR_ENTRY && hasComboReadiness) {
+        status = "tradable";
+      }
     }
     return {
       marketKey,
       asset,
       window,
       predictionCount,
-      score,
+      score: effectiveExecutionScore,
+      researchScore,
+      executionScore,
+      effectiveExecutionScore,
       tradeCount,
+      researchPredictionCount: windowedResearchPredictions.length,
+      executedTradeCount: tradeCount,
       winRate: tradeCount === 0 ? 0.5 : winCount / tradeCount,
       cumulativeNetPnl,
       averageNetPnlPerTrade,
       maxDrawdown: marketEquityState.maxDrawdown,
       hasSufficientHistory,
       hasWarmupComplete,
+      hasComboReadiness,
       status,
     };
   }
@@ -483,6 +554,15 @@ export class PaperExecutionService {
           const executionDecision = this.executionPolicyService.buildEntryDecision(marketSlice, latestPrediction, openPosition, marketPerformanceSummary);
           if (executionDecision !== null) {
             this.executionDecisions.set(marketKey, executionDecision);
+          }
+          if (latestPrediction !== null && executionDecision !== null) {
+            this.predictionEngineService.markExecutionEligibility(
+              marketKey,
+              latestPrediction.timestamp,
+              executionDecision.isEntryAllowed,
+              executionDecision.gateFailures,
+              executionDecision.selectedComboSource,
+            );
           }
           if (openPosition !== null) {
             if (openPosition.status === "entry_pending_maker") {
@@ -522,6 +602,9 @@ export class PaperExecutionService {
           positionSide: null,
           predictionDirection: null,
           marketScore: null,
+          researchScore: null,
+          executionScore: null,
+          effectiveExecutionScore: null,
           marketTradeCount: 0,
           hasSufficientMarketHistory: false,
           entryReferencePrice: null,
@@ -535,6 +618,10 @@ export class PaperExecutionService {
           makerFillProbability: 0,
           bookRiskScore: 1,
           positionSizeSuggestion: 0,
+          hasComboGatePassed: false,
+          selectedComboKey: null,
+          selectedComboSize: null,
+          selectedComboSource: null,
           gateFailures: ["no_market_data"],
           generatedAt: null,
         };

@@ -36,8 +36,8 @@ test("StrategyMetricsService only counts outcomes inside the rolling time window
     debug: {},
   };
 
-  strategyMetricsService.recordResolution("btc:5m", [staleSignal], "DOWN", 0);
-  strategyMetricsService.recordResolution("btc:5m", [freshSignal], "DOWN", 7_500_000);
+  strategyMetricsService.recordResolution("btc:5m", [staleSignal], "DOWN", 0, "research");
+  strategyMetricsService.recordResolution("btc:5m", [freshSignal], "DOWN", 7_500_000, "research");
 
   const marketSummary = strategyMetricsService.getSummaries("btc:5m")[0];
 

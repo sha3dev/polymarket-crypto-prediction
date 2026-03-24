@@ -33,7 +33,10 @@ export class ExecutionPolicyService {
       asset: marketSlice.asset,
       window: marketSlice.window,
       isEntryAllowed: false,
-      marketScore: marketPerformanceSummary?.score ?? null,
+      marketScore: marketPerformanceSummary?.effectiveExecutionScore ?? null,
+      researchScore: marketPerformanceSummary?.researchScore ?? null,
+      executionScore: marketPerformanceSummary?.executionScore ?? null,
+      effectiveExecutionScore: marketPerformanceSummary?.effectiveExecutionScore ?? null,
       marketTradeCount: marketPerformanceSummary?.tradeCount ?? 0,
       hasSufficientMarketHistory: marketPerformanceSummary?.hasSufficientHistory ?? false,
       positionSide,
@@ -49,6 +52,10 @@ export class ExecutionPolicyService {
       makerFillProbability: 0,
       bookRiskScore: 1,
       positionSizeSuggestion: 0,
+      hasComboGatePassed: prediction?.comboGate.hasComboGatePassed ?? false,
+      selectedComboKey: prediction?.comboGate.selectedComboKey ?? null,
+      selectedComboSize: prediction?.comboGate.selectedComboSize ?? null,
+      selectedComboSource: prediction?.comboGate.selectedComboSource ?? null,
       gateFailures,
       generatedAt: marketSlice.generatedAt,
     };
@@ -205,6 +212,9 @@ export class ExecutionPolicyService {
           if (referencePrice === null) {
             gateFailures.push("no_reference_price");
           }
+          if (!prediction.comboGate.hasComboGatePassed) {
+            gateFailures.push("combo_gate_failed");
+          }
           if (!marketSlice.quality.hasLiveMarket) {
             gateFailures.push("market_not_live");
           }
@@ -221,11 +231,18 @@ export class ExecutionPolicyService {
           if (spread > config.MAX_SPREAD_FOR_ENTRY) {
             gateFailures.push("spread_too_wide");
           }
-          if (marketPerformanceSummary?.hasSufficientHistory && marketPerformanceSummary.score < config.MIN_MARKET_SCORE_FOR_ENTRY) {
-            gateFailures.push("market_score_too_low");
-          }
-          if (marketPerformanceSummary !== null && !marketPerformanceSummary.hasWarmupComplete) {
+          if (marketPerformanceSummary !== null && marketPerformanceSummary.status === "warming_up") {
             gateFailures.push("market_warming_up");
+          }
+          if (marketPerformanceSummary !== null && marketPerformanceSummary.executionScore === null) {
+            gateFailures.push("insufficient_execution_history");
+          }
+          if (marketPerformanceSummary !== null && marketPerformanceSummary.effectiveExecutionScore < config.MIN_EXECUTION_SCORE_FOR_ENTRY) {
+            gateFailures.push(
+              marketPerformanceSummary.executionScore === null || !marketPerformanceSummary.hasSufficientHistory
+                ? "bootstrap_discount_too_low"
+                : "execution_score_too_low",
+            );
           }
           const orderShareCount = referencePrice === null ? 0 : this.computeMinimumShareCount(referencePrice);
           const orderNotionalUsd = referencePrice === null ? null : this.computeOrderNotionalUsd(referencePrice, orderShareCount);
@@ -235,7 +252,7 @@ export class ExecutionPolicyService {
           if (orderShareCount < config.MIN_ORDER_SHARES) {
             gateFailures.push("order_share_count_too_low");
           }
-          if (gateFailures.length > 0 || referencePrice === null) {
+          if (gateFailures.length > 0 || referencePrice === null || marketPerformanceSummary === null) {
             executionDecision = this.buildBlockedDecision(marketSlice, prediction, marketPerformanceSummary, gateFailures);
           } else {
             const depth = this.resolveDepth(marketSlice, positionSide);
@@ -251,9 +268,12 @@ export class ExecutionPolicyService {
               asset: marketSlice.asset,
               window: marketSlice.window,
               isEntryAllowed: true,
-              marketScore: marketPerformanceSummary?.score ?? null,
-              marketTradeCount: marketPerformanceSummary?.tradeCount ?? 0,
-              hasSufficientMarketHistory: marketPerformanceSummary?.hasSufficientHistory ?? false,
+              marketScore: marketPerformanceSummary.effectiveExecutionScore,
+              researchScore: marketPerformanceSummary.researchScore,
+              executionScore: marketPerformanceSummary.executionScore,
+              effectiveExecutionScore: marketPerformanceSummary.effectiveExecutionScore,
+              marketTradeCount: marketPerformanceSummary.tradeCount,
+              hasSufficientMarketHistory: marketPerformanceSummary.hasSufficientHistory,
               positionSide,
               predictionDirection: prediction.direction,
               entryReferencePrice: referencePrice,
@@ -267,6 +287,10 @@ export class ExecutionPolicyService {
               makerFillProbability,
               bookRiskScore,
               positionSizeSuggestion,
+              hasComboGatePassed: true,
+              selectedComboKey: prediction.comboGate.selectedComboKey,
+              selectedComboSize: prediction.comboGate.selectedComboSize,
+              selectedComboSource: prediction.comboGate.selectedComboSource,
               gateFailures: [],
               generatedAt: marketSlice.generatedAt,
             };

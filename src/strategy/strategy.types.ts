@@ -45,12 +45,15 @@ export type StrategySummary = {
   weight: number;
   isEnabled: boolean;
   totalResolved: number;
+  executionTotalResolved: number;
   wins: number;
   losses: number;
   voids: number;
   hitRate: number;
   cumulativePnlProxy: number;
   averagePnlProxy: number;
+  executionHitRate: number;
+  executionAveragePnlProxy: number;
   averageSignedEdge: number;
   averageCalibrationError: number;
   recentStreak: number;

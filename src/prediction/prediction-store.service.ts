@@ -78,11 +78,11 @@ export class PredictionStoreService {
     return predictionCount;
   }
 
-  public getPendingPredictions(dueAtOrBefore: number): PredictionRecord[] {
+  public getOpenPredictions(): PredictionRecord[] {
     const pendingPredictions: PredictionRecord[] = [];
     for (const marketPredictions of this.predictionHistory.values()) {
       for (const predictionRecord of marketPredictions) {
-        if (!predictionRecord.isResolved && predictionRecord.evaluationDueAt <= dueAtOrBefore) {
+        if (!predictionRecord.isResolved) {
           pendingPredictions.push(predictionRecord);
         }
       }
