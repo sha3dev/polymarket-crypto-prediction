@@ -4,7 +4,7 @@ const ENV = process.env;
 
 const config = {
   RESPONSE_CONTENT_TYPE: ENV.RESPONSE_CONTENT_TYPE || "application/json",
-  DEFAULT_PORT: Number(ENV.PORT || 3000),
+  DEFAULT_PORT: Number(ENV.PORT || 3300),
   SERVICE_NAME: ENV.SERVICE_NAME || "@sha3/polymarket-crypto-prediction",
   SNAPSHOT_INTERVAL_MS: Number(ENV.SNAPSHOT_INTERVAL_MS || 500),
   CROSS_THRESHOLD: Number(ENV.CROSS_THRESHOLD || 0.02),
