@@ -15,6 +15,23 @@ export const STRATEGY_TIERS = ["low", "medium", "high"] as const;
  */
 
 export type StrategyTier = (typeof STRATEGY_TIERS)[number];
+export type SetupType =
+  | "broad_continuation"
+  | "leader_laggard_catchup"
+  | "local_breakout_confirmed"
+  | "mispricing_repricing"
+  | "fade_failed_cross"
+  | "research_probe";
+export type EngineId =
+  | "breadth_engine"
+  | "propagation_engine"
+  | "local_momentum_engine"
+  | "local_microstructure_engine"
+  | "mispricing_engine"
+  | "reversion_engine"
+  | "meta_engine";
+export type EngineState = "inactive" | "weak" | "active" | "dominant" | "avoid";
+export type EngineSourceScope = "local" | "cross_asset" | "meta";
 export type StrategyDefinition = {
   strategyId: string;
   name: string;
@@ -80,6 +97,44 @@ export type StrategyBoard = {
   marketKey: MarketKey;
   strategies: StrategySummary[];
 };
+export type SignalEngineContribution = {
+  strategyId: string;
+  strategyName: string;
+  score: number;
+  weight: number;
+  signedContribution: number;
+};
+export type SignalEngineResult = {
+  engineId: EngineId;
+  name: string;
+  setupType: SetupType;
+  direction: PredictionDirection;
+  score: number;
+  confidence: number;
+  isActive: boolean;
+  state: EngineState;
+  activationReason: string | null;
+  blockingReason: string | null;
+  regimeFit: number;
+  memberStrategyIds: string[];
+  memberContributions: SignalEngineContribution[];
+  sourceScope: EngineSourceScope;
+};
+export type EngineCombinationResult = {
+  comboKey: string;
+  engineIds: EngineId[];
+  setupType: SetupType;
+  direction: PredictionDirection;
+  score: number;
+  confidence: number;
+  diversityScore: number;
+  regimeFitScore: number;
+  reason: string;
+};
+export type EngineBoard = {
+  marketKey: MarketKey;
+  engines: SignalEngineResult[];
+};
 export type StrategyEvaluationResult = {
   marketKey: MarketKey;
   finalDirection: PredictionDirection;
@@ -90,6 +145,13 @@ export type StrategyEvaluationResult = {
   baseConfidence: number;
   adjustedConfidence: number;
   strategyBreakdown: StrategySignal[];
+  engineBreakdown: SignalEngineResult[];
+  winningCombination: EngineCombinationResult;
+  winningSetupType: SetupType;
+  winningEngineIds: EngineId[];
+  winningEngineComboKey: string;
+  winningEngineComboScore: number;
+  combinationReason: string;
   qualityScore: number;
   escalatedToMedium: boolean;
   escalatedToHigh: boolean;

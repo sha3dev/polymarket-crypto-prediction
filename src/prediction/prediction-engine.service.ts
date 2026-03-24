@@ -12,7 +12,7 @@ import type { AssetSymbol, MarketKey, MarketSnapshotSlice, MarketTrigger, Market
 import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
 import type { StrategyEngineService } from "../strategy/strategy-engine.service.ts";
 import type { StrategyMetricsService } from "../strategy/strategy-metrics.service.ts";
-import type { StrategySummary } from "../strategy/strategy.types.ts";
+import type { EngineBoard, StrategySummary } from "../strategy/strategy.types.ts";
 import type { PredictionStoreService } from "./prediction-store.service.ts";
 import type { PredictionOutcome, PredictionRecord, PredictionResponse } from "./prediction.types.ts";
 
@@ -233,26 +233,30 @@ export class PredictionEngineService {
           predictionContext.marketKey,
           evaluationResult.strategyBreakdown,
           strategySummaries,
-          evaluationResult.baseWeightedScore,
-          evaluationResult.baseConfidence,
+          evaluationResult.weightedScore,
+          evaluationResult.finalConfidence,
         );
-        const adjustedWeightedScore = comboApplicationResult.adjustedWeightedScore;
-        const adjustedConfidence = comboApplicationResult.adjustedConfidence;
-        const adjustedDirection = adjustedWeightedScore >= 0 ? "UP" : "DOWN";
-        const positionSide = this.resolvePositionSide(adjustedDirection);
+        const winningDirection = evaluationResult.finalDirection;
+        const positionSide = this.resolvePositionSide(winningDirection);
         const baselineSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
         const entryReferencePrice = this.resolveEntryReferencePrice(baselineSlice, positionSide);
         const takeProfitPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice + config.TAKE_PROFIT_DELTA);
         const stopLossPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice - config.STOP_LOSS_DELTA);
         const predictionRecord = this.buildPredictionRecord(
           marketTrigger.marketKey,
-          adjustedDirection,
-          adjustedConfidence,
-          adjustedWeightedScore,
+          winningDirection,
+          evaluationResult.finalConfidence,
+          evaluationResult.weightedScore,
           evaluationResult.baseWeightedScore,
           evaluationResult.baseConfidence,
           marketTrigger,
           evaluationResult.strategyBreakdown,
+          evaluationResult.engineBreakdown,
+          evaluationResult.winningSetupType,
+          evaluationResult.winningEngineIds,
+          evaluationResult.winningEngineComboKey,
+          evaluationResult.winningEngineComboScore,
+          evaluationResult.combinationReason,
           comboApplicationResult.comboBreakdown,
           comboApplicationResult.comboGate,
           predictionContext.crossAssetRegime,
@@ -280,6 +284,12 @@ export class PredictionEngineService {
     baseConfidence: number,
     marketTrigger: MarketTrigger,
     strategyBreakdown: PredictionRecord["strategyBreakdown"],
+    engineBreakdown: PredictionRecord["engineBreakdown"],
+    winningSetupType: PredictionRecord["winningSetupType"],
+    winningEngineIds: PredictionRecord["winningEngineIds"],
+    winningEngineComboKey: PredictionRecord["winningEngineComboKey"],
+    winningEngineComboScore: PredictionRecord["winningEngineComboScore"],
+    combinationReason: PredictionRecord["combinationReason"],
     comboBreakdown: PredictionRecord["comboBreakdown"],
     comboGate: PredictionRecord["comboGate"],
     crossAssetRegime: PredictionRecord["crossAssetRegime"],
@@ -313,6 +323,12 @@ export class PredictionEngineService {
       baselineUpPrice,
       baselineUpMidpoint,
       strategyBreakdown,
+      engineBreakdown,
+      winningSetupType,
+      winningEngineIds,
+      winningEngineComboKey,
+      winningEngineComboScore,
+      combinationReason,
       comboBreakdown,
       comboGate,
       crossAssetRegime,
@@ -381,6 +397,12 @@ export class PredictionEngineService {
       executionComboSource: predictionRecord.executionComboSource,
       result: predictionRecord.outcome,
       strategyBreakdown: predictionRecord.strategyBreakdown,
+      engineBreakdown: predictionRecord.engineBreakdown,
+      winningSetupType: predictionRecord.winningSetupType,
+      winningEngineIds: predictionRecord.winningEngineIds,
+      winningEngineComboKey: predictionRecord.winningEngineComboKey,
+      winningEngineComboScore: predictionRecord.winningEngineComboScore,
+      combinationReason: predictionRecord.combinationReason,
       comboBreakdown: predictionRecord.comboBreakdown,
     };
   }
@@ -498,6 +520,20 @@ export class PredictionEngineService {
   public getStrategySummaries(marketKey?: MarketKey): StrategySummary[] {
     const strategySummaries = this.strategyMetricsService.getSummaries(marketKey);
     return strategySummaries;
+  }
+
+  public getEngineBoards(marketKeys: MarketKey[]): EngineBoard[] {
+    const engineBoards: EngineBoard[] = [];
+    for (const marketKey of marketKeys) {
+      const predictionContext = this.marketStateService.getPredictionContext(marketKey);
+      if (predictionContext !== null) {
+        const evaluationResult = this.strategyEngineService.evaluate(predictionContext);
+        engineBoards.push({ marketKey, engines: evaluationResult.engineBreakdown });
+      } else {
+        engineBoards.push({ marketKey, engines: [] });
+      }
+    }
+    return engineBoards;
   }
 
   public getPredictionCount(asset: AssetSymbol, window: MarketWindow): number {

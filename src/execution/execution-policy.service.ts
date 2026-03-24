@@ -60,6 +60,12 @@ export class ExecutionPolicyService {
       selectedComboKey: prediction?.comboGate.selectedComboKey ?? null,
       selectedComboSize: prediction?.comboGate.selectedComboSize ?? null,
       selectedComboSource: prediction?.comboGate.selectedComboSource ?? null,
+      winningSetupType: prediction?.winningSetupType ?? null,
+      winningEngineIds: prediction?.winningEngineIds ?? [],
+      winningEngineComboKey: prediction?.winningEngineComboKey ?? null,
+      winningEngineComboScore: prediction?.winningEngineComboScore ?? null,
+      regimeId: prediction?.crossAssetRegime.regimeId ?? null,
+      executionProfile: prediction?.winningSetupType ?? null,
       gateFailures,
       generatedAt: marketSlice.generatedAt,
     };
@@ -84,6 +90,34 @@ export class ExecutionPolicyService {
       hasBreadthAlignment = prediction.direction === breadthDirection;
     }
     return hasBreadthAlignment;
+  }
+
+  private appendSetupGateFailures(gateFailures: string[], prediction: PredictionResponse, marketSlice: MarketSnapshotSlice): void {
+    if (prediction.winningSetupType === "broad_continuation") {
+      if (!prediction.crossAssetRegime.isDirectional) {
+        gateFailures.push("setup_requires_directional_regime");
+      }
+      if (prediction.crossAssetRegime.reversalRiskScore >= 0.72) {
+        gateFailures.push("setup_reversal_risk");
+      }
+    }
+    if (prediction.winningSetupType === "leader_laggard_catchup") {
+      if (!prediction.crossAssetRegime.hasLeaderLaggardOpportunity) {
+        gateFailures.push("setup_needs_laggard");
+      }
+      if (prediction.crossAssetRegime.leaderMarketKey === null) {
+        gateFailures.push("setup_needs_leader");
+      }
+    }
+    if (prediction.winningSetupType === "local_breakout_confirmed" && Math.abs(marketSlice.spotMomentum) < config.MIN_TRIGGER_SPOT_MOMENTUM) {
+      gateFailures.push("setup_needs_momentum");
+    }
+    if (prediction.winningSetupType === "mispricing_repricing" && marketSlice.chainlinkPrice === null) {
+      gateFailures.push("setup_needs_basis");
+    }
+    if (prediction.winningSetupType === "fade_failed_cross" && prediction.crossAssetRegime.hasStrongBreadth) {
+      gateFailures.push("setup_fade_conflicts_with_breadth");
+    }
   }
 
   private resolveTokenPrice(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number | null {
@@ -248,6 +282,7 @@ export class ExecutionPolicyService {
           if (spread > config.MAX_SPREAD_FOR_ENTRY) {
             gateFailures.push("spread_too_wide");
           }
+          this.appendSetupGateFailures(gateFailures, prediction, marketSlice);
           if (marketPerformanceSummary !== null && marketPerformanceSummary.status === "warming_up") {
             gateFailures.push("market_warming_up");
           }
@@ -312,6 +347,12 @@ export class ExecutionPolicyService {
               selectedComboKey: prediction.comboGate.selectedComboKey,
               selectedComboSize: prediction.comboGate.selectedComboSize,
               selectedComboSource: prediction.comboGate.selectedComboSource,
+              winningSetupType: prediction.winningSetupType,
+              winningEngineIds: [...prediction.winningEngineIds],
+              winningEngineComboKey: prediction.winningEngineComboKey,
+              winningEngineComboScore: prediction.winningEngineComboScore,
+              regimeId: prediction.crossAssetRegime.regimeId,
+              executionProfile: prediction.winningSetupType,
               gateFailures: [],
               generatedAt: marketSlice.generatedAt,
             };

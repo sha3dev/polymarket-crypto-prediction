@@ -511,6 +511,112 @@ export class MarketStateService {
     return marketKeys;
   }
 
+  private computeSynchronyScore(alignedMarketCount: number, qualifyingMarketCount: number): number {
+    const synchronyScore = qualifyingMarketCount === 0 ? 0 : alignedMarketCount / qualifyingMarketCount;
+    return synchronyScore;
+  }
+
+  private computeAccelerationScore(qualifyingMoves: Array<{ marketKey: MarketKey; signedMove: number }>, averageSignedMove: number): number {
+    const absoluteMoves = qualifyingMoves.map((qualifyingMove) => Math.abs(qualifyingMove.signedMove));
+    const latestMoveMagnitude = Math.abs(averageSignedMove);
+    const averageMagnitude =
+      absoluteMoves.length === 0 ? 0 : absoluteMoves.reduce((aggregatedMagnitude, magnitude) => aggregatedMagnitude + magnitude, 0) / absoluteMoves.length;
+    const accelerationScore =
+      averageMagnitude === 0 ? 0 : Math.max(0, Math.min(1, (latestMoveMagnitude - averageMagnitude * 0.5) / Math.max(averageMagnitude, 0.0001)));
+    return accelerationScore;
+  }
+
+  private computeExhaustionScore(breadthStrength: number, lagRatio: number, targetSignedMove: number, peerAverageSignedMove: number): number {
+    const leaderOvershoot = Math.max(0, Math.abs(targetSignedMove) - Math.abs(peerAverageSignedMove));
+    const exhaustionScore = Math.max(0, Math.min(1, breadthStrength * 0.6 + leaderOvershoot * 12 + Math.max(0, 0.35 - lagRatio)));
+    return exhaustionScore;
+  }
+
+  private computeReversalRiskScore(
+    breadthDirection: CrossAssetRegime["breadthDirection"],
+    targetSignedMove: number,
+    peerAverageSignedMove: number,
+    breadthStrength: number,
+    exhaustionScore: number,
+  ): number {
+    const directionSign = breadthDirection === "UP" ? 1 : breadthDirection === "DOWN" ? -1 : 0;
+    const isTargetAgainstBreadth = directionSign !== 0 && Math.sign(targetSignedMove) !== 0 && Math.sign(targetSignedMove) !== directionSign;
+    const signedConflict = isTargetAgainstBreadth ? 0.45 : 0;
+    const peerOvershoot = Math.max(0, Math.abs(peerAverageSignedMove) - Math.abs(targetSignedMove));
+    const reversalRiskScore = Math.max(0, Math.min(1, exhaustionScore * 0.55 + breadthStrength * 0.2 + peerOvershoot * 10 + signedConflict));
+    return reversalRiskScore;
+  }
+
+  private buildLeaderGroup(dominantMoves: Array<{ marketKey: MarketKey; signedMove: number }>): MarketKey[] {
+    const leaderGroup = [...dominantMoves]
+      .sort((leftMove, rightMove) => Math.abs(rightMove.signedMove) - Math.abs(leftMove.signedMove))
+      .slice(0, 2)
+      .map((dominantMove) => dominantMove.marketKey);
+    return leaderGroup;
+  }
+
+  private buildLaggardGroup(
+    qualifyingMoves: Array<{ marketKey: MarketKey; signedMove: number }>,
+    breadthDirection: CrossAssetRegime["breadthDirection"],
+    peerAverageSignedMove: number,
+  ): MarketKey[] {
+    const laggardGroup =
+      breadthDirection === "NEUTRAL"
+        ? []
+        : [...qualifyingMoves]
+            .filter((qualifyingMove) => Math.abs(qualifyingMove.signedMove) < Math.abs(peerAverageSignedMove))
+            .sort((leftMove, rightMove) => Math.abs(leftMove.signedMove) - Math.abs(rightMove.signedMove))
+            .slice(0, 2)
+            .map((qualifyingMove) => qualifyingMove.marketKey);
+    return laggardGroup;
+  }
+
+  private resolveRegimeId(
+    breadthDirection: CrossAssetRegime["breadthDirection"],
+    hasStrongBreadth: boolean,
+    hasLeaderLaggardOpportunity: boolean,
+    qualifyingMarketCount: number,
+    reversalRiskScore: number,
+  ): CrossAssetRegime["regimeId"] {
+    let regimeId: CrossAssetRegime["regimeId"] = "neutral";
+    if (qualifyingMarketCount >= 2 && breadthDirection === "NEUTRAL") {
+      regimeId = "fragmented";
+    }
+    if (breadthDirection === "UP") {
+      regimeId = hasStrongBreadth ? "broad_up_strong" : "broad_up_weak";
+    }
+    if (breadthDirection === "DOWN") {
+      regimeId = hasStrongBreadth ? "broad_down_strong" : "broad_down_weak";
+    }
+    if (hasLeaderLaggardOpportunity && breadthDirection === "UP") {
+      regimeId = "leader_laggard_up";
+    }
+    if (hasLeaderLaggardOpportunity && breadthDirection === "DOWN") {
+      regimeId = "leader_laggard_down";
+    }
+    if (reversalRiskScore >= 0.72 && breadthDirection !== "NEUTRAL") {
+      regimeId = "reversal_risk";
+    }
+    return regimeId;
+  }
+
+  private resolveRegimeClass(regimeId: CrossAssetRegime["regimeId"]): CrossAssetRegime["regimeClass"] {
+    let regimeClass: CrossAssetRegime["regimeClass"] = "neutral";
+    if (regimeId === "broad_up_weak" || regimeId === "broad_up_strong" || regimeId === "broad_down_weak" || regimeId === "broad_down_strong") {
+      regimeClass = "directional";
+    }
+    if (regimeId === "leader_laggard_up" || regimeId === "leader_laggard_down") {
+      regimeClass = "leader_laggard";
+    }
+    if (regimeId === "fragmented") {
+      regimeClass = "fragmented";
+    }
+    if (regimeId === "reversal_risk") {
+      regimeClass = "reversal";
+    }
+    return regimeClass;
+  }
+
   private buildCrossAssetRegime(marketKey: MarketKey, window: MarketWindow): CrossAssetRegime {
     const qualifyingMoves: Array<{ marketKey: MarketKey; signedMove: number }> = [];
     const targetMarketRecord = this.requireMarketRecord(marketKey);
@@ -550,6 +656,7 @@ export class MarketStateService {
         ? 0
         : Math.max(0, (Math.abs(peerAverageSignedMove) - Math.abs(targetSignedMove)) / Math.abs(peerAverageSignedMove));
     const normalizedMoveStrength = Math.max(0, Math.min(1, Math.abs(averageSignedMove) / Math.max(config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD * 3, 0.0001)));
+    const synchronyScore = this.computeSynchronyScore(alignedMarketCount, qualifyingMarketCount);
     const breadthStrength = breadthParticipation * normalizedMoveStrength;
     const hasStrongBreadth =
       breadthDirection !== "NEUTRAL" &&
@@ -557,12 +664,24 @@ export class MarketStateService {
       breadthParticipation >= config.CROSS_ASSET_BREADTH_MIN_PARTICIPATION &&
       breadthStrength >= config.CROSS_ASSET_BREADTH_MIN_STRENGTH;
     const hasLeaderLaggardOpportunity =
-      hasStrongBreadth && Math.sign(targetSignedMove || 0) !== (breadthDirection === "UP" ? -1 : 1) && lagRatio >= config.CROSS_ASSET_LAGGARD_THRESHOLD;
+      breadthDirection !== "NEUTRAL" &&
+      alignedMarketCount >= 2 &&
+      Math.abs(targetSignedMove) < Math.abs(peerAverageSignedMove) &&
+      lagRatio >= config.CROSS_ASSET_LAGGARD_THRESHOLD;
     const leaderMarketKey =
       dominantMoves.length === 0
         ? null
         : ([...dominantMoves].sort((leftMove, rightMove) => Math.abs(rightMove.signedMove) - Math.abs(leftMove.signedMove))[0]?.marketKey ?? null);
+    const leaderGroup = this.buildLeaderGroup(dominantMoves);
+    const laggardGroup = this.buildLaggardGroup(qualifyingMoves, breadthDirection, peerAverageSignedMove);
+    const accelerationScore = this.computeAccelerationScore(qualifyingMoves, averageSignedMove);
+    const exhaustionScore = this.computeExhaustionScore(breadthStrength, lagRatio, targetSignedMove, peerAverageSignedMove);
+    const reversalRiskScore = this.computeReversalRiskScore(breadthDirection, targetSignedMove, peerAverageSignedMove, breadthStrength, exhaustionScore);
+    const regimeId = this.resolveRegimeId(breadthDirection, hasStrongBreadth, hasLeaderLaggardOpportunity, qualifyingMarketCount, reversalRiskScore);
+    const regimeClass = this.resolveRegimeClass(regimeId);
     return {
+      regimeId,
+      regimeClass,
       breadthDirection,
       breadthStrength,
       breadthParticipation,
@@ -573,6 +692,14 @@ export class MarketStateService {
       alignedMarketCount,
       qualifyingMarketCount,
       leaderMarketKey,
+      leaderGroup,
+      laggardGroup,
+      synchronyScore,
+      accelerationScore,
+      exhaustionScore,
+      reversalRiskScore,
+      isDirectional: breadthDirection !== "NEUTRAL",
+      isTradableGlobalContext: regimeId !== "neutral" && regimeId !== "fragmented",
       hasStrongBreadth,
       hasLeaderLaggardOpportunity,
     };
@@ -651,6 +778,15 @@ export class MarketStateService {
       };
     }
     return predictionContext;
+  }
+
+  public getCrossAssetRegime(marketKey: MarketKey): CrossAssetRegime | null {
+    let crossAssetRegime: CrossAssetRegime | null = null;
+    const latestSlice = this.getLatestSlice(marketKey);
+    if (latestSlice !== null) {
+      crossAssetRegime = this.buildCrossAssetRegime(marketKey, latestSlice.window);
+    }
+    return crossAssetRegime;
   }
 
   public getEvaluationPrice(marketKey: MarketKey): MarketEvaluationPrice {

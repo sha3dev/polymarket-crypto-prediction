@@ -6,7 +6,7 @@ import type { ComboGateDecision } from "../combo/combo.types.ts";
 import type { ComboBreakdown } from "../combo/combo.types.ts";
 import type { ComboSource, PositionSide } from "../execution/execution.types.ts";
 import type { AssetSymbol, CrossAssetRegime, MarketKey, MarketTrigger, MarketWindow, PredictionDirection } from "../market/market.types.ts";
-import type { StrategySignal } from "../strategy/strategy.types.ts";
+import type { EngineId, SetupType, SignalEngineResult, StrategySignal } from "../strategy/strategy.types.ts";
 
 /**
  * @section types
@@ -44,6 +44,12 @@ export type PredictionRecord = {
   baselineUpPrice: number | null;
   baselineUpMidpoint: number | null;
   strategyBreakdown: StrategySignal[];
+  engineBreakdown: SignalEngineResult[];
+  winningSetupType: SetupType;
+  winningEngineIds: EngineId[];
+  winningEngineComboKey: string;
+  winningEngineComboScore: number;
+  combinationReason: string;
   comboBreakdown: ComboBreakdown;
   comboGate: ComboGateDecision;
   crossAssetRegime: CrossAssetRegime;
@@ -81,5 +87,11 @@ export type PredictionResponse = {
   executionComboSource: ComboSource | null;
   result: PredictionOutcome;
   strategyBreakdown: StrategySignal[];
+  engineBreakdown: SignalEngineResult[];
+  winningSetupType: SetupType;
+  winningEngineIds: EngineId[];
+  winningEngineComboKey: string;
+  winningEngineComboScore: number;
+  combinationReason: string;
   comboBreakdown: ComboBreakdown;
 };

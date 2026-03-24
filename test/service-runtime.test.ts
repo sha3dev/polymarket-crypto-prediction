@@ -136,7 +136,11 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(typeof latestPredictionJson.adjustedConfidence, "number");
   assert.equal(typeof latestPredictionJson.crossAssetRegime.breadthDirection, "string");
   assert.equal(typeof latestPredictionJson.crossAssetRegime.breadthStrength, "number");
+  assert.equal(typeof latestPredictionJson.crossAssetRegime.regimeId, "string");
   assert.equal(Array.isArray(latestPredictionJson.comboBreakdown.activeCombos), true);
+  assert.equal(Array.isArray(latestPredictionJson.engineBreakdown), true);
+  assert.equal(typeof latestPredictionJson.winningSetupType, "string");
+  assert.equal(typeof latestPredictionJson.winningEngineComboKey, "string");
 
   const cooldownPredictionsResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=10`);
   const cooldownPredictionsJson = await cooldownPredictionsResponse.json();
@@ -239,6 +243,10 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(typeof executionJson.executionNow[0].decision.marketTradeCount, "number");
   assert.equal(typeof executionJson.executionNow[0].decision.breadthDirection, "string");
   assert.equal(typeof executionJson.executionNow[0].decision.hasBreadthAlignment, "boolean");
+  assert.equal(
+    typeof executionJson.executionNow[0].decision.winningSetupType === "string" || executionJson.executionNow[0].decision.winningSetupType === null,
+    true,
+  );
   assert.equal(executionJson.executionNow[0].decision.orderShareCount >= 5, true);
   assert.equal(executionJson.executionNow[0].decision.orderNotionalUsd === null || executionJson.executionNow[0].decision.orderNotionalUsd >= 1, true);
   assert.equal(typeof executionJson.executionPerformance.tradeCount, "number");
@@ -265,13 +273,17 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   );
   assert.equal(summaryJson.health.pendingEvaluationCount, summaryJson.openPositions?.length ?? 0);
   assert.equal(summaryJson.markets.length, 8);
+  assert.equal(summaryJson.globalRegime === null || typeof summaryJson.globalRegime.regimeId === "string", true);
   assert.ok(summaryJson.executionNow.length === 8);
   assert.equal(summaryJson.marketPerformance.length, 8);
   assert.equal(summaryJson.strategyBoards.length, 8);
+  assert.equal(summaryJson.engineBoards.length, 8);
   assert.equal(summaryJson.marketPnlTable.length, 8);
   assert.equal(Array.isArray(summaryJson.comboBoards), true);
   assert.equal(Array.isArray(summaryJson.comboLeaders), true);
   assert.equal(Array.isArray(summaryJson.latestComboInfluence), true);
+  assert.equal(Array.isArray(summaryJson.winningCombinations), true);
+  assert.equal(Array.isArray(summaryJson.discoveryBoard), true);
   assert.equal(typeof summaryJson.selectedStrategyMarketKey, "string");
   assert.equal(typeof summaryJson.executionPerformance.tradeCount, "number");
   assert.equal(typeof summaryJson.paperExecutionPerformance.tradeCount, "number");

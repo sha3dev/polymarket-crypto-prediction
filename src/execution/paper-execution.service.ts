@@ -628,6 +628,12 @@ export class PaperExecutionService {
           selectedComboKey: null,
           selectedComboSize: null,
           selectedComboSource: null,
+          winningSetupType: null,
+          winningEngineIds: [],
+          winningEngineComboKey: null,
+          winningEngineComboScore: null,
+          regimeId: null,
+          executionProfile: null,
           gateFailures: ["no_market_data"],
           generatedAt: null,
         };

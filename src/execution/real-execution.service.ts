@@ -433,6 +433,12 @@ export class RealExecutionService {
       selectedComboKey: null,
       selectedComboSize: null,
       selectedComboSource: null,
+      winningSetupType: null,
+      winningEngineIds: [],
+      winningEngineComboKey: null,
+      winningEngineComboScore: null,
+      regimeId: null,
+      executionProfile: null,
       gateFailures,
       generatedAt: this.latestObservedAt,
     };

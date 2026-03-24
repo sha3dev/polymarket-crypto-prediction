@@ -15,10 +15,10 @@ import type {
   PortfolioExecutionSummary,
 } from "../execution/execution.types.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
-import type { MarketSummary } from "../market/market.types.ts";
+import type { CrossAssetRegime, MarketSummary } from "../market/market.types.ts";
 import type { PredictionEngineService } from "../prediction/prediction-engine.service.ts";
 import type { PredictionResponse } from "../prediction/prediction.types.ts";
-import type { StrategyBoard, StrategySummary } from "../strategy/strategy.types.ts";
+import type { EngineBoard, StrategyBoard, StrategySummary } from "../strategy/strategy.types.ts";
 
 /**
  * @section types
@@ -48,10 +48,13 @@ export type DashboardSummaryPayload = {
     averageConfidence: number;
   };
   markets: MarketSummary[];
+  globalRegime: CrossAssetRegime | null;
   latestPredictions: PredictionResponse[];
   strategies: StrategySummary[];
   strategyBoards: StrategyBoard[];
+  engineBoards: EngineBoard[];
   selectedStrategyMarketKey: string;
+  winningCombinations: PredictionResponse[];
   executionNow: MarketExecutionSummary[];
   openPositions: OpenPositionSummary[];
   recentTrades: ExecutionTrade[];
@@ -60,6 +63,14 @@ export type DashboardSummaryPayload = {
   comboBoards: MarketComboBoard[];
   comboLeaders: ComboSummary[];
   latestComboInfluence: PredictionResponse[];
+  discoveryBoard: Array<{
+    comboKey: string;
+    setupType: string;
+    hitRate: number;
+    averageConfidence: number;
+    sampleCount: number;
+    markets: string[];
+  }>;
   executionPerformance: PortfolioExecutionSummary;
   paperExecutionPerformance: PortfolioExecutionSummary;
   makerTakerStats: {
@@ -115,6 +126,11 @@ export class DashboardSummaryService {
     return strategyBoards;
   }
 
+  private buildEngineBoards(marketKeys: MarketSummary["marketKey"][]): EngineBoard[] {
+    const engineBoards = this.predictionEngineService.getEngineBoards(marketKeys);
+    return engineBoards;
+  }
+
   private selectStrategyMarketKey(executionNow: MarketExecutionSummary[], marketPerformance: MarketPerformanceSummary[]): string {
     let selectedStrategyMarketKey = "btc:5m";
     const executableMarket = executionNow.find((marketExecution) => marketExecution.decision.isEntryAllowed);
@@ -137,6 +153,61 @@ export class DashboardSummaryService {
     return comboBoards;
   }
 
+  private selectGlobalRegime(markets: MarketSummary[]): CrossAssetRegime | null {
+    let globalRegime: CrossAssetRegime | null = null;
+    for (const market of markets) {
+      const marketRegime = this.marketStateService.getCrossAssetRegime(market.marketKey);
+      if (marketRegime !== null) {
+        if (globalRegime === null || marketRegime.breadthStrength > globalRegime.breadthStrength) {
+          globalRegime = marketRegime;
+        }
+      }
+    }
+    return globalRegime;
+  }
+
+  private buildDiscoveryBoard(latestPredictions: PredictionResponse[]): DashboardSummaryPayload["discoveryBoard"] {
+    const discoveryMap = new Map<
+      string,
+      { comboKey: string; setupType: string; hits: number; totalConfidence: number; sampleCount: number; markets: Set<string> }
+    >();
+    for (const prediction of latestPredictions) {
+      const discoveryKey = `${prediction.winningEngineComboKey}:${prediction.winningSetupType}`;
+      let discoveryEntry = discoveryMap.get(discoveryKey);
+      if (!discoveryEntry) {
+        discoveryEntry = {
+          comboKey: prediction.winningEngineComboKey,
+          setupType: prediction.winningSetupType,
+          hits: 0,
+          totalConfidence: 0,
+          sampleCount: 0,
+          markets: new Set<string>(),
+        };
+        discoveryMap.set(discoveryKey, discoveryEntry);
+      }
+      if (prediction.result.status === "ok") {
+        discoveryEntry.hits += 1;
+      }
+      discoveryEntry.totalConfidence += prediction.confidence;
+      discoveryEntry.sampleCount += 1;
+      discoveryEntry.markets.add(prediction.marketKey);
+    }
+    const discoveryBoard = [...discoveryMap.values()]
+      .map((discoveryEntry) => {
+        return {
+          comboKey: discoveryEntry.comboKey,
+          setupType: discoveryEntry.setupType,
+          hitRate: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.hits / discoveryEntry.sampleCount,
+          averageConfidence: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalConfidence / discoveryEntry.sampleCount,
+          sampleCount: discoveryEntry.sampleCount,
+          markets: [...discoveryEntry.markets],
+        };
+      })
+      .sort((leftEntry, rightEntry) => rightEntry.hitRate - leftEntry.hitRate || rightEntry.sampleCount - leftEntry.sampleCount)
+      .slice(0, 10);
+    return discoveryBoard;
+  }
+
   /**
    * @section public:methods
    */
@@ -157,9 +228,11 @@ export class DashboardSummaryService {
 
   public async buildDashboardSummary(nowTimestamp: number): Promise<DashboardSummaryPayload> {
     const markets = this.marketStateService.getMarketSummaries(nowTimestamp);
+    const globalRegime = this.selectGlobalRegime(markets);
     const latestPredictions = this.predictionEngineService.getRecentResolvedPredictions(20);
     const strategies = this.predictionEngineService.getStrategySummaries();
     const strategyBoards = this.buildStrategyBoards();
+    const engineBoards = this.buildEngineBoards(markets.map((market) => market.marketKey));
     const executionNow = this.executionService.getExecutionSummaries();
     const openPositions = this.executionService.getOpenPositions();
     const recentTrades = this.executionService.getRecentTrades(20);
@@ -171,6 +244,8 @@ export class DashboardSummaryService {
     const comboBoards = comboSummaries.length === 0 ? [] : this.buildComboBoards(marketPerformance);
     const comboLeaders = comboSummaries.slice(0, 12);
     const latestComboInfluence = latestPredictions.filter((prediction) => prediction.comboBreakdown.activeCombos.length > 0).slice(0, 12);
+    const winningCombinations = latestPredictions.slice(0, 12);
+    const discoveryBoard = this.buildDiscoveryBoard(latestPredictions);
     const executionPerformance = this.executionService.getPortfolioSummary();
     const paperExecutionPerformance = executionPerformance;
     const account = await this.executionService.getAccountSummary(nowTimestamp);
@@ -195,10 +270,13 @@ export class DashboardSummaryService {
         averageConfidence,
       },
       markets,
+      globalRegime,
       latestPredictions,
       strategies,
       strategyBoards,
+      engineBoards,
       selectedStrategyMarketKey: this.selectStrategyMarketKey(executionNow, marketPerformance),
+      winningCombinations,
       executionNow,
       openPositions,
       recentTrades,
@@ -207,6 +285,7 @@ export class DashboardSummaryService {
       comboBoards,
       comboLeaders,
       latestComboInfluence,
+      discoveryBoard,
       executionPerformance,
       paperExecutionPerformance,
       makerTakerStats: {

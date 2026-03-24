@@ -5,7 +5,18 @@
 import config from "../config.ts";
 import type { PredictionContext, PredictionDirection } from "../market/market.types.ts";
 import type { StrategyMetricsService } from "./strategy-metrics.service.ts";
-import type { StrategyDefinition, StrategyEvaluationResult, StrategySignal, StrategyTier } from "./strategy.types.ts";
+import type {
+  EngineCombinationResult,
+  EngineId,
+  EngineSourceScope,
+  SetupType,
+  SignalEngineContribution,
+  SignalEngineResult,
+  StrategyDefinition,
+  StrategyEvaluationResult,
+  StrategySignal,
+  StrategyTier,
+} from "./strategy.types.ts";
 
 /**
  * @section class
@@ -106,6 +117,345 @@ export class StrategyEngineService {
     const rawConfidence = 0.5 + Math.min(0.49, Math.abs(weightedScore) * Math.max(0.2, qualityScore));
     const finalConfidence = Math.max(0.5, Math.min(0.99, rawConfidence));
     return { finalDirection, finalConfidence, weightedScore, strategyBreakdown: strategySignals };
+  }
+
+  private buildEngineStrategyIds(engineId: EngineId): string[] {
+    let memberStrategyIds: string[] = [];
+    if (engineId === "breadth_engine") {
+      memberStrategyIds = ["s07", "s17", "s21"];
+    }
+    if (engineId === "propagation_engine") {
+      memberStrategyIds = ["s04", "s16", "s22"];
+    }
+    if (engineId === "local_momentum_engine") {
+      memberStrategyIds = ["s01", "s09", "s12", "s17"];
+    }
+    if (engineId === "local_microstructure_engine") {
+      memberStrategyIds = ["s02", "s03", "s05", "s07", "s10", "s13"];
+    }
+    if (engineId === "mispricing_engine") {
+      memberStrategyIds = ["s06", "s08", "s14", "s15", "s16"];
+    }
+    if (engineId === "reversion_engine") {
+      memberStrategyIds = ["s11", "s13", "s18"];
+    }
+    if (engineId === "meta_engine") {
+      memberStrategyIds = ["s19", "s20"];
+    }
+    return memberStrategyIds;
+  }
+
+  private buildEngineName(engineId: EngineId): string {
+    let engineName = "Meta Engine";
+    if (engineId === "breadth_engine") {
+      engineName = "Cross-Asset Breadth";
+    }
+    if (engineId === "propagation_engine") {
+      engineName = "Leader-Laggard Propagation";
+    }
+    if (engineId === "local_momentum_engine") {
+      engineName = "Local Momentum";
+    }
+    if (engineId === "local_microstructure_engine") {
+      engineName = "Local Microstructure";
+    }
+    if (engineId === "mispricing_engine") {
+      engineName = "Mispricing / Basis";
+    }
+    if (engineId === "reversion_engine") {
+      engineName = "Mean Reversion";
+    }
+    return engineName;
+  }
+
+  private buildDefaultSetup(engineId: EngineId): SetupType {
+    let setupType: SetupType = "research_probe";
+    if (engineId === "breadth_engine") {
+      setupType = "broad_continuation";
+    }
+    if (engineId === "propagation_engine") {
+      setupType = "leader_laggard_catchup";
+    }
+    if (engineId === "local_momentum_engine") {
+      setupType = "local_breakout_confirmed";
+    }
+    if (engineId === "mispricing_engine") {
+      setupType = "mispricing_repricing";
+    }
+    if (engineId === "reversion_engine") {
+      setupType = "fade_failed_cross";
+    }
+    return setupType;
+  }
+
+  private buildSourceScope(engineId: EngineId): EngineSourceScope {
+    let sourceScope: EngineSourceScope = "meta";
+    if (engineId === "breadth_engine" || engineId === "propagation_engine") {
+      sourceScope = "cross_asset";
+    }
+    if (
+      engineId === "local_momentum_engine" ||
+      engineId === "local_microstructure_engine" ||
+      engineId === "mispricing_engine" ||
+      engineId === "reversion_engine"
+    ) {
+      sourceScope = "local";
+    }
+    return sourceScope;
+  }
+
+  private computeMemberContributions(memberSignals: StrategySignal[]): SignalEngineContribution[] {
+    const totalWeight = memberSignals.reduce((aggregatedWeight, strategySignal) => aggregatedWeight + strategySignal.weight, 0);
+    const memberContributions = memberSignals.map((strategySignal) => {
+      const signedContribution = totalWeight === 0 ? 0 : (strategySignal.score * strategySignal.weight) / totalWeight;
+      return {
+        strategyId: strategySignal.strategyId,
+        strategyName: strategySignal.name,
+        score: strategySignal.score,
+        weight: strategySignal.weight,
+        signedContribution,
+      };
+    });
+    return memberContributions;
+  }
+
+  private computeEngineBias(engineId: EngineId, context: PredictionContext): number {
+    const directionSign = context.crossAssetRegime.breadthDirection === "UP" ? 1 : context.crossAssetRegime.breadthDirection === "DOWN" ? -1 : 0;
+    let engineBias = 0;
+    if (engineId === "breadth_engine") {
+      engineBias = directionSign * (context.crossAssetRegime.breadthStrength * 1.35 + context.crossAssetRegime.synchronyScore * 0.2);
+    }
+    if (engineId === "propagation_engine") {
+      engineBias =
+        context.crossAssetRegime.hasLeaderLaggardOpportunity && directionSign !== 0
+          ? directionSign * (context.crossAssetRegime.lagRatio * 0.8 + context.crossAssetRegime.breadthStrength * 0.4)
+          : 0;
+    }
+    if (engineId === "local_momentum_engine") {
+      engineBias = context.current.spotMomentum * 35;
+    }
+    if (engineId === "local_microstructure_engine") {
+      engineBias = context.current.up.imbalance - context.current.down.imbalance;
+    }
+    if (engineId === "mispricing_engine") {
+      engineBias = this.scoreChainlinkBasis(context) * -6 + this.scoreTheoreticalProbabilityGap(context) * 0.7;
+    }
+    if (engineId === "reversion_engine") {
+      engineBias = this.scoreLiquidityShockFade(context) + context.crossAssetRegime.reversalRiskScore * 0.25;
+    }
+    if (engineId === "meta_engine") {
+      engineBias = context.current.quality.score - 0.5;
+    }
+    return engineBias;
+  }
+
+  private computeEngineRegimeFit(engineId: EngineId, context: PredictionContext, direction: PredictionDirection): number {
+    const crossAssetRegime = context.crossAssetRegime;
+    const isDirectionAligned = crossAssetRegime.breadthDirection === "NEUTRAL" ? true : crossAssetRegime.breadthDirection === direction;
+    let regimeFit = 0.85;
+    if (engineId === "breadth_engine") {
+      regimeFit = crossAssetRegime.isDirectional ? 1 + crossAssetRegime.breadthStrength * 0.7 : 0.35;
+    }
+    if (engineId === "propagation_engine") {
+      regimeFit = crossAssetRegime.hasLeaderLaggardOpportunity ? 1.1 + crossAssetRegime.lagRatio * 0.35 : crossAssetRegime.isDirectional ? 0.7 : 0.3;
+    }
+    if (engineId === "local_momentum_engine") {
+      regimeFit = crossAssetRegime.regimeClass === "reversal" ? 0.55 : isDirectionAligned ? 1 + crossAssetRegime.breadthStrength * 0.2 : 0.72;
+    }
+    if (engineId === "local_microstructure_engine") {
+      regimeFit = context.current.quality.score >= 0.75 ? 0.95 : 0.65;
+    }
+    if (engineId === "mispricing_engine") {
+      regimeFit = crossAssetRegime.regimeClass === "directional" && isDirectionAligned ? 0.78 : 1.02;
+    }
+    if (engineId === "reversion_engine") {
+      regimeFit =
+        crossAssetRegime.regimeClass === "reversal" || crossAssetRegime.regimeClass === "fragmented" ? 1.15 : crossAssetRegime.hasStrongBreadth ? 0.55 : 0.85;
+    }
+    if (engineId === "meta_engine") {
+      regimeFit = 0.92 + context.current.quality.score * 0.12;
+    }
+    return regimeFit;
+  }
+
+  private resolveEngineState(score: number, confidence: number, regimeFit: number): SignalEngineResult["state"] {
+    let state: SignalEngineResult["state"] = "inactive";
+    if (regimeFit < 0.4 || confidence < 0.52) {
+      state = "avoid";
+    } else {
+      if (Math.abs(score) >= 0.34 && confidence >= 0.66) {
+        state = "dominant";
+      } else {
+        if (Math.abs(score) >= 0.18 && confidence >= 0.58) {
+          state = "active";
+        } else {
+          if (Math.abs(score) >= 0.08) {
+            state = "weak";
+          }
+        }
+      }
+    }
+    return state;
+  }
+
+  private buildEngineResult(engineId: EngineId, strategySignals: StrategySignal[], context: PredictionContext): SignalEngineResult {
+    const memberStrategyIds = this.buildEngineStrategyIds(engineId);
+    const memberSignals = strategySignals.filter((strategySignal) => memberStrategyIds.includes(strategySignal.strategyId));
+    const totalWeight = memberSignals.reduce((aggregatedWeight, strategySignal) => aggregatedWeight + strategySignal.weight, 0);
+    const baseScore =
+      totalWeight === 0
+        ? 0
+        : memberSignals.reduce((aggregatedScore, strategySignal) => aggregatedScore + strategySignal.score * strategySignal.weight, 0) / totalWeight;
+    const biasedScore = baseScore + this.computeEngineBias(engineId, context);
+    const direction: PredictionDirection = biasedScore >= 0 ? "UP" : "DOWN";
+    const regimeFit = this.computeEngineRegimeFit(engineId, context, direction);
+    const score = biasedScore * regimeFit;
+    const confidence = Math.max(0.5, Math.min(0.99, 0.5 + Math.abs(score) * 0.45));
+    const state = this.resolveEngineState(score, confidence, regimeFit);
+    const isActive = state === "weak" || state === "active" || state === "dominant";
+    return {
+      engineId,
+      name: this.buildEngineName(engineId),
+      setupType: this.buildDefaultSetup(engineId),
+      direction,
+      score,
+      confidence,
+      isActive,
+      state,
+      activationReason: isActive ? `${context.crossAssetRegime.regimeId} fit ${regimeFit.toFixed(2)}` : null,
+      blockingReason: isActive ? null : `regime fit ${regimeFit.toFixed(2)} too weak`,
+      regimeFit,
+      memberStrategyIds,
+      memberContributions: this.computeMemberContributions(memberSignals),
+      sourceScope: this.buildSourceScope(engineId),
+    };
+  }
+
+  private buildEngineBreakdown(strategySignals: StrategySignal[], context: PredictionContext): SignalEngineResult[] {
+    const engineIds: EngineId[] = [
+      "breadth_engine",
+      "propagation_engine",
+      "local_momentum_engine",
+      "local_microstructure_engine",
+      "mispricing_engine",
+      "reversion_engine",
+      "meta_engine",
+    ];
+    const engineBreakdown = engineIds.map((engineId) => this.buildEngineResult(engineId, strategySignals, context));
+    return engineBreakdown;
+  }
+
+  private requireEngineResult(engineBreakdown: SignalEngineResult[], engineId: EngineId): SignalEngineResult | null {
+    const signalEngineResult = engineBreakdown.find((engineResult) => engineResult.engineId === engineId) ?? null;
+    return signalEngineResult;
+  }
+
+  private buildCombinationCandidates(engineBreakdown: SignalEngineResult[], context: PredictionContext): EngineCombinationResult[] {
+    const candidateProfiles: Array<{ setupType: SetupType; engineIds: EngineId[]; reason: string }> = [
+      {
+        setupType: "broad_continuation",
+        engineIds: ["breadth_engine", "local_momentum_engine", "local_microstructure_engine"],
+        reason: "global breadth leads continuation",
+      },
+      {
+        setupType: "leader_laggard_catchup",
+        engineIds: ["breadth_engine", "propagation_engine", "local_momentum_engine"],
+        reason: "leaders move first, laggard catches up",
+      },
+      {
+        setupType: "local_breakout_confirmed",
+        engineIds: ["local_momentum_engine", "local_microstructure_engine", "meta_engine"],
+        reason: "local continuation confirmed by structure",
+      },
+      { setupType: "mispricing_repricing", engineIds: ["mispricing_engine", "meta_engine"], reason: "basis and theoretical gap point to repricing" },
+      {
+        setupType: "fade_failed_cross",
+        engineIds: ["reversion_engine", "local_microstructure_engine", "meta_engine"],
+        reason: "cross looks exhausted and fades",
+      },
+    ];
+    const candidateResults: EngineCombinationResult[] = [];
+    for (const candidateProfile of candidateProfiles) {
+      const memberEngines = candidateProfile.engineIds
+        .map((engineId) => this.requireEngineResult(engineBreakdown, engineId))
+        .filter((engineResult) => engineResult?.isActive) as SignalEngineResult[];
+      if (memberEngines.length >= Math.min(2, candidateProfile.engineIds.length)) {
+        candidateResults.push(this.buildCombinationResult(candidateProfile.setupType, memberEngines, candidateProfile.reason, context));
+      }
+    }
+    if (candidateResults.length === 0) {
+      const fallbackEngine = [...engineBreakdown].sort((leftEngine, rightEngine) => Math.abs(rightEngine.score) - Math.abs(leftEngine.score))[0];
+      if (fallbackEngine) {
+        candidateResults.push(this.buildCombinationResult("research_probe", [fallbackEngine], "fallback research probe", context));
+      }
+    }
+    return candidateResults;
+  }
+
+  private computeDiversityScore(memberEngines: SignalEngineResult[]): number {
+    const sourceScopes = [...new Set(memberEngines.map((engineResult) => engineResult.sourceScope))];
+    const diversityScore = sourceScopes.length / Math.max(1, memberEngines.length);
+    return diversityScore;
+  }
+
+  private computeSetupRegimeFit(setupType: SetupType, context: PredictionContext, direction: PredictionDirection): number {
+    const crossAssetRegime = context.crossAssetRegime;
+    const isDirectionAligned = crossAssetRegime.breadthDirection === "NEUTRAL" ? true : crossAssetRegime.breadthDirection === direction;
+    let regimeFitScore = 0.8;
+    if (setupType === "broad_continuation") {
+      regimeFitScore = crossAssetRegime.regimeClass === "directional" && isDirectionAligned ? 1.1 + crossAssetRegime.breadthStrength * 0.35 : 0.3;
+    }
+    if (setupType === "leader_laggard_catchup") {
+      regimeFitScore = crossAssetRegime.hasLeaderLaggardOpportunity ? 1.15 + crossAssetRegime.lagRatio * 0.2 : 0.35;
+    }
+    if (setupType === "local_breakout_confirmed") {
+      regimeFitScore = crossAssetRegime.regimeClass === "reversal" ? 0.45 : isDirectionAligned ? 1 : 0.75;
+    }
+    if (setupType === "mispricing_repricing") {
+      regimeFitScore = crossAssetRegime.regimeClass === "directional" && !isDirectionAligned ? 0.68 : 1;
+    }
+    if (setupType === "fade_failed_cross") {
+      regimeFitScore = crossAssetRegime.regimeClass === "reversal" || crossAssetRegime.regimeClass === "fragmented" ? 1.08 : 0.55;
+    }
+    return regimeFitScore;
+  }
+
+  private buildCombinationResult(
+    setupType: SetupType,
+    memberEngines: SignalEngineResult[],
+    reason: string,
+    context: PredictionContext,
+  ): EngineCombinationResult {
+    const rawScore = memberEngines.reduce((aggregatedScore, engineResult) => aggregatedScore + engineResult.score, 0) / Math.max(1, memberEngines.length);
+    const direction: PredictionDirection = rawScore >= 0 ? "UP" : "DOWN";
+    const diversityScore = this.computeDiversityScore(memberEngines);
+    const regimeFitScore = this.computeSetupRegimeFit(setupType, context, direction);
+    const score = rawScore * (0.85 + diversityScore * 0.3) * regimeFitScore;
+    const confidence = Math.max(0.5, Math.min(0.99, 0.5 + Math.abs(score) * 0.42));
+    const comboKey = memberEngines.map((engineResult) => engineResult.engineId).join("+");
+    return {
+      comboKey,
+      engineIds: memberEngines.map((engineResult) => engineResult.engineId),
+      setupType,
+      direction,
+      score,
+      confidence,
+      diversityScore,
+      regimeFitScore,
+      reason,
+    };
+  }
+
+  private selectWinningCombination(candidateResults: EngineCombinationResult[]): EngineCombinationResult {
+    const winningCombination = [...candidateResults].sort((leftCandidate, rightCandidate) => {
+      const scoreDelta = Math.abs(rightCandidate.score) - Math.abs(leftCandidate.score);
+      let comparatorResult = rightCandidate.diversityScore - leftCandidate.diversityScore;
+      if (scoreDelta !== 0) {
+        comparatorResult = scoreDelta;
+      }
+      return comparatorResult;
+    })[0] as EngineCombinationResult;
+    return winningCombination;
   }
 
   private shouldEscalate(finalConfidence: number, weightedScore: number): boolean {
@@ -419,17 +769,27 @@ export class StrategyEngineService {
     const mediumAggregate = this.aggregateSignals([...lowSignals, ...mediumSignals], context.current.quality.score);
     const shouldEscalateToHigh = this.shouldEscalate(mediumAggregate.finalConfidence, mediumAggregate.weightedScore);
     const highSignals = shouldEscalateToHigh ? this.evaluateTier("high", context, [...lowSignals, ...mediumSignals]) : [];
-    const aggregate = this.aggregateSignals([...lowSignals, ...mediumSignals, ...highSignals], context.current.quality.score);
+    const strategyBreakdown = [...lowSignals, ...mediumSignals, ...highSignals];
+    const engineBreakdown = this.buildEngineBreakdown(strategyBreakdown, context);
+    const candidateResults = this.buildCombinationCandidates(engineBreakdown, context);
+    const winningCombination = this.selectWinningCombination(candidateResults);
     return {
       marketKey: context.marketKey,
-      finalDirection: aggregate.finalDirection,
-      finalConfidence: aggregate.finalConfidence,
-      weightedScore: aggregate.weightedScore,
-      baseWeightedScore: aggregate.weightedScore,
-      adjustedWeightedScore: aggregate.weightedScore,
-      baseConfidence: aggregate.finalConfidence,
-      adjustedConfidence: aggregate.finalConfidence,
-      strategyBreakdown: aggregate.strategyBreakdown,
+      finalDirection: winningCombination.direction,
+      finalConfidence: winningCombination.confidence,
+      weightedScore: winningCombination.score,
+      baseWeightedScore: winningCombination.score,
+      adjustedWeightedScore: winningCombination.score,
+      baseConfidence: winningCombination.confidence,
+      adjustedConfidence: winningCombination.confidence,
+      strategyBreakdown,
+      engineBreakdown,
+      winningCombination,
+      winningSetupType: winningCombination.setupType,
+      winningEngineIds: winningCombination.engineIds,
+      winningEngineComboKey: winningCombination.comboKey,
+      winningEngineComboScore: winningCombination.score,
+      combinationReason: winningCombination.reason,
       qualityScore: context.current.quality.score,
       escalatedToMedium: shouldEscalateToMedium,
       escalatedToHigh: shouldEscalateToHigh,

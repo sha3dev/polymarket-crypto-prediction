@@ -3,6 +3,7 @@
  */
 
 import type { AssetSymbol, CrossAssetBreadthDirection, MarketKey, MarketWindow, PredictionDirection } from "../market/market.types.ts";
+import type { EngineId, SetupType } from "../strategy/strategy.types.ts";
 
 /**
  * @section types
@@ -46,6 +47,12 @@ export type ExecutionDecision = {
   selectedComboKey: string | null;
   selectedComboSize: 2 | 3 | null;
   selectedComboSource: ComboSource | null;
+  winningSetupType: SetupType | null;
+  winningEngineIds: EngineId[];
+  winningEngineComboKey: string | null;
+  winningEngineComboScore: number | null;
+  regimeId: string | null;
+  executionProfile: string | null;
   gateFailures: string[];
   generatedAt: number | null;
 };
