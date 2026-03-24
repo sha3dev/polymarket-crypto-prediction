@@ -96,21 +96,11 @@ export class DashboardViewService {
         display: block;
         font-size: 24px;
       }
-      .overview-grid {
+      .dashboard-layout {
         display: grid;
         grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.95fr);
         gap: 18px;
         align-items: start;
-      }
-      .support-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 18px;
-        align-items: start;
-        margin-top: 18px;
-      }
-      .health-section {
-        margin-top: 18px;
       }
       .stack {
         display: grid;
@@ -121,8 +111,8 @@ export class DashboardViewService {
         background: var(--panel);
         padding: 18px;
       }
-      .panel-tall { min-height: 420px; }
-      .panel-medium { min-height: 308px; }
+      .panel-tall { min-height: 300px; }
+      .panel-medium { min-height: 220px; }
       .panel-compact { min-height: 132px; }
       .panel-scroll {
         overflow: auto;
@@ -231,7 +221,7 @@ export class DashboardViewService {
       }
       @media (max-width: 1100px) {
         .hero-head { grid-template-columns: 1fr; }
-        .overview-grid, .support-grid { grid-template-columns: 1fr; }
+        .dashboard-layout { grid-template-columns: 1fr; }
         .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .panel-tall, .panel-medium, .panel-compact { min-height: 0; }
         .panel-scroll { max-height: none; }
@@ -262,7 +252,7 @@ export class DashboardViewService {
           </div>
         </article>
       </section>
-      <section class="overview-grid">
+      <section class="dashboard-layout">
         <div class="stack">
           <article class="panel panel-compact">
             <h2><span class="label-with-hint"><span class="hint-text" title="Current state for all eight monitored markets, including token midpoints, cooldown, and data quality.">Markets</span></span></h2>
@@ -278,6 +268,11 @@ export class DashboardViewService {
             <h2><span class="label-with-hint"><span class="hint-text" title="Most recent predictions that completed through a paper-trade TP or SL exit.">Resolved Predictions</span></span></h2>
             <p class="tiny panel-intro">Recent predictions that already finished their lifecycle. Use it to judge whether the engine is reading direction well once ideas are forced to end as TP or SL outcomes.</p>
             <div id="predictions" class="loading panel-scroll">Loading resolved predictions…</div>
+          </article>
+          <article class="panel panel-medium">
+            <h2><span class="label-with-hint"><span class="hint-text" title="How much recent predictions changed after combo boosts or combo disagreement penalties.">Combo Influence</span></span></h2>
+            <p class="tiny panel-intro">Shows how dynamic pairs and trios are altering the base signal. If confidence moves a lot here, combos are heavily shaping the final view instead of just the standalone strategies.</p>
+            <div id="combo-influence" class="loading panel-scroll">Loading combo influence…</div>
           </article>
         </div>
         <div class="stack">
@@ -296,14 +291,6 @@ export class DashboardViewService {
             <p class="tiny panel-intro">Best dynamic pairs and trios discovered by the engine. This is the fast way to see which combinations are strong enough to open the combo gate and support a real execution decision.</p>
             <div id="combos" class="loading panel-scroll">Loading combo ranking…</div>
           </article>
-        </div>
-      </section>
-      <section class="support-grid">
-          <article class="panel panel-medium">
-            <h2><span class="label-with-hint"><span class="hint-text" title="How much recent predictions changed after combo boosts or combo disagreement penalties.">Combo Influence</span></span></h2>
-            <p class="tiny panel-intro">Shows how dynamic pairs and trios are altering the base signal. If confidence moves a lot here, combos are heavily shaping the final view instead of just the standalone strategies.</p>
-            <div id="combo-influence" class="loading panel-scroll">Loading combo influence…</div>
-          </article>
           <article class="panel panel-medium">
             <h2><span class="label-with-hint"><span class="hint-text" title="Most recent closed paper trades, including maker/taker styles and exit reasons.">Recent Trades</span></span></h2>
             <p class="tiny panel-intro">Closed paper trades only. It shows what the system really executed, how those trades ended, and whether execution quality is matching what the research layer suggests.</p>
@@ -314,13 +301,12 @@ export class DashboardViewService {
             <p class="tiny panel-intro">Current paper positions that are still alive. Use this panel to understand active exposure, where TP and SL sit, and what risk is still on the table right now.</p>
             <div id="positions" class="loading panel-scroll">Loading open positions…</div>
           </article>
-      </section>
-      <section class="health-section">
           <article class="panel panel-compact">
             <h2><span class="label-with-hint"><span class="hint-text" title="Ingestion freshness and service runtime health indicators.">Health</span></span></h2>
             <p class="tiny panel-intro">Operational status of the feed and the service itself. If another panel looks suspicious, check here first to confirm the data is fresh and the runtime is behaving normally.</p>
             <div id="health" class="loading">Loading service health…</div>
           </article>
+        </div>
       </section>
     </div>
     <script>
@@ -340,6 +326,22 @@ export class DashboardViewService {
 
       function renderTableShell(tableHtml) {
         return '<div class="panel-scroll">' + tableHtml + '</div>';
+      }
+
+      function replacePanelContent(panelId, html) {
+        const panelElement = document.getElementById(panelId);
+        const previousScrollElement = panelElement ? panelElement.querySelector('.panel-scroll') : null;
+        const previousScrollTop = previousScrollElement ? previousScrollElement.scrollTop : 0;
+        const previousScrollLeft = previousScrollElement ? previousScrollElement.scrollLeft : 0;
+        if (panelElement) {
+          panelElement.classList.remove("loading");
+          panelElement.innerHTML = html;
+          const nextScrollElement = panelElement.querySelector('.panel-scroll');
+          if (nextScrollElement) {
+            nextScrollElement.scrollTop = previousScrollTop;
+            nextScrollElement.scrollLeft = previousScrollLeft;
+          }
+        }
       }
 
       function renderConvictionLabel(positionSizeSuggestion) {
@@ -755,8 +757,7 @@ export class DashboardViewService {
             '<td><span class="quality-cell" title="' + qualityDetails + '"><span>' + formatNumber(market.quality.score, 2) + '</span><div class="quality-bar"><span style="width:' + qualityWidth + '%"></span></div></span></td>' +
             '</tr>';
         }).join("");
-        document.getElementById("markets").classList.remove("loading");
-        document.getElementById("markets").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP mid', 'Current midpoint for the UP token. Falls back to price only outside the midpoint field, not in this display.') + '</th><th>' + renderHintLabel('DOWN mid', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent trading score for this market only. It reflects local hit rate, PnL, drawdown, and sample size over the rolling market-score window.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset regime for this window. NEU means neutral. WK means directional but not yet strong enough to open the strong-breadth gate. STR means strong breadth.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        replacePanelContent("markets", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP mid', 'Current midpoint for the UP token. Falls back to price only outside the midpoint field, not in this display.') + '</th><th>' + renderHintLabel('DOWN mid', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent trading score for this market only. It reflects local hit rate, PnL, drawdown, and sample size over the rolling market-score window.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset regime for this window. NEU means neutral. WK means directional but not yet strong enough to open the strong-breadth gate. STR means strong breadth.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderPredictions(summary) {
@@ -784,8 +785,7 @@ export class DashboardViewService {
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
             '</tr>';
         }).join("");
-        document.getElementById("predictions").classList.remove("loading");
-        document.getElementById("predictions").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final ensemble direction that was traded.') + '</th><th>' + renderHintLabel('Conf', 'Normalized ensemble confidence between 0 and 1.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime attached to this prediction at creation time. WK means directional but weak. STR means strong breadth.') + '</th><th>' + renderHintLabel('Lead', 'Leader market or lag marker. LAG means this market looked like a catch-up candidate.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final ensemble direction that was traded.') + '</th><th>' + renderHintLabel('Conf', 'Normalized ensemble confidence between 0 and 1.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime attached to this prediction at creation time. WK means directional but weak. STR means strong breadth.') + '</th><th>' + renderHintLabel('Lead', 'Leader market or lag marker. LAG means this market looked like a catch-up candidate.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderStrategies(summary) {
@@ -815,8 +815,7 @@ export class DashboardViewService {
             '<td><span title="' + (comboCode === '—' ? 'no current strong combo' : 'member of a strong combo on this market') + '">' + comboCode + '</span></td>' +
             '</tr>';
         }).join("");
-        document.getElementById("strategies").classList.remove("loading");
-        document.getElementById("strategies").innerHTML =
+        replacePanelContent("strategies",
           '<div class="tiny" style="margin-bottom:8px">' +
             renderHintLabel('Selected market', 'This strategy board uses local weights and local rolling performance for one market only.') +
             ': ' +
@@ -831,7 +830,7 @@ export class DashboardViewService {
             ' · lag ' +
             (selectedPrediction ? formatNumber(selectedPrediction.crossAssetRegime.lagRatio, 2) : '—') +
             '</div>' +
-          renderTableShell('<table><thead><tr><th>' + renderHintLabel('Str', 'Strategy name, internal id, cost tier, and hover hint with its role in the ensemble.') + '</th><th>' + renderHintLabel('Wgt', 'Current market-local adaptive ensemble weight.') + '</th><th>' + renderHintLabel('Hit', 'Share of resolved research predictions this strategy got right inside the rolling time window for the selected market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative research PnL proxy for the selected market.') + '</th><th>' + renderHintLabel('Avg', 'Average research / execution PnL proxy per resolved signal.') + '</th><th>' + renderHintLabel('Stk', 'Positive for consecutive wins, negative for consecutive losses.') + '</th><th>' + renderHintLabel('Cx', 'Combo marker. C2 means the strategy belongs to a strong pair, C3 to a strong trio.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+          renderTableShell('<table><thead><tr><th>' + renderHintLabel('Str', 'Strategy name, internal id, cost tier, and hover hint with its role in the ensemble.') + '</th><th>' + renderHintLabel('Wgt', 'Current market-local adaptive ensemble weight.') + '</th><th>' + renderHintLabel('Hit', 'Share of resolved research predictions this strategy got right inside the rolling time window for the selected market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative research PnL proxy for the selected market.') + '</th><th>' + renderHintLabel('Avg', 'Average research / execution PnL proxy per resolved signal.') + '</th><th>' + renderHintLabel('Stk', 'Positive for consecutive wins, negative for consecutive losses.') + '</th><th>' + renderHintLabel('Cx', 'Combo marker. C2 means the strategy belongs to a strong pair, C3 to a strong trio.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderExecution(summary) {
@@ -877,8 +876,7 @@ export class DashboardViewService {
             '<td><span class="truncate-cell" title="' + whyNot + '">' + reasonCodes + '</span></td>' +
             '</tr>';
         }).join("");
-        document.getElementById("execution").classList.remove("loading");
-        document.getElementById("execution").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Action', 'Clear action right now: BUY UP, BUY DOWN, or NO TRADE.') + '</th><th>' + renderHintLabel('Ref px', 'Current token price the execution overlay uses as the reference entry level.') + '</th><th>' + renderHintLabel('Size', 'Planned order size in shares and notional. Polymarket minimums require at least 5 shares and at least $1.') + '</th><th>' + renderHintLabel('Target', 'Take-profit price for this potential trade.') + '</th><th>' + renderHintLabel('Risk', 'Stop-loss price for this potential trade.') + '</th><th>' + renderHintLabel('Exec', 'Compact execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Scores', 'Research / execution / effective execution score for this market.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window. Strong aligned market-wide moves are shown as UP or DOWN plus strength.') + '</th><th>' + renderHintLabel('Combo', 'Whether the combo gate is open or blocked.') + '</th><th>' + renderHintLabel('Combo key', 'Selected pair or trio used by the execution gate.') + '</th><th>' + renderHintLabel('Mkt score', 'Effective execution score followed by recent trade count.') + '</th><th>' + renderHintLabel('Conviction', 'Simplified trade strength derived from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Action', 'Clear action right now: BUY UP, BUY DOWN, or NO TRADE.') + '</th><th>' + renderHintLabel('Ref px', 'Current token price the execution overlay uses as the reference entry level.') + '</th><th>' + renderHintLabel('Size', 'Planned order size in shares and notional. Polymarket minimums require at least 5 shares and at least $1.') + '</th><th>' + renderHintLabel('Target', 'Take-profit price for this potential trade.') + '</th><th>' + renderHintLabel('Risk', 'Stop-loss price for this potential trade.') + '</th><th>' + renderHintLabel('Exec', 'Compact execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Scores', 'Research / execution / effective execution score for this market.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window. Strong aligned market-wide moves are shown as UP or DOWN plus strength.') + '</th><th>' + renderHintLabel('Combo', 'Whether the combo gate is open or blocked.') + '</th><th>' + renderHintLabel('Combo key', 'Selected pair or trio used by the execution gate.') + '</th><th>' + renderHintLabel('Mkt score', 'Effective execution score followed by recent trade count.') + '</th><th>' + renderHintLabel('Conviction', 'Simplified trade strength derived from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderMarketPnl(summary) {
@@ -894,8 +892,7 @@ export class DashboardViewService {
             '<td><span title="' + marketPerformance.status.replace('_', ' ') + '">' + renderMarketStatusCode(marketPerformance.status) + '</span></td>' +
             '</tr>';
         }).join('');
-        document.getElementById('market-pnl').classList.remove('loading');
-        document.getElementById('market-pnl').innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key.') + '</th><th>' + renderHintLabel('Trd', 'Number of recent closed paper trades in this market.') + '</th><th>' + renderHintLabel('Hit', 'Recent paper trade hit rate in this market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative recent paper net PnL for this market.') + '</th><th>' + renderHintLabel('Avg', 'Average net PnL per trade in this market.') + '</th><th>' + renderHintLabel('DD', 'Maximum rolling drawdown proxy for this market.') + '</th><th>' + renderHintLabel('Scr', 'Research / execution / effective execution score.') + '</th><th>' + renderHintLabel('St', 'Market status. WRM = warming up, RSC = research only, TRD = tradable, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        replacePanelContent('market-pnl', renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key.') + '</th><th>' + renderHintLabel('Trd', 'Number of recent closed paper trades in this market.') + '</th><th>' + renderHintLabel('Hit', 'Recent paper trade hit rate in this market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative recent paper net PnL for this market.') + '</th><th>' + renderHintLabel('Avg', 'Average net PnL per trade in this market.') + '</th><th>' + renderHintLabel('DD', 'Maximum rolling drawdown proxy for this market.') + '</th><th>' + renderHintLabel('Scr', 'Research / execution / effective execution score.') + '</th><th>' + renderHintLabel('St', 'Market status. WRM = warming up, RSC = research only, TRD = tradable, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderCombos(summary) {
@@ -912,10 +909,9 @@ export class DashboardViewService {
             '<td><span title="' + comboSummary.status + '">' + renderMarketStatusCode(comboSummary.status) + '</span></td>' +
             '</tr>';
         }).join('');
-        document.getElementById('combos').classList.remove('loading');
-        document.getElementById('combos').innerHTML = summary.comboLeaders.length === 0
+        replacePanelContent('combos', summary.comboLeaders.length === 0
           ? '<div class="tiny">No combo history yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the combo.') + '</th><th>' + renderHintLabel('Combo', 'Pair or trio of strategies tracked together.') + '</th><th>' + renderHintLabel('Sz', 'Combo size: 2 or 3.') + '</th><th>' + renderHintLabel('Score', 'Research score / effective execution score for the combo.') + '</th><th>' + renderHintLabel('Lift', 'Average PnL lift over the best member of the combo.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative combo PnL proxy in the rolling window.') + '</th><th>' + renderHintLabel('Hit', 'Combo hit rate in the rolling window.') + '</th><th>' + renderHintLabel('N', 'Number of combo observations in the rolling window.') + '</th><th>' + renderHintLabel('St', 'Combo status. WRM = warming up, RSC/TRD = execution source, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the combo.') + '</th><th>' + renderHintLabel('Combo', 'Pair or trio of strategies tracked together.') + '</th><th>' + renderHintLabel('Sz', 'Combo size: 2 or 3.') + '</th><th>' + renderHintLabel('Score', 'Research score / effective execution score for the combo.') + '</th><th>' + renderHintLabel('Lift', 'Average PnL lift over the best member of the combo.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative combo PnL proxy in the rolling window.') + '</th><th>' + renderHintLabel('Hit', 'Combo hit rate in the rolling window.') + '</th><th>' + renderHintLabel('N', 'Number of combo observations in the rolling window.') + '</th><th>' + renderHintLabel('St', 'Combo status. WRM = warming up, RSC/TRD = execution source, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderComboInfluence(summary) {
@@ -935,10 +931,9 @@ export class DashboardViewService {
             '<td>' + prediction.direction + '</td>' +
             '</tr>';
         }).join('');
-        document.getElementById('combo-influence').classList.remove('loading');
-        document.getElementById('combo-influence').innerHTML = summary.latestComboInfluence.length === 0
+        replacePanelContent('combo-influence', summary.latestComboInfluence.length === 0
           ? '<div class="tiny">No combo-influenced predictions yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Base', 'Weighted score before combo logic.') + '</th><th>' + renderHintLabel('Adj', 'Weighted score after combo logic.') + '</th><th>' + renderHintLabel('Bst', 'Total score boost from agreeing combos.') + '</th><th>' + renderHintLabel('Pen', 'Total confidence penalty from disagreeing combos.') + '</th><th>' + renderHintLabel('Combo', 'Combo with the strongest visible effect on this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final post-combo prediction direction.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Base', 'Weighted score before combo logic.') + '</th><th>' + renderHintLabel('Adj', 'Weighted score after combo logic.') + '</th><th>' + renderHintLabel('Bst', 'Total score boost from agreeing combos.') + '</th><th>' + renderHintLabel('Pen', 'Total confidence penalty from disagreeing combos.') + '</th><th>' + renderHintLabel('Combo', 'Combo with the strongest visible effect on this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final post-combo prediction direction.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderPositions(summary) {
@@ -955,10 +950,9 @@ export class DashboardViewService {
             '<td>' + formatNumber(position.stopLossPrice) + '</td>' +
             '</tr>';
         }).join("");
-        document.getElementById("positions").classList.remove("loading");
-        document.getElementById("positions").innerHTML = summary.openPositions.length === 0
+        replacePanelContent("positions", summary.openPositions.length === 0
           ? '<div class="tiny">No open paper positions.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the open paper position.') + '</th><th>' + renderHintLabel('Side', 'Token currently held: UP or DOWN.') + '</th><th>' + renderHintLabel('Status', 'Position lifecycle state, including maker-pending statuses.') + '</th><th>' + renderHintLabel('Qty', 'Position size in shares. The execution overlay respects the 5-share minimum.') + '</th><th>' + renderHintLabel('Entry fill', 'Simulated fill price used to open the position.') + '</th><th>' + renderHintLabel('Live px', 'Current token midpoint or fallback price for mark-to-market.') + '</th><th>' + renderHintLabel('uPnL', 'Unrealized token-price PnL after scaling by the current share count, before paper execution costs.') + '</th><th>' + renderHintLabel('TP', 'Take-profit target for this open position.') + '</th><th>' + renderHintLabel('SL', 'Stop-loss level for this open position.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the open paper position.') + '</th><th>' + renderHintLabel('Side', 'Token currently held: UP or DOWN.') + '</th><th>' + renderHintLabel('Status', 'Position lifecycle state, including maker-pending statuses.') + '</th><th>' + renderHintLabel('Qty', 'Position size in shares. The execution overlay respects the 5-share minimum.') + '</th><th>' + renderHintLabel('Entry fill', 'Simulated fill price used to open the position.') + '</th><th>' + renderHintLabel('Live px', 'Current token midpoint or fallback price for mark-to-market.') + '</th><th>' + renderHintLabel('uPnL', 'Unrealized token-price PnL after scaling by the current share count, before paper execution costs.') + '</th><th>' + renderHintLabel('TP', 'Take-profit target for this open position.') + '</th><th>' + renderHintLabel('SL', 'Stop-loss level for this open position.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderTrades(summary) {
@@ -974,10 +968,9 @@ export class DashboardViewService {
             '<td>' + formatNumber(trade.holdTimeMs, 0) + '</td>' +
             '</tr>';
         }).join("");
-        document.getElementById("trades").classList.remove("loading");
-        document.getElementById("trades").innerHTML = summary.recentTrades.length === 0
+        replacePanelContent("trades", summary.recentTrades.length === 0
           ? '<div class="tiny">No closed paper trades yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the closed paper trade.') + '</th><th>' + renderHintLabel('Side', 'Token that was bought for the trade.') + '</th><th>' + renderHintLabel('Qty', 'Filled share count used for the trade. Polymarket minimums require at least 5 shares and at least $1 of notional.') + '</th><th>' + renderHintLabel('In', 'Entry execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Out', 'Exit execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Exit', 'Exit reason code. TP = take profit, SL = stop loss.') + '</th><th>' + renderHintLabel('Net PnL', 'Realized simulated PnL after proxy entry and exit costs, scaled by the executed share count.') + '</th><th>' + renderHintLabel('Hold time', 'Milliseconds between entry fill and exit fill.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and window of the closed paper trade.') + '</th><th>' + renderHintLabel('Side', 'Token that was bought for the trade.') + '</th><th>' + renderHintLabel('Qty', 'Filled share count used for the trade. Polymarket minimums require at least 5 shares and at least $1 of notional.') + '</th><th>' + renderHintLabel('In', 'Entry execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Out', 'Exit execution code. M = maker, T = taker.') + '</th><th>' + renderHintLabel('Exit', 'Exit reason code. TP = take profit, SL = stop loss.') + '</th><th>' + renderHintLabel('Net PnL', 'Realized simulated PnL after proxy entry and exit costs, scaled by the executed share count.') + '</th><th>' + renderHintLabel('Hold time', 'Milliseconds between entry fill and exit fill.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderHealth(summary) {
