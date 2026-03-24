@@ -164,6 +164,21 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves outcomes, 
   assert.equal(strategiesResponse.status, 200);
   assert.equal(strategiesJson.length, 20);
   assert.ok(strategiesJson.some((strategy) => strategy.totalResolved > 0));
+  assert.equal(strategiesJson[0]?.marketKey, null);
+
+  const btcStrategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies?asset=btc&window=5m`);
+  const btcStrategiesJson = (await btcStrategiesResponse.json()) as StrategySummary[];
+  assert.equal(btcStrategiesResponse.status, 200);
+  assert.equal(btcStrategiesJson.length, 20);
+  assert.equal(btcStrategiesJson[0]?.marketKey, "btc:5m");
+  assert.ok(btcStrategiesJson.some((strategy) => strategy.totalResolved > 0));
+
+  const solStrategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies?asset=sol&window=5m`);
+  const solStrategiesJson = (await solStrategiesResponse.json()) as StrategySummary[];
+  assert.equal(solStrategiesResponse.status, 200);
+  assert.equal(solStrategiesJson.length, 20);
+  assert.equal(solStrategiesJson[0]?.marketKey, "sol:5m");
+  assert.ok(solStrategiesJson.every((strategy) => strategy.totalResolved === 0));
 
   const executionResponse = await fetch(`http://127.0.0.1:${address.port}/v1/execution`);
   const executionJson = await executionResponse.json();
@@ -186,6 +201,8 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves outcomes, 
 
   const invalidLimitResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=999`);
   assert.equal(invalidLimitResponse.status, 400);
+  const invalidStrategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies?asset=btc`);
+  assert.equal(invalidStrategiesResponse.status, 400);
   const invalidTradeLimitResponse = await fetch(`http://127.0.0.1:${address.port}/v1/trades?limit=999`);
   assert.equal(invalidTradeLimitResponse.status, 400);
 

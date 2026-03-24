@@ -40,6 +40,7 @@ export type StrategySummary = {
   name: string;
   tier: StrategyTier;
   description: string;
+  marketKey: MarketKey | null;
   weight: number;
   isEnabled: boolean;
   totalResolved: number;

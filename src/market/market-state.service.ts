@@ -187,30 +187,48 @@ export class MarketStateService {
     const qualityIssues: string[] = [];
     const hasFreshTokens = this.hasFreshToken(up.ageMs) && this.hasFreshToken(down.ageMs);
     const hasFreshSpot = spotVenues.some((spotVenue) => this.hasFreshSpot(spotVenue.ageMs));
-    let score = slug ? 1 : 0;
+    const freshSpotVenues = spotVenues.filter((spotVenue) => this.hasFreshSpot(spotVenue.ageMs));
+    const freshSpotCoverage = spotVenues.length === 0 ? 0 : freshSpotVenues.length / spotVenues.length;
+    const worstTokenAge = Math.max(up.ageMs ?? config.TOKEN_MAX_AGE_MS * 3, down.ageMs ?? config.TOKEN_MAX_AGE_MS * 3);
+    const tokenAgePenalty = Math.min(0.28, (worstTokenAge / config.TOKEN_MAX_AGE_MS) * 0.14);
+    const averageFreshSpotAge =
+      freshSpotVenues.length === 0
+        ? config.SPOT_MAX_AGE_MS * 3
+        : freshSpotVenues.reduce((aggregatedAge, spotVenue) => aggregatedAge + (spotVenue.ageMs ?? config.SPOT_MAX_AGE_MS * 3), 0) / freshSpotVenues.length;
+    const spotAgePenalty = Math.min(0.14, (averageFreshSpotAge / config.SPOT_MAX_AGE_MS) * 0.08);
+    const spotCoveragePenalty = (1 - freshSpotCoverage) * 0.18;
+    const upSpreadPenalty = this.computeTokenSpreadPenalty(up.spread);
+    const downSpreadPenalty = this.computeTokenSpreadPenalty(down.spread);
+    const midpointPenalty = this.computeMidpointPenalty(up.midpoint, down.midpoint);
+    const chainlinkPenalty = this.computeChainlinkPenalty(chainlinkAgeMs);
+    const dispersionPenalty = this.computeSpotDispersionPenalty(spotVenues);
+    let score = slug ? 0.96 : 0;
     if (!slug) {
       qualityIssues.push("market_inactive");
     }
     if (!hasFreshTokens) {
       qualityIssues.push("token_stale");
-      score -= 0.35;
     }
     if (!hasFreshSpot) {
       qualityIssues.push("spot_stale");
-      score -= 0.2;
     }
-    if ((up.spread ?? 0) > 0.1 || (down.spread ?? 0) > 0.1) {
+    if (freshSpotCoverage < 0.75) {
+      qualityIssues.push("spot_sparse");
+    }
+    if (Math.max(upSpreadPenalty, downSpreadPenalty) >= 0.08) {
       qualityIssues.push("wide_spread");
-      score -= 0.15;
     }
-    if (chainlinkAgeMs !== null && chainlinkAgeMs > config.CHAINLINK_MAX_AGE_MS) {
+    if (dispersionPenalty >= 0.06) {
+      qualityIssues.push("spot_dispersion");
+    }
+    if (chainlinkPenalty > 0.04) {
       qualityIssues.push("chainlink_stale");
-      score -= 0.1;
     }
     if (up.midpoint === null || down.midpoint === null) {
       qualityIssues.push("midpoint_fallback");
-      score -= 0.1;
     }
+    score -=
+      tokenAgePenalty + spotAgePenalty + spotCoveragePenalty + upSpreadPenalty + downSpreadPenalty + midpointPenalty + chainlinkPenalty + dispersionPenalty;
     return {
       score: Math.max(0, Math.min(1, score)),
       hasLiveMarket: Boolean(slug),
@@ -218,6 +236,46 @@ export class MarketStateService {
       hasFreshSpot,
       issues: qualityIssues,
     };
+  }
+
+  private computeTokenSpreadPenalty(spread: number | null): number {
+    let spreadPenalty = 0.16;
+    if (spread !== null) {
+      spreadPenalty = Math.min(0.16, (spread / 0.08) * 0.16);
+    }
+    return spreadPenalty;
+  }
+
+  private computeMidpointPenalty(upMidpoint: number | null, downMidpoint: number | null): number {
+    let midpointPenalty = 0;
+    if (upMidpoint === null) {
+      midpointPenalty += 0.08;
+    }
+    if (downMidpoint === null) {
+      midpointPenalty += 0.08;
+    }
+    return midpointPenalty;
+  }
+
+  private computeChainlinkPenalty(chainlinkAgeMs: number | null): number {
+    let chainlinkPenalty = 0.05;
+    if (chainlinkAgeMs !== null) {
+      chainlinkPenalty = Math.min(0.12, (chainlinkAgeMs / config.CHAINLINK_MAX_AGE_MS) * 0.06);
+    }
+    return chainlinkPenalty;
+  }
+
+  private computeSpotDispersionPenalty(spotVenues: SpotVenueMetrics[]): number {
+    const pricedSpotVenues = spotVenues.filter((spotVenue) => spotVenue.price !== null).map((spotVenue) => spotVenue.price as number);
+    let dispersionPenalty = 0;
+    if (pricedSpotVenues.length >= 2) {
+      const minimumSpotPrice = Math.min(...pricedSpotVenues);
+      const maximumSpotPrice = Math.max(...pricedSpotVenues);
+      const averageSpotPrice = pricedSpotVenues.reduce((aggregatedPrice, spotPrice) => aggregatedPrice + spotPrice, 0) / pricedSpotVenues.length;
+      const normalizedDispersion = averageSpotPrice === 0 ? 0 : (maximumSpotPrice - minimumSpotPrice) / averageSpotPrice;
+      dispersionPenalty = Math.min(0.12, normalizedDispersion * 12);
+    }
+    return dispersionPenalty;
   }
 
   private appendHistory(marketRecord: MarketRecord, latestSlice: MarketSnapshotSlice): void {

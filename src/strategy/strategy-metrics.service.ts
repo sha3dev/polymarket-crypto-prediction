@@ -3,7 +3,7 @@
  */
 
 import config from "../config.ts";
-import type { PredictionDirection } from "../market/market.types.ts";
+import type { MarketKey, PredictionDirection } from "../market/market.types.ts";
 import type { StrategyDefinition, StrategyMetricsRecord, StrategySignal, StrategySummary, StrategyTier } from "./strategy.types.ts";
 
 /**
@@ -22,6 +22,8 @@ type MutableMetricsState = {
   lastParticipatedAt: number | null;
 };
 
+type StrategyMetricsScope = "global" | MarketKey;
+
 /**
  * @section class
  */
@@ -32,7 +34,8 @@ export class StrategyMetricsService {
    */
 
   private readonly definitions: StrategyDefinition[];
-  private readonly mutableState: Map<string, MutableMetricsState>;
+  private readonly globalMutableState: Map<string, MutableMetricsState>;
+  private readonly marketMutableState: Map<string, MutableMetricsState>;
 
   /**
    * @section constructor
@@ -40,7 +43,8 @@ export class StrategyMetricsService {
 
   public constructor(definitions: StrategyDefinition[]) {
     this.definitions = definitions;
-    this.mutableState = this.createInitialState(definitions);
+    this.globalMutableState = this.createInitialState(definitions);
+    this.marketMutableState = new Map<string, MutableMetricsState>();
   }
 
   /**
@@ -58,22 +62,35 @@ export class StrategyMetricsService {
     return mutableState;
   }
 
-  private requireState(strategyId: string): MutableMetricsState {
-    const strategyState = this.mutableState.get(strategyId);
+  private createMarketStateKey(strategyId: string, marketKey: MarketKey): string {
+    const marketStateKey = `${marketKey}:${strategyId}`;
+    return marketStateKey;
+  }
+
+  private requireState(strategyId: string, scope: StrategyMetricsScope): MutableMetricsState {
+    const stateKey = scope === "global" ? strategyId : this.createMarketStateKey(strategyId, scope);
+    const targetStateMap = scope === "global" ? this.globalMutableState : this.marketMutableState;
+    let strategyState = targetStateMap.get(stateKey);
     if (!strategyState) {
-      throw new Error(`Missing strategy state for ${strategyId}`);
+      const createdState: MutableMetricsState = {
+        outcomes: [],
+        lastParticipatedAt: null,
+      };
+      targetStateMap.set(stateKey, createdState);
+      strategyState = createdState;
     }
     return strategyState;
   }
 
-  private getSummary(strategyId: string): StrategySummary {
+  private getSummary(strategyId: string, scope: StrategyMetricsScope): StrategySummary {
     const strategyDefinition = this.requireDefinition(strategyId);
-    const strategyRecord = this.buildMetricsRecord(strategyId, strategyDefinition.tier);
+    const strategyRecord = this.buildMetricsRecord(strategyId, strategyDefinition.tier, scope);
     return {
       strategyId,
       name: strategyDefinition.name,
       tier: strategyDefinition.tier,
       description: strategyDefinition.description,
+      marketKey: scope === "global" ? null : scope,
       weight: strategyRecord.weight,
       isEnabled: true,
       totalResolved: strategyRecord.totalResolved,
@@ -97,8 +114,8 @@ export class StrategyMetricsService {
     return strategyDefinition;
   }
 
-  private buildMetricsRecord(strategyId: string, tier: StrategyTier): StrategyMetricsRecord {
-    const mutableMetricsState = this.requireState(strategyId);
+  private buildMetricsRecord(strategyId: string, tier: StrategyTier, scope: StrategyMetricsScope): StrategyMetricsRecord {
+    const mutableMetricsState = this.requireState(strategyId, scope);
     const resolvedOutcomes = mutableMetricsState.outcomes.filter((outcome) => outcome.wasCorrect !== null);
     const wins = resolvedOutcomes.filter((outcome) => outcome.wasCorrect).length;
     const losses = resolvedOutcomes.filter((outcome) => outcome.wasCorrect === false).length;
@@ -185,47 +202,65 @@ export class StrategyMetricsService {
     return comparison;
   }
 
+  private recordOutcomeEntry(
+    mutableMetricsState: MutableMetricsState,
+    wasCorrect: boolean | null,
+    signedEdge: number,
+    calibrationError: number,
+    resolvedAt: number | null,
+  ): void {
+    mutableMetricsState.outcomes.push({
+      wasCorrect,
+      signedEdge,
+      calibrationError,
+      resolvedAt,
+    });
+    if (mutableMetricsState.outcomes.length > config.STRATEGY_ROLLING_WINDOW_SIZE) {
+      mutableMetricsState.outcomes.splice(0, mutableMetricsState.outcomes.length - config.STRATEGY_ROLLING_WINDOW_SIZE);
+    }
+  }
+
   /**
    * @section public:methods
    */
 
-  public getWeight(strategyId: string): number {
-    const strategySummary = this.getSummary(strategyId);
+  public getMarketWeight(strategyId: string, marketKey: MarketKey): number {
+    const strategySummary = this.getSummary(strategyId, marketKey);
     return strategySummary.weight;
   }
 
-  public markParticipated(strategySignals: StrategySignal[], participatedAt: number): void {
+  public markParticipated(marketKey: MarketKey, strategySignals: StrategySignal[], participatedAt: number): void {
     for (const strategySignal of strategySignals) {
       if (strategySignal.didRun) {
-        const state = this.requireState(strategySignal.strategyId);
-        state.lastParticipatedAt = participatedAt;
+        const globalState = this.requireState(strategySignal.strategyId, "global");
+        const marketState = this.requireState(strategySignal.strategyId, marketKey);
+        globalState.lastParticipatedAt = participatedAt;
+        marketState.lastParticipatedAt = participatedAt;
       }
     }
   }
 
-  public recordResolution(strategySignals: StrategySignal[], resolvedDirection: PredictionDirection | null, resolvedAt: number | null): void {
+  public recordResolution(
+    marketKey: MarketKey,
+    strategySignals: StrategySignal[],
+    resolvedDirection: PredictionDirection | null,
+    resolvedAt: number | null,
+  ): void {
     for (const strategySignal of strategySignals) {
-      const mutableMetricsState = this.requireState(strategySignal.strategyId);
       const wasCorrect = resolvedDirection === null ? null : strategySignal.direction === resolvedDirection;
       const signedEdge =
         resolvedDirection === null ? 0 : strategySignal.direction === resolvedDirection ? strategySignal.confidence : strategySignal.confidence * -1;
       const targetConfidence = wasCorrect === null ? strategySignal.confidence : wasCorrect ? 1 : 0;
       const calibrationError = Math.abs(strategySignal.confidence - targetConfidence);
-      mutableMetricsState.outcomes.push({
-        wasCorrect,
-        signedEdge,
-        calibrationError,
-        resolvedAt,
-      });
-      if (mutableMetricsState.outcomes.length > config.STRATEGY_ROLLING_WINDOW_SIZE) {
-        mutableMetricsState.outcomes.splice(0, mutableMetricsState.outcomes.length - config.STRATEGY_ROLLING_WINDOW_SIZE);
-      }
+      this.recordOutcomeEntry(this.requireState(strategySignal.strategyId, "global"), wasCorrect, signedEdge, calibrationError, resolvedAt);
+      this.recordOutcomeEntry(this.requireState(strategySignal.strategyId, marketKey), wasCorrect, signedEdge, calibrationError, resolvedAt);
     }
   }
 
-  public getSummaries(): StrategySummary[] {
+  public getSummaries(marketKey?: MarketKey): StrategySummary[] {
+    const scope: StrategyMetricsScope = marketKey ?? "global";
     const strategySummaries = this.definitions
-      .map((definition) => this.getSummary(definition.strategyId))
+      .map((definition) => this.getSummary(definition.strategyId, scope))
       .sort((leftSummary, rightSummary) => {
         return this.compareSummaries(leftSummary, rightSummary);
       });

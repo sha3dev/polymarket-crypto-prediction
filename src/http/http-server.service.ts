@@ -104,8 +104,15 @@ export class HttpServerService {
       return context.json(this.dashboardSummaryService.buildDashboardSummary(Date.now()), 200);
     });
     app.get("/v1/strategies", (context) => {
+      const asset = this.parseAsset(context.req.query("asset"));
+      const window = this.parseWindow(context.req.query("window"));
+      const hasAsset = context.req.query("asset") !== undefined;
+      const hasWindow = context.req.query("window") !== undefined;
+      if ((hasAsset || hasWindow) && (!asset || !window)) {
+        return context.json({ code: "invalid_request", message: "asset and window must be provided together." }, 400);
+      }
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
-      return context.json(this.predictionEngineService.getStrategySummaries(), 200);
+      return context.json(this.predictionEngineService.getStrategySummaries(asset && window ? `${asset}:${window}` : undefined), 200);
     });
     app.get("/v1/execution", (context) => {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);

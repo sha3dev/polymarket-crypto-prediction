@@ -67,7 +67,7 @@ export class PredictionEngineService {
         );
         this.predictionStoreService.addPrediction(predictionRecord);
         this.marketStateService.markPredictionCreated(marketTrigger.marketKey, marketTrigger.triggeredAt);
-        this.strategyMetricsService.markParticipated(evaluationResult.strategyBreakdown, predictionRecord.createdAt);
+        this.strategyMetricsService.markParticipated(predictionRecord.marketKey, evaluationResult.strategyBreakdown, predictionRecord.createdAt);
       }
     }
   }
@@ -126,7 +126,7 @@ export class PredictionEngineService {
       );
       pendingPrediction.isResolved = true;
       pendingPrediction.outcome = outcome;
-      this.strategyMetricsService.recordResolution(pendingPrediction.strategyBreakdown, resolvedDirection, outcome.resolvedAt);
+      this.strategyMetricsService.recordResolution(pendingPrediction.marketKey, pendingPrediction.strategyBreakdown, resolvedDirection, outcome.resolvedAt);
     }
   }
 
@@ -210,8 +210,8 @@ export class PredictionEngineService {
     return predictionResponses;
   }
 
-  public getStrategySummaries(): StrategySummary[] {
-    const strategySummaries = this.strategyMetricsService.getSummaries();
+  public getStrategySummaries(marketKey?: MarketKey): StrategySummary[] {
+    const strategySummaries = this.strategyMetricsService.getSummaries(marketKey);
     return strategySummaries;
   }
 

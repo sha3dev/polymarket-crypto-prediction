@@ -73,7 +73,7 @@ export class StrategyEngineService {
     const direction: PredictionDirection = weightedScore >= 0 ? "UP" : "DOWN";
     const rawConfidence = 0.5 + Math.min(0.49, Math.abs(weightedScore));
     const confidence = Math.max(0.5, Math.min(0.99, rawConfidence));
-    const weight = this.strategyMetricsService.getWeight(definition.strategyId);
+    const weight = this.strategyMetricsService.getMarketWeight(definition.strategyId, context.marketKey);
     return {
       strategyId: definition.strategyId,
       name: definition.name,

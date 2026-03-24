@@ -173,6 +173,11 @@ export class DashboardViewService {
         background: rgba(13, 27, 42, 0.08);
         overflow: hidden;
       }
+      .quality-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
       .quality-bar span {
         display: block;
         height: 100%;
@@ -321,16 +326,17 @@ export class DashboardViewService {
       function renderMarkets(summary) {
         const rows = summary.markets.map((market) => {
           const qualityWidth = Math.max(0, Math.min(100, market.quality.score * 100));
+          const qualityDetails = 'score ' + formatNumber(market.quality.score, 3) + (market.quality.issues.length === 0 ? ' · healthy' : ' · ' + market.quality.issues.join(', '));
           return '<tr>' +
             '<td><strong>' + market.asset.toUpperCase() + '</strong> <span class="tiny">' + market.window + '</span></td>' +
             '<td>' + formatNumber(market.latestUpMidpoint) + '</td>' +
             '<td>' + formatNumber(market.latestDownMidpoint) + '</td>' +
             '<td>' + formatNumber(market.cooldownRemainingMs, 0) + '</td>' +
-            '<td><div class="quality-bar" title="' + market.quality.issues.join(", ") + '"><span style="width:' + qualityWidth + '%"></span></div></td>' +
+            '<td><span class="quality-cell" title="' + qualityDetails + '"><span>' + formatNumber(market.quality.score, 2) + '</span><div class="quality-bar"><span style="width:' + qualityWidth + '%"></span></div></span></td>' +
             '</tr>';
         }).join("");
         document.getElementById("markets").classList.remove("loading");
-        document.getElementById("markets").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP mid', 'Current midpoint for the UP token. Falls back to price only outside the midpoint field, not in this display.') + '</th><th>' + renderHintLabel('DOWN mid', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Quality', 'Aggregate data quality score based on freshness, spreads, and market availability.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        document.getElementById("markets").innerHTML = renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP mid', 'Current midpoint for the UP token. Falls back to price only outside the midpoint field, not in this display.') + '</th><th>' + renderHintLabel('DOWN mid', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
       }
 
       function renderPredictions(summary) {
