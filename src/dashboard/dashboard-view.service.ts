@@ -1250,6 +1250,9 @@ export class DashboardViewService {
         if (reasonCode === 'btc_trend_reversal') {
           humanReason = 'btc trend reversal';
         }
+        if (reasonCode === 'btc_local_reversal') {
+          humanReason = 'btc local reversal';
+        }
         if (reasonCode === 'combo_state_shift') {
           humanReason = 'combo state shift';
         }
@@ -1296,6 +1299,9 @@ export class DashboardViewService {
         }
         if (triggerType === 'btc_trend_reversal') {
           triggerCode = 'BTR';
+        }
+        if (triggerType === 'btc_local_reversal') {
+          triggerCode = 'BLR';
         }
         if (triggerType === 'combo_state_shift') {
           triggerCode = 'CSS';
@@ -1861,7 +1867,7 @@ export class DashboardViewService {
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo. Real entry also expects confidence of at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = confirmed half cross, BTR = BTC trend reversal, CSS = combo state shift, RSS = regime state shift.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Combo score used to rank the combo at prediction time. This is idea quality after anti-late-entry and anti-redundancy filtering, before hard entry gates.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo. Real entry also expects confidence of at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = confirmed half cross, BTR = BTC trend reversal for followers, BLR = BTC local reversal, CSS = combo state shift, RSS = regime state shift.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Combo score used to rank the combo at prediction time. This is idea quality after anti-late-entry and anti-redundancy filtering, before hard entry gates.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderExecution(summary) {

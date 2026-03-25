@@ -243,22 +243,24 @@ export class PredictionEngineService {
 
   private hasBreadthConfirmation(marketKey: MarketKey, positionSide: PositionSide): boolean {
     const predictionContext = this.marketStateService.getPredictionContext(marketKey);
-    let hasBreadthConfirmation = false;
+    let hasBreadthConfirmation = marketKey.startsWith("btc:");
     if (predictionContext !== null) {
       const crossAssetRegime = predictionContext.crossAssetRegime;
       const expectedDirection: PredictionDirection = positionSide === "up" ? "UP" : "DOWN";
-      // Neutral breadth → no directional conflict, always passes
-      if (crossAssetRegime.breadthDirection === "NEUTRAL") {
-        hasBreadthConfirmation = true;
-      } else {
-        const isDirectionAligned = crossAssetRegime.breadthDirection === expectedDirection;
-        // Strong breadth MUST align with prediction direction
-        if (crossAssetRegime.hasStrongBreadth) {
-          // Even aligned strong breadth fails if exhaustion is very high (fading move)
-          hasBreadthConfirmation = isDirectionAligned && crossAssetRegime.exhaustionScore < 0.85;
+      if (!marketKey.startsWith("btc:")) {
+        // Neutral breadth → no directional conflict, always passes
+        if (crossAssetRegime.breadthDirection === "NEUTRAL") {
+          hasBreadthConfirmation = true;
         } else {
-          // Weak breadth: allow aligned predictions, and also allow counter-breadth if breadth is very weak
-          hasBreadthConfirmation = isDirectionAligned || crossAssetRegime.breadthStrength < config.MIN_WEAK_BREADTH_STRENGTH_FOR_PREDICTION;
+          const isDirectionAligned = crossAssetRegime.breadthDirection === expectedDirection;
+          // Strong breadth MUST align with prediction direction
+          if (crossAssetRegime.hasStrongBreadth) {
+            // Even aligned strong breadth fails if exhaustion is very high (fading move)
+            hasBreadthConfirmation = isDirectionAligned && crossAssetRegime.exhaustionScore < 0.85;
+          } else {
+            // Weak breadth: allow aligned predictions, and also allow counter-breadth if breadth is very weak
+            hasBreadthConfirmation = isDirectionAligned || crossAssetRegime.breadthStrength < config.MIN_WEAK_BREADTH_STRENGTH_FOR_PREDICTION;
+          }
         }
       }
     }

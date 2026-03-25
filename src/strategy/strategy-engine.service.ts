@@ -974,7 +974,7 @@ export class StrategyEngineService {
     const assetMultiplier = context.asset === "btc" ? 0.55 : context.asset === "eth" ? 1 : 1.1;
     const reversalEdge = Math.max(0, btcTriggeredMomentum - btcOppositeMomentum);
     let score = 0;
-    if (currentTriggerType === "btc_trend_reversal") {
+    if (currentTriggerType === "btc_trend_reversal" || currentTriggerType === "btc_local_reversal") {
       score = reversalEdge * 28 * assetMultiplier;
     }
     return score;

@@ -315,7 +315,7 @@ export class ComboMetricsService {
     const hasEthDirectionAligned = !hasEthHardConflict && (crossAssetRegime.ethDirection === predictedDirection || ethSupport >= 0.35);
     let anchorFitScore = 0.75;
     if (asset === "btc") {
-      // BTC is the anchor itself; synchrony indicates broad market alignment
+      // BTC is anchor itself; synchrony indicates broad market alignment
       anchorFitScore = 0.88 + crossAssetRegime.breadthStrength * 0.06 + crossAssetRegime.synchronyScore * 0.06;
     }
     if (asset === "eth") {

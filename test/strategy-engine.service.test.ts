@@ -52,6 +52,35 @@ test("StrategyEngineService detects BTC trend reversal confirmation through s23"
   assert.equal(trendReversalScore > 0.1, true);
 });
 
+test("StrategyEngineService detects BTC local reversal confirmation through s23", () => {
+  const strategyDefinitions = buildStrategyDefinitions();
+  const strategyMetricsService = new StrategyMetricsService(strategyDefinitions);
+  const strategyEngineService = new StrategyEngineService(strategyMetricsService);
+  const predictionContext: PredictionContext = {
+    ...buildPredictionContext(),
+    asset: "btc",
+    marketKey: "btc:5m",
+    trigger: {
+      ...buildPredictionContext().trigger,
+      triggerType: "btc_local_reversal",
+    },
+    crossAssetRegime: {
+      ...buildPredictionContext().crossAssetRegime,
+      btcUpTokenMomentum: 0.05,
+      btcDownTokenMomentum: 0.01,
+    },
+  };
+  const trendReversalFunction = Reflect.get(strategyEngineService, "scoreBtcTrendReversalConfirmation") as ((context: PredictionContext) => number) | undefined;
+
+  if (!trendReversalFunction) {
+    throw new Error("expected btc trend reversal helper");
+  }
+
+  const trendReversalScore = trendReversalFunction.call(strategyEngineService, predictionContext);
+
+  assert.equal(trendReversalScore > 0.1, true);
+});
+
 test("StrategyEngineService exposes a continuous affordability curve in debug context", () => {
   const strategyDefinitions = buildStrategyDefinitions();
   const strategyMetricsService = new StrategyMetricsService(strategyDefinitions);

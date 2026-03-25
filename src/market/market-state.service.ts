@@ -487,6 +487,31 @@ export class MarketStateService {
     return triggerType;
   }
 
+  private detectBtcLocalReversalTrigger(currentSlice: MarketSnapshotSlice, tokenSide: TriggeredToken, currentPrice: number | null): TriggerType | null {
+    const btcMarketRecord = this.requireMarketRecord(this.buildMarketKey("btc", currentSlice.window));
+    const btcLatestSlice = btcMarketRecord.latest;
+    const btcPreviousSlice = btcMarketRecord.previous;
+    const btcCurrentTriggeredPrice = btcLatestSlice === null ? null : this.resolveTriggerPrice(btcLatestSlice, tokenSide);
+    const btcPreviousTriggeredPrice = btcPreviousSlice === null ? null : this.resolveTriggerPrice(btcPreviousSlice, tokenSide);
+    const btcCurrentOppositePrice = btcLatestSlice === null ? null : this.resolveTriggerPrice(btcLatestSlice, tokenSide === "up" ? "down" : "up");
+    const btcPreviousOppositePrice = btcPreviousSlice === null ? null : this.resolveTriggerPrice(btcPreviousSlice, tokenSide === "up" ? "down" : "up");
+    const signedTriggeredChange = this.computeSignedTokenChange(btcPreviousTriggeredPrice, btcCurrentTriggeredPrice, tokenSide);
+    const isBtcMarket = currentSlice.asset === "btc";
+    const hasOppositeDominanceRecently = btcPreviousOppositePrice !== null && btcPreviousOppositePrice >= 0.5 + config.MIN_TRIGGER_DISTANCE_FROM_HALF * 0.5;
+    const hasOppositeSideFading = btcPreviousOppositePrice !== null && btcCurrentOppositePrice !== null && btcCurrentOppositePrice < btcPreviousOppositePrice;
+    const hasTriggeredSideRecovery =
+      btcCurrentTriggeredPrice !== null &&
+      btcPreviousTriggeredPrice !== null &&
+      btcCurrentTriggeredPrice > btcPreviousTriggeredPrice &&
+      signedTriggeredChange >= config.MIN_TRIGGER_SPOT_MOMENTUM;
+    const hasAffordableRecovery = this.isPriceOnTriggeredSide(currentPrice, tokenSide) && this.isTriggerPriceAffordable(currentPrice);
+    let triggerType: TriggerType | null = null;
+    if (isBtcMarket && hasOppositeDominanceRecently && hasOppositeSideFading && hasTriggeredSideRecovery && hasAffordableRecovery) {
+      triggerType = "btc_local_reversal";
+    }
+    return triggerType;
+  }
+
   private detectTriggerType(
     marketRecord: MarketRecord,
     currentSlice: MarketSnapshotSlice,
@@ -497,10 +522,14 @@ export class MarketStateService {
   ): TriggerType | null {
     const crossedHalfTrigger = this.detectCrossedHalfTrigger(marketRecord, currentSlice, previousPrice, currentPrice, tokenSide);
     const btcTrendReversalTrigger = this.detectBtcTrendReversalTrigger(currentSlice, tokenSide, currentPrice, crossAssetRegime);
+    const btcLocalReversalTrigger = this.detectBtcLocalReversalTrigger(currentSlice, tokenSide, currentPrice);
     let triggerType: TriggerType | null = null;
     const isTriggerAffordable = this.isTriggerPriceAffordable(currentPrice);
+    if (btcLocalReversalTrigger !== null && isTriggerAffordable) {
+      triggerType = btcLocalReversalTrigger;
+    }
     if (crossedHalfTrigger !== null && isTriggerAffordable) {
-      triggerType = crossedHalfTrigger;
+      triggerType = triggerType ?? crossedHalfTrigger;
     }
     if (triggerType === null && btcTrendReversalTrigger !== null && isTriggerAffordable) {
       triggerType = btcTrendReversalTrigger;

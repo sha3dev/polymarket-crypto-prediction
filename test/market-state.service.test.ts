@@ -71,7 +71,7 @@ test("MarketStateService no longer emits anchor-follow breakout triggers", () =>
   assert.equal(ethSummary?.lastTrigger, null);
 });
 
-test("MarketStateService no longer emits pullback-resume triggers", () => {
+test("MarketStateService detects btc local reversal triggers for btc markets", () => {
   const marketStateService = new MarketStateService();
 
   marketStateService.ingestSnapshot(
@@ -81,12 +81,12 @@ test("MarketStateService no longer emits pullback-resume triggers", () => {
   );
   marketStateService.ingestSnapshot(
     buildSelectiveSnapshot(2_000, {
-      "btc:5m": 0.54,
+      "btc:5m": 0.42,
     }),
   );
   marketStateService.ingestSnapshot(
     buildSelectiveSnapshot(3_000, {
-      "btc:5m": 0.56,
+      "btc:5m": 0.44,
     }),
   );
   marketStateService.ingestSnapshot(
@@ -95,10 +95,17 @@ test("MarketStateService no longer emits pullback-resume triggers", () => {
     }),
   );
 
-  const btcSummary = marketStateService.getMarketSummaries(4_000).find((marketSummary) => marketSummary.marketKey === "btc:5m");
+  const btcSlice = marketStateService.getLatestSlice("btc:5m");
+  const detectLocalReversal = Reflect.get(marketStateService, "detectBtcLocalReversalTrigger") as
+    | ((currentSlice: NonNullable<ReturnType<MarketStateService["getLatestSlice"]>>, tokenSide: "up" | "down", currentPrice: number | null) => string | null)
+    | undefined;
 
-  assert.notEqual(btcSummary, undefined);
-  assert.equal(btcSummary?.lastTrigger, null);
+  assert.notEqual(btcSlice, null);
+  assert.notEqual(detectLocalReversal, undefined);
+  if (btcSlice === null || detectLocalReversal === undefined) {
+    throw new Error("expected btc local reversal helpers");
+  }
+  assert.equal(detectLocalReversal.call(marketStateService, btcSlice, "up", btcSlice.up.midpoint ?? btcSlice.up.price ?? null), "btc_local_reversal");
 });
 
 test("MarketStateService no longer emits laggard-release triggers for follower assets", () => {
