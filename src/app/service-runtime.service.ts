@@ -184,21 +184,115 @@ export class ServiceRuntime {
    */
 
   private static buildStrategyDefinitions(): StrategyDefinition[] {
+    // Must stay in sync with StrategyEngineService.createDefinitions()
     const strategyDefinitions: StrategyDefinition[] = [
+      // --- low tier ---
       { strategyId: "s01", name: "Momentum EWMA", tier: "low", family: "momentum", description: "Short drift continuation.", isComboEligible: true },
       { strategyId: "s02", name: "Token Microprice", tier: "low", family: "microstructure", description: "Top-of-book pressure.", isComboEligible: true },
-      { strategyId: "s05", name: "Order Book Churn", tier: "medium", family: "microstructure", description: "Book rotation pressure.", isComboEligible: true },
+      { strategyId: "s06", name: "No-Arb Consistency", tier: "low", family: "pricing", description: "Up+down deviation from unity.", isComboEligible: true },
+      {
+        strategyId: "s07",
+        name: "Spread Compression",
+        tier: "low",
+        family: "microstructure",
+        description: "Spread diff plus spot drift.",
+        isComboEligible: true,
+      },
       { strategyId: "s09", name: "Spot Consensus Momentum", tier: "low", family: "momentum", description: "Cross-venue spot drift.", isComboEligible: true },
-      { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: true },
+      {
+        strategyId: "s10",
+        name: "Spot Micropressure",
+        tier: "low",
+        family: "microstructure",
+        description: "Aggregated venue imbalance.",
+        isComboEligible: true,
+      },
       { strategyId: "s14", name: "Chainlink Basis", tier: "low", family: "pricing", description: "Oracle catch-up.", isComboEligible: true },
+      {
+        strategyId: "s15",
+        name: "Theoretical Probability Gap",
+        tier: "low",
+        family: "pricing",
+        description: "Oracle-implied vs observed gap.",
+        isComboEligible: true,
+      },
       { strategyId: "s16", name: "Freshness Gap", tier: "low", family: "pricing", description: "Spot leads stale token.", isComboEligible: true },
+      {
+        strategyId: "s24",
+        name: "Spot-Token Divergence",
+        tier: "low",
+        family: "pricing",
+        description: "Spot price moved but token midpoint lags behind.",
+        isComboEligible: true,
+      },
+      // --- medium tier ---
+      {
+        strategyId: "s03",
+        name: "Token Imbalance Band",
+        tier: "medium",
+        family: "microstructure",
+        description: "Depth ratio pressure.",
+        isComboEligible: true,
+      },
+      { strategyId: "s04", name: "Wall Proximity", tier: "medium", family: "microstructure", description: "Spread-depth wall signal.", isComboEligible: true },
+      { strategyId: "s05", name: "Order Book Churn", tier: "medium", family: "microstructure", description: "Book rotation pressure.", isComboEligible: true },
+      {
+        strategyId: "s08",
+        name: "Barrier Timing",
+        tier: "medium",
+        family: "pricing",
+        description: "Chainlink vs price-to-beat proximity.",
+        isComboEligible: true,
+      },
+      {
+        strategyId: "s11",
+        name: "Spot Dispersion",
+        tier: "medium",
+        family: "reversion",
+        description: "Cross-venue price spread as reversion.",
+        isComboEligible: true,
+      },
+      { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: false },
+      {
+        strategyId: "s13",
+        name: "Spot Slippage Skew",
+        tier: "medium",
+        family: "microstructure",
+        description: "Venue spread skew direction.",
+        isComboEligible: true,
+      },
+      {
+        strategyId: "s17",
+        name: "Regime Switch",
+        tier: "medium",
+        family: "momentum",
+        description: "Conditional momentum or reversion.",
+        isComboEligible: true,
+      },
       { strategyId: "s18", name: "Liquidity Shock Fade", tier: "medium", family: "reversion", description: "Short mean reversion.", isComboEligible: true },
       {
         strategyId: "s21",
         name: "Cross-Asset Breadth Impulse",
         tier: "medium",
         family: "cross_asset",
-        description: "Market-wide synchronous move confirmation.",
+        description: "Market-wide breadth confirmation, not primary conviction.",
+        isComboEligible: false,
+      },
+      // --- high tier ---
+      {
+        strategyId: "s19",
+        name: "Recent Performance Hedge",
+        tier: "high",
+        family: "momentum",
+        description: "Meta signal from prior strategy consensus.",
+        isComboEligible: false,
+      },
+      {
+        strategyId: "s20",
+        name: "Online Logistic Blend",
+        tier: "high",
+        family: "momentum",
+        description: "Weighted blend of core strategies plus prior bias.",
         isComboEligible: false,
       },
       {
@@ -215,7 +309,7 @@ export class ServiceRuntime {
         tier: "high",
         family: "momentum",
         description: "BTC flips and followers start confirming the new side.",
-        isComboEligible: true,
+        isComboEligible: false,
       },
     ];
     return strategyDefinitions;
