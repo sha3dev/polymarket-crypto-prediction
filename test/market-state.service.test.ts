@@ -49,7 +49,7 @@ test("MarketStateService ignores follower-only moves when building anchor breadt
   assert.equal((crossAssetRegime?.followerParticipation ?? 0) > 0, false);
 });
 
-test("MarketStateService detects anchor-follow breakout triggers outside the half-cross", () => {
+test("MarketStateService no longer emits anchor-follow breakout triggers", () => {
   const marketStateService = new MarketStateService();
 
   marketStateService.ingestSnapshot(
@@ -68,10 +68,10 @@ test("MarketStateService detects anchor-follow breakout triggers outside the hal
   const ethSummary = marketStateService.getMarketSummaries(3_000).find((marketSummary) => marketSummary.marketKey === "eth:5m");
 
   assert.notEqual(ethSummary, undefined);
-  assert.equal(ethSummary?.lastTrigger?.triggerType, "anchor_follow_breakout");
+  assert.equal(ethSummary?.lastTrigger, null);
 });
 
-test("MarketStateService detects pullback-resume triggers without a half-cross", () => {
+test("MarketStateService no longer emits pullback-resume triggers", () => {
   const marketStateService = new MarketStateService();
 
   marketStateService.ingestSnapshot(
@@ -98,10 +98,10 @@ test("MarketStateService detects pullback-resume triggers without a half-cross",
   const btcSummary = marketStateService.getMarketSummaries(4_000).find((marketSummary) => marketSummary.marketKey === "btc:5m");
 
   assert.notEqual(btcSummary, undefined);
-  assert.equal(btcSummary?.lastTrigger?.triggerType, "pullback_resume");
+  assert.equal(btcSummary?.lastTrigger, null);
 });
 
-test("MarketStateService detects laggard-release triggers for follower assets", () => {
+test("MarketStateService no longer emits laggard-release triggers for follower assets", () => {
   const marketStateService = new MarketStateService();
 
   marketStateService.ingestSnapshot(
@@ -122,7 +122,7 @@ test("MarketStateService detects laggard-release triggers for follower assets", 
   const solSummary = marketStateService.getMarketSummaries(3_000).find((marketSummary) => marketSummary.marketKey === "sol:5m");
 
   assert.notEqual(solSummary, undefined);
-  assert.equal(solSummary?.lastTrigger?.triggerType, "laggard_release");
+  assert.equal(solSummary?.lastTrigger, null);
 });
 
 test("MarketStateService detects btc trend reversal triggers for followers", () => {

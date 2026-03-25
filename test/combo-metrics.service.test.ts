@@ -43,8 +43,25 @@ test("ComboMetricsService penalizes semantic overlap and keeps a usable combo sc
 
   assert.notEqual(selectedStrategyCombo, null);
   assert.equal(selectedStrategyCombo?.comboKey === "s01+s09", false);
-  assert.equal((selectedStrategyCombo?.semanticOverlapPenalty ?? 0) <= 0.08, true);
+  assert.equal((selectedStrategyCombo?.semanticOverlapPenalty ?? 0) <= 0.12, true);
   assert.equal((selectedStrategyCombo?.comboScore ?? 0) > 0, true);
+});
+
+test("ComboMetricsService rejects pure continuation combos without a sanity-check member", () => {
+  const comboMetricsService = new ComboMetricsService();
+  const selectedStrategyCombo = comboMetricsService.selectBestComboForMarket({
+    marketKey: "btc:5m",
+    strategySignals: [
+      buildStrategySignal("s01", "momentum", 0.88, 0.92, 0.91, true),
+      buildStrategySignal("s09", "momentum", 0.86, 0.9, 0.9, true),
+      buildStrategySignal("s02", "microstructure", 0.82, 0.89, 0.88, true),
+      buildStrategySignal("s05", "microstructure", 0.78, 0.88, 0.86, true),
+    ],
+    crossAssetRegime: buildCrossAssetRegime("UP"),
+    marketQualityScore: 0.9,
+  });
+
+  assert.equal(selectedStrategyCombo, null);
 });
 
 test("ComboMetricsService uses affordability to weaken late-entry combos", () => {

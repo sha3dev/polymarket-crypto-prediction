@@ -119,25 +119,13 @@ export class ComboMetricsService {
     return comboOutcomeEntries;
   }
 
-  private resolveMinimumStrategyScoreForCombo(marketKey: MarketKey): number {
-    let minimumStrategyScoreForCombo = config.MIN_STRATEGY_SCORE_FOR_COMBO;
-    if (marketKey.startsWith("eth:")) {
-      minimumStrategyScoreForCombo = 0.025;
-    }
-    if (marketKey.startsWith("sol:") || marketKey.startsWith("xrp:")) {
-      minimumStrategyScoreForCombo = 0.02;
-    }
+  private resolveMinimumStrategyScoreForCombo(_marketKey: MarketKey): number {
+    const minimumStrategyScoreForCombo = config.MIN_STRATEGY_SCORE_FOR_COMBO;
     return minimumStrategyScoreForCombo;
   }
 
-  private resolveMinimumStrategyConfidenceForCombo(marketKey: MarketKey): number {
-    let minimumStrategyConfidenceForCombo = config.MIN_STRATEGY_CONFIDENCE_FOR_COMBO;
-    if (marketKey.startsWith("eth:")) {
-      minimumStrategyConfidenceForCombo = 0.52;
-    }
-    if (marketKey.startsWith("sol:") || marketKey.startsWith("xrp:")) {
-      minimumStrategyConfidenceForCombo = 0.515;
-    }
+  private resolveMinimumStrategyConfidenceForCombo(_marketKey: MarketKey): number {
+    const minimumStrategyConfidenceForCombo = config.MIN_STRATEGY_CONFIDENCE_FOR_COMBO;
     return minimumStrategyConfidenceForCombo;
   }
 
@@ -240,15 +228,22 @@ export class ComboMetricsService {
     const memberKey = activeComboCandidate.comboDefinition.memberStrategyIds.join("+");
     let semanticOverlapPenalty = 0;
     if (memberKey.includes("s01+s09")) {
-      semanticOverlapPenalty = 0.12;
+      semanticOverlapPenalty = 0.2;
     }
     if (memberKey.includes("s01+s12")) {
-      semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.08);
+      semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.12);
     }
     if (memberKey.includes("s02+s05")) {
-      semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.05);
+      semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.12);
     }
     return semanticOverlapPenalty;
+  }
+
+  private hasSanityCheckMember(activeComboCandidate: ActiveComboCandidate): boolean {
+    const hasSanityCheckMember = activeComboCandidate.memberSignals.some((memberSignal) => {
+      return memberSignal.family === "pricing" || memberSignal.family === "reversion" || memberSignal.family === "risk";
+    });
+    return hasSanityCheckMember;
   }
 
   private computeAnchorFitScore(marketKey: MarketKey, crossAssetRegime: CrossAssetRegime, direction: PredictionDirection | null): number {
@@ -270,17 +265,17 @@ export class ComboMetricsService {
     }
     if (asset === "eth") {
       anchorFitScore = hasBtcDirectionAligned
-        ? 0.52 + btcSupport * 0.34 + crossAssetRegime.breadthParticipation * 0.08 + crossAssetRegime.breadthStrength * 0.06
+        ? 0.42 + btcSupport * 0.4 + crossAssetRegime.breadthParticipation * 0.08 + crossAssetRegime.breadthStrength * 0.04
         : 0.15;
     }
     if (asset === "sol" || asset === "xrp") {
       anchorFitScore =
         hasBtcDirectionAligned && hasEthDirectionAligned
-          ? 0.56 +
-            ((btcSupport + ethSupport) / 2) * 0.22 +
+          ? 0.42 +
+            ((btcSupport + ethSupport) / 2) * 0.28 +
             (crossAssetRegime.hasEthAlignment ? 0.1 : 0) +
-            crossAssetRegime.followerParticipation * 0.06 +
-            crossAssetRegime.breadthStrength * 0.06
+            crossAssetRegime.followerParticipation * 0.04 +
+            crossAssetRegime.breadthStrength * 0.04
           : 0.05;
     }
     anchorFitScore = Math.max(0, Math.min(1, anchorFitScore));
@@ -371,10 +366,10 @@ export class ComboMetricsService {
   private resolveMinimumAnchorFit(marketKey: MarketKey): number {
     let minimumAnchorFit = 0;
     if (marketKey.startsWith("eth:")) {
-      minimumAnchorFit = 0.55;
+      minimumAnchorFit = 0.62;
     }
     if (marketKey.startsWith("sol:") || marketKey.startsWith("xrp:")) {
-      minimumAnchorFit = 0.68;
+      minimumAnchorFit = 0.78;
     }
     return minimumAnchorFit;
   }
@@ -425,6 +420,7 @@ export class ComboMetricsService {
     const minimumAnchorFit = this.resolveMinimumAnchorFit(activeComboCandidate.comboDefinition.marketKey);
     const minimumComboConfidence = this.resolveMinimumComboConfidence(activeComboCandidate.comboDefinition.marketKey, anchorFitScore);
     const minimumResearchComboScore = this.resolveMinimumResearchComboScore(activeComboCandidate.comboDefinition.marketKey, anchorFitScore);
+    const hasSanityCheckMember = this.hasSanityCheckMember(activeComboCandidate);
     const comboScore =
       agreementScore * 0.24 +
       historicalHitScore * 0.18 +
@@ -433,8 +429,8 @@ export class ComboMetricsService {
       diversityScore * 0.12 +
       anchorFitScore * 0.1 -
       drawdownPenalty * 0.1 -
-      familyRedundancyPenalty * 0.08 -
-      semanticOverlapPenalty * 0.08;
+      familyRedundancyPenalty * 0.14 -
+      semanticOverlapPenalty * 0.14;
     const hasEnoughAgreement = activeComboCandidate.comboDefinition.size === 2 ? agreementScore >= 0.75 : agreementScore >= 0.67 && diversityScore >= 0.67;
     const hasContrarianStretchSignal = activeComboCandidate.memberSignals.some(
       (memberSignal) => memberSignal.strategyId === "s24" && memberSignal.direction !== direction,
@@ -442,6 +438,7 @@ export class ComboMetricsService {
     const isResearchEligible =
       direction !== null &&
       hasEnoughAgreement &&
+      hasSanityCheckMember &&
       activeComboCandidate.comboConfidence >= minimumComboConfidence &&
       comboScore >= minimumResearchComboScore &&
       anchorFitScore >= minimumAnchorFit &&

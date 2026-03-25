@@ -235,7 +235,11 @@ export class PaperExecutionService {
   }
 
   private maybeInitiateExit(marketSlice: MarketSnapshotSlice, paperPosition: PaperPosition): void {
-    const exitDecision = this.executionPolicyService.buildExitDecision(marketSlice, paperPosition);
+    const latestPrediction = this.resolvePrediction(marketSlice.asset, marketSlice.window);
+    const exitDecision = this.executionPolicyService.buildExitDecision(marketSlice, paperPosition, latestPrediction);
+    if (exitDecision.nextStopLossPrice !== null) {
+      paperPosition.stopLossPrice = exitDecision.nextStopLossPrice;
+    }
     if (exitDecision.exitReason !== null && exitDecision.executionStyle !== null) {
       paperPosition.exitDecisionAt = marketSlice.generatedAt;
       paperPosition.exitExecutionStyle = exitDecision.executionStyle;

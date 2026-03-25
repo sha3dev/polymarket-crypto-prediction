@@ -245,6 +245,24 @@ export class ExecutionPolicyService {
     return clampedPrice;
   }
 
+  private matchesPositionSide(prediction: PredictionResponse, paperPosition: PaperPosition): boolean {
+    const hasMatchingPositionSide =
+      (prediction.direction === "UP" && paperPosition.positionSide === "up") || (prediction.direction === "DOWN" && paperPosition.positionSide === "down");
+    return hasMatchingPositionSide;
+  }
+
+  private shouldHoldAfterTakeProfit(marketSlice: MarketSnapshotSlice, paperPosition: PaperPosition, prediction: PredictionResponse | null): boolean {
+    let shouldHoldAfterTakeProfit = false;
+    if (prediction !== null && this.matchesPositionSide(prediction, paperPosition)) {
+      const hasComboSupport = prediction.selectedCombo.comboScore >= config.MIN_COMBO_EXECUTION_SCORE;
+      const hasAnchorSupport = this.hasBreadthAlignment(prediction) && this.hasAnchorTokenMomentumSupport(prediction, marketSlice.asset);
+      const hasAffordabilitySupport = prediction.selectedCombo.affordabilityScore >= 0.2;
+      const hasQualitySupport = marketSlice.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
+      shouldHoldAfterTakeProfit = hasComboSupport && hasAnchorSupport && hasAffordabilitySupport && hasQualitySupport;
+    }
+    return shouldHoldAfterTakeProfit;
+  }
+
   /**
    * @section public:methods
    */
@@ -375,15 +393,21 @@ export class ExecutionPolicyService {
   public buildExitDecision(
     marketSlice: MarketSnapshotSlice,
     paperPosition: PaperPosition,
-  ): { exitReason: TradeExitReason | null; executionStyle: ExecutionStyle | null; exitPrice: number | null } {
+    prediction: PredictionResponse | null,
+  ): { exitReason: TradeExitReason | null; executionStyle: ExecutionStyle | null; exitPrice: number | null; nextStopLossPrice: number | null } {
     const liveTokenPrice = this.resolveTokenPrice(marketSlice, paperPosition.positionSide);
     const spread = this.resolveSpread(marketSlice, paperPosition.positionSide);
     const depth = this.resolveDepth(marketSlice, paperPosition.positionSide);
     const imbalance = this.resolveImbalance(marketSlice, paperPosition.positionSide);
     const bookRiskScore = this.computeBookRiskScore(spread, depth, imbalance);
     let exitReason: TradeExitReason | null = null;
+    let nextStopLossPrice: number | null = null;
     if (liveTokenPrice !== null && liveTokenPrice >= paperPosition.takeProfitPrice) {
-      exitReason = "take_profit_hit";
+      if (this.shouldHoldAfterTakeProfit(marketSlice, paperPosition, prediction)) {
+        nextStopLossPrice = Math.max(paperPosition.stopLossPrice, paperPosition.entryFillPrice ?? paperPosition.stopLossPrice);
+      } else {
+        exitReason = "take_profit_hit";
+      }
     }
     if (liveTokenPrice !== null && liveTokenPrice <= paperPosition.stopLossPrice) {
       exitReason = "stop_loss_hit";
@@ -394,6 +418,6 @@ export class ExecutionPolicyService {
       executionStyle = urgencyScore >= config.TAKER_URGENCY_THRESHOLD || spread <= 0.01 ? "taker" : "maker";
     }
     const exitPrice = liveTokenPrice;
-    return { exitReason, executionStyle, exitPrice };
+    return { exitReason, executionStyle, exitPrice, nextStopLossPrice };
   }
 }

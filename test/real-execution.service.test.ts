@@ -299,16 +299,19 @@ function buildExecutionPolicyServiceMock(): ExecutionPolicyService {
     buildExitDecision(
       marketSlice: MarketSnapshotSlice,
       _openPosition: PaperPosition,
+      _prediction: PredictionResponse | null,
     ): {
       exitReason: TradeExitReason | null;
       executionStyle: ExecutionStyle | null;
       exitPrice: number | null;
+      nextStopLossPrice: number | null;
     } {
       const shouldExit = (marketSlice.up.midpoint ?? marketSlice.up.price ?? 0) >= 0.62;
       return {
         exitReason: shouldExit ? "take_profit_hit" : null,
         executionStyle: shouldExit ? "maker" : null,
         exitPrice: shouldExit ? 0.62 : null,
+        nextStopLossPrice: null,
       };
     },
   } as unknown as ExecutionPolicyService;

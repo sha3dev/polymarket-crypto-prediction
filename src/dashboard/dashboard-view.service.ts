@@ -776,7 +776,7 @@ export class DashboardViewService {
           taker: { code: 'TAK', label: 'Taker', description: 'Immediate liquidity-taking order preferred because urgency or fill risk is high.' },
         },
         tradeExitReason: {
-          take_profit_hit: { code: 'TPF', label: 'Take Profit Hit', description: 'The position closed because the take-profit level was reached.' },
+          take_profit_hit: { code: 'TPF', label: 'Take Profit Hit', description: 'The position closed because the take-profit level was reached and continuation no longer looked strong enough to keep holding.' },
           stop_loss_hit: { code: 'STP', label: 'Stop Loss Hit', description: 'The position closed because the stop-loss level was reached.' },
         },
         reason: {
@@ -1167,16 +1167,7 @@ export class DashboardViewService {
           humanReason = 'book moving away';
         }
         if (reasonCode === 'crossed_half') {
-          humanReason = 'crossed half';
-        }
-        if (reasonCode === 'anchor_follow_breakout') {
-          humanReason = 'anchor-follow breakout';
-        }
-        if (reasonCode === 'pullback_resume') {
-          humanReason = 'pullback resume';
-        }
-        if (reasonCode === 'laggard_release') {
-          humanReason = 'laggard release';
+          humanReason = 'confirmed half cross';
         }
         if (reasonCode === 'btc_trend_reversal') {
           humanReason = 'btc trend reversal';
@@ -1224,15 +1215,6 @@ export class DashboardViewService {
         let triggerCode = triggerType;
         if (triggerType === 'crossed_half') {
           triggerCode = 'XH';
-        }
-        if (triggerType === 'anchor_follow_breakout') {
-          triggerCode = 'AFB';
-        }
-        if (triggerType === 'pullback_resume') {
-          triggerCode = 'PBR';
-        }
-        if (triggerType === 'laggard_release') {
-          triggerCode = 'LGR';
         }
         if (triggerType === 'btc_trend_reversal') {
           triggerCode = 'BTR';
@@ -1801,7 +1783,7 @@ export class DashboardViewService {
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo. Real entry also expects confidence of at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half, AFB = anchor-follow breakout, PBR = pullback resume, LGR = laggard release, BTR = BTC trend reversal, CSS = combo state shift, RSS = regime state shift.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Combo score used to rank the combo at prediction time. This is idea quality before hard entry gates.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo. Real entry also expects confidence of at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = confirmed half cross, BTR = BTC trend reversal, CSS = combo state shift, RSS = regime state shift.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Combo score used to rank the combo at prediction time. This is idea quality after anti-late-entry and anti-redundancy filtering, before hard entry gates.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderExecution(summary) {

@@ -644,7 +644,11 @@ export class RealExecutionService {
   }
 
   private async maybeInitiateExit(marketSlice: MarketSnapshotSlice, positionRecord: RealPositionRecord): Promise<void> {
-    const exitDecision = this.executionPolicyService.buildExitDecision(marketSlice, positionRecord);
+    const latestPrediction = this.resolvePrediction(marketSlice.asset, marketSlice.window);
+    const exitDecision = this.executionPolicyService.buildExitDecision(marketSlice, positionRecord, latestPrediction);
+    if (exitDecision.nextStopLossPrice !== null) {
+      positionRecord.stopLossPrice = exitDecision.nextStopLossPrice;
+    }
     if (exitDecision.exitReason !== null && exitDecision.executionStyle !== null) {
       const polymarketMarket = await this.resolvePolymarketMarket(positionRecord.marketKey, marketSlice);
       if (polymarketMarket !== null) {

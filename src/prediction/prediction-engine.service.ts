@@ -20,9 +20,9 @@ import type { PredictionOutcome, PredictionRecord, PredictionResponse } from "./
  * @section consts
  */
 
-const MODEL_TRIGGER_MIN_SCORE = 0.55;
-const MODEL_TRIGGER_MIN_CONFIDENCE = 0.56;
-const MODEL_TRIGGER_MIN_SCORE_DELTA = 0.12;
+const MODEL_TRIGGER_MIN_SCORE = 0.58;
+const MODEL_TRIGGER_MIN_CONFIDENCE = 0.58;
+const MODEL_TRIGGER_MIN_SCORE_DELTA = 0.16;
 
 /**
  * @section types
@@ -120,12 +120,16 @@ export class PredictionEngineService {
       resolvedAt: number | null;
     } | null = null;
     if (liveTokenPrice !== null && predictionRecord.takeProfitPrice !== null && liveTokenPrice >= predictionRecord.takeProfitPrice) {
-      researchOutcome = {
-        status: "ok",
-        resolvedDirection: predictionRecord.direction,
-        evaluationPrice: liveTokenPrice,
-        resolvedAt: marketSlice?.generatedAt ?? null,
-      };
+      if (this.shouldHoldResearchAfterTakeProfit(predictionRecord, marketSlice)) {
+        predictionRecord.stopLossPrice = Math.max(predictionRecord.stopLossPrice ?? 0, predictionRecord.entryReferencePrice ?? 0);
+      } else {
+        researchOutcome = {
+          status: "ok",
+          resolvedDirection: predictionRecord.direction,
+          evaluationPrice: liveTokenPrice,
+          resolvedAt: marketSlice?.generatedAt ?? null,
+        };
+      }
     }
     if (liveTokenPrice !== null && predictionRecord.stopLossPrice !== null && liveTokenPrice <= predictionRecord.stopLossPrice) {
       researchOutcome = {
@@ -136,6 +140,22 @@ export class PredictionEngineService {
       };
     }
     return researchOutcome;
+  }
+
+  private shouldHoldResearchAfterTakeProfit(predictionRecord: PredictionRecord, marketSlice: MarketSnapshotSlice | null): boolean {
+    const modelEvaluationSnapshot = this.evaluateCurrentModel(predictionRecord.marketKey);
+    let shouldHoldResearchAfterTakeProfit = false;
+    if (marketSlice !== null && modelEvaluationSnapshot !== null) {
+      const selectedCombo = modelEvaluationSnapshot.comboApplicationResult.selectedCombo;
+      const expectedDirection = predictionRecord.direction;
+      const hasDirectionMatch = selectedCombo?.direction === expectedDirection;
+      const hasComboSupport = (selectedCombo?.comboScore ?? 0) >= config.MIN_COMBO_EXECUTION_SCORE;
+      const hasAnchorConfirmation = this.hasAnchorConfirmation(predictionRecord.marketKey, predictionRecord.positionSide === "up" ? "up" : "down");
+      const hasAffordabilitySupport = (selectedCombo?.affordabilityScore ?? 0) >= 0.2;
+      const hasQualitySupport = marketSlice.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
+      shouldHoldResearchAfterTakeProfit = hasDirectionMatch && hasComboSupport && hasAnchorConfirmation && hasAffordabilitySupport && hasQualitySupport;
+    }
+    return shouldHoldResearchAfterTakeProfit;
   }
 
   private maybeResolveResearchPredictions(): void {
@@ -357,7 +377,7 @@ export class PredictionEngineService {
       const expectedDirection: PredictionDirection = marketTrigger.triggeredToken === "up" ? "UP" : "DOWN";
       const ageMs = nowTimestamp - marketTrigger.triggeredAt;
       const hasDirectionMismatch = selectedCombo?.direction !== expectedDirection;
-      const hasWeakCombo = (selectedCombo?.comboScore ?? 0) < 0.45;
+      const hasWeakCombo = (selectedCombo?.comboScore ?? 0) < 0.5;
       shouldDropModelTrigger = ageMs > config.TRIGGER_CONFIRMATION_DELAY_MS * 4 || hasDirectionMismatch || hasWeakCombo;
     }
     return shouldDropModelTrigger;
@@ -381,8 +401,19 @@ export class PredictionEngineService {
         const hasQualityConfirmation = marketSlice.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
         const hasBreadthConfirmation = this.hasBreadthConfirmation(marketTrigger.marketKey);
         const hasAnchorConfirmation = this.hasAnchorConfirmation(marketTrigger.marketKey, positionSide);
+        const modelEvaluationSnapshot = this.evaluateCurrentModel(marketTrigger.marketKey);
+        const selectedCombo = modelEvaluationSnapshot?.comboApplicationResult.selectedCombo ?? null;
+        const expectedDirection: PredictionDirection = positionSide === "up" ? "UP" : "DOWN";
+        const hasComboDirectionMatch = selectedCombo?.direction === expectedDirection;
+        const hasComboScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= 0.54;
         hasPendingTriggerConfirmed =
-          isPastDelay && hasMovedAwayFromHalf && hasMomentumConfirmation && hasQualityConfirmation && (hasBreadthConfirmation || hasAnchorConfirmation);
+          isPastDelay &&
+          hasMovedAwayFromHalf &&
+          hasMomentumConfirmation &&
+          hasQualityConfirmation &&
+          (hasBreadthConfirmation || hasAnchorConfirmation) &&
+          hasComboDirectionMatch &&
+          hasComboScoreConfirmation;
       }
     }
     return hasPendingTriggerConfirmed;
@@ -416,10 +447,13 @@ export class PredictionEngineService {
       shouldReplacePendingTrigger = true;
     }
     if (existingTrigger !== null && !this.isModelTriggerType(existingTrigger.triggerType) && this.isModelTriggerType(nextTrigger.triggerType)) {
-      shouldReplacePendingTrigger = false;
+      shouldReplacePendingTrigger = true;
     }
     if (existingTrigger !== null && this.isModelTriggerType(nextTrigger.triggerType) && nextTrigger.triggeredAt > existingTrigger.triggeredAt) {
       shouldReplacePendingTrigger = this.isModelTriggerType(existingTrigger.triggerType);
+    }
+    if (existingTrigger !== null && this.isModelTriggerType(existingTrigger.triggerType) && nextTrigger.triggerType === "crossed_half") {
+      shouldReplacePendingTrigger = false;
     }
     return shouldReplacePendingTrigger;
   }

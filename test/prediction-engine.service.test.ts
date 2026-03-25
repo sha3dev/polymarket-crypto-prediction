@@ -45,15 +45,19 @@ test("PredictionEngineService emits a model trigger when the combo state changes
   const firstEvaluationSnapshot = evaluateCurrentModel.call(predictionEngineService, "btc:5m");
   const firstModelTrigger = firstEvaluationSnapshot === null ? null : buildModelDrivenTrigger.call(predictionEngineService, firstEvaluationSnapshot, 1_000);
 
-  marketStateService.ingestSnapshot(
-    buildSnapshot(3_000, {
-      slug: "btc-5m",
-      upPrice: 0.65,
-      downPrice: 0.35,
-      upMidpoint: 0.65,
-      downMidpoint: 0.35,
-    }),
-  );
+  const secondSnapshot = buildSnapshot(3_000, {
+    slug: "btc-5m",
+    upPrice: 0.58,
+    downPrice: 0.42,
+    upMidpoint: 0.58,
+    downMidpoint: 0.42,
+  });
+  secondSnapshot.btc_chainlink_price = 59_600;
+  secondSnapshot.btc_binance_price = 60_600;
+  secondSnapshot.btc_coinbase_price = 60_640;
+  secondSnapshot.btc_kraken_price = 60_580;
+  secondSnapshot.btc_okx_price = 60_620;
+  marketStateService.ingestSnapshot(secondSnapshot);
   const secondEvaluationSnapshot = evaluateCurrentModel.call(predictionEngineService, "btc:5m");
   const secondModelTrigger = secondEvaluationSnapshot === null ? null : buildModelDrivenTrigger.call(predictionEngineService, secondEvaluationSnapshot, 3_000);
 
@@ -77,7 +81,7 @@ function buildStrategyDefinitions(): StrategyDefinition[] {
     { strategyId: "s02", name: "Token Microprice", tier: "low", family: "microstructure", description: "Top-of-book pressure.", isComboEligible: true },
     { strategyId: "s05", name: "Order Book Churn", tier: "medium", family: "microstructure", description: "Book rotation pressure.", isComboEligible: true },
     { strategyId: "s09", name: "Spot Consensus Momentum", tier: "low", family: "momentum", description: "Cross-venue spot drift.", isComboEligible: true },
-    { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: true },
+    { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: false },
     { strategyId: "s14", name: "Chainlink Basis", tier: "low", family: "pricing", description: "Oracle catch-up.", isComboEligible: true },
     { strategyId: "s16", name: "Freshness Gap", tier: "low", family: "pricing", description: "Spot leads stale token.", isComboEligible: true },
     { strategyId: "s18", name: "Liquidity Shock Fade", tier: "medium", family: "reversion", description: "Short mean reversion.", isComboEligible: true },
@@ -87,7 +91,7 @@ function buildStrategyDefinitions(): StrategyDefinition[] {
       tier: "medium",
       family: "cross_asset",
       description: "Market-wide breadth confirmation, not primary conviction.",
-      isComboEligible: true,
+      isComboEligible: false,
     },
     {
       strategyId: "s22",

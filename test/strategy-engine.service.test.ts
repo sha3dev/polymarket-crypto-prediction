@@ -119,13 +119,59 @@ test("StrategyEngineService turns s24 into a continuous affordability curve", ()
   assert.equal(expensivePriceStretchScore < -0.9, true);
 });
 
+test("StrategyEngineService weakens continuation and boosts fade when the move is already stretched", () => {
+  const strategyDefinitions = buildStrategyDefinitions();
+  const strategyMetricsService = new StrategyMetricsService(strategyDefinitions);
+  const strategyEngineService = new StrategyEngineService(strategyMetricsService);
+  const stretchedPredictionContext: PredictionContext = {
+    ...buildPredictionContext(),
+    current: {
+      ...buildPredictionContext().current,
+      up: {
+        ...buildPredictionContext().current.up,
+        price: 0.74,
+        midpoint: 0.74,
+        distanceToHalf: 0.24,
+      },
+      down: {
+        ...buildPredictionContext().current.down,
+        price: 0.26,
+        midpoint: 0.26,
+        distanceToHalf: 0.24,
+      },
+    },
+    crossAssetRegime: {
+      ...buildPredictionContext().crossAssetRegime,
+      reversalRiskScore: 0.72,
+    },
+  };
+  const momentumFunction = Reflect.get(strategyEngineService, "scoreMomentumEwma") as ((context: PredictionContext) => number) | undefined;
+  const spotMomentumFunction = Reflect.get(strategyEngineService, "scoreSpotConsensusMomentum") as ((context: PredictionContext) => number) | undefined;
+  const fadeFunction = Reflect.get(strategyEngineService, "scoreLiquidityShockFade") as ((context: PredictionContext) => number) | undefined;
+
+  if (!momentumFunction || !spotMomentumFunction || !fadeFunction) {
+    throw new Error("expected stretched-move helpers");
+  }
+
+  const baseMomentumScore = momentumFunction.call(strategyEngineService, buildPredictionContext());
+  const stretchedMomentumScore = momentumFunction.call(strategyEngineService, stretchedPredictionContext);
+  const baseSpotMomentumScore = spotMomentumFunction.call(strategyEngineService, buildPredictionContext());
+  const stretchedSpotMomentumScore = spotMomentumFunction.call(strategyEngineService, stretchedPredictionContext);
+  const baseFadeScore = Math.abs(fadeFunction.call(strategyEngineService, buildPredictionContext()));
+  const stretchedFadeScore = Math.abs(fadeFunction.call(strategyEngineService, stretchedPredictionContext));
+
+  assert.equal(Math.abs(stretchedMomentumScore) < Math.abs(baseMomentumScore), true);
+  assert.equal(Math.abs(stretchedSpotMomentumScore) < Math.abs(baseSpotMomentumScore), true);
+  assert.equal(stretchedFadeScore > baseFadeScore, true);
+});
+
 function buildStrategyDefinitions(): StrategyDefinition[] {
   return [
     { strategyId: "s01", name: "Momentum EWMA", tier: "low", family: "momentum", description: "Short drift continuation.", isComboEligible: true },
     { strategyId: "s02", name: "Token Microprice", tier: "low", family: "microstructure", description: "Top-of-book pressure.", isComboEligible: true },
     { strategyId: "s05", name: "Order Book Churn", tier: "medium", family: "microstructure", description: "Book rotation pressure.", isComboEligible: true },
     { strategyId: "s09", name: "Spot Consensus Momentum", tier: "low", family: "momentum", description: "Cross-venue spot drift.", isComboEligible: true },
-    { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: true },
+    { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: false },
     { strategyId: "s14", name: "Chainlink Basis", tier: "low", family: "pricing", description: "Oracle catch-up.", isComboEligible: true },
     { strategyId: "s16", name: "Freshness Gap", tier: "low", family: "pricing", description: "Spot leads stale token.", isComboEligible: true },
     { strategyId: "s18", name: "Liquidity Shock Fade", tier: "medium", family: "reversion", description: "Short mean reversion.", isComboEligible: true },
@@ -135,7 +181,7 @@ function buildStrategyDefinitions(): StrategyDefinition[] {
       tier: "medium",
       family: "cross_asset",
       description: "Market-wide breadth confirmation, not primary conviction.",
-      isComboEligible: true,
+      isComboEligible: false,
     },
     {
       strategyId: "s22",
@@ -143,7 +189,7 @@ function buildStrategyDefinitions(): StrategyDefinition[] {
       tier: "high",
       family: "cross_asset",
       description: "Follow lagging asset after peer impulse.",
-      isComboEligible: true,
+      isComboEligible: false,
     },
     {
       strategyId: "s23",

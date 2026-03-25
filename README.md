@@ -296,9 +296,6 @@ Prediction records now describe:
 Current triggers are:
 
 - `XH` = `crossed_half`
-- `AFB` = `anchor_follow_breakout`
-- `PBR` = `pullback_resume`
-- `LGR` = `laggard_release`
 - `BTR` = `btc_trend_reversal`
 - `CSS` = `combo_state_shift`
 - `RSS` = `regime_state_shift`

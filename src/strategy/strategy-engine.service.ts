@@ -49,7 +49,7 @@ export class StrategyEngineService {
       { strategyId: "s02", name: "Token Microprice", tier: "low", family: "microstructure", description: "Top-of-book pressure.", isComboEligible: true },
       { strategyId: "s05", name: "Order Book Churn", tier: "medium", family: "microstructure", description: "Book rotation pressure.", isComboEligible: true },
       { strategyId: "s09", name: "Spot Consensus Momentum", tier: "low", family: "momentum", description: "Cross-venue spot drift.", isComboEligible: true },
-      { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: true },
+      { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: false },
       { strategyId: "s14", name: "Chainlink Basis", tier: "low", family: "pricing", description: "Oracle catch-up.", isComboEligible: true },
       { strategyId: "s16", name: "Freshness Gap", tier: "low", family: "pricing", description: "Spot leads stale token.", isComboEligible: true },
       { strategyId: "s18", name: "Liquidity Shock Fade", tier: "medium", family: "reversion", description: "Short mean reversion.", isComboEligible: true },
@@ -59,7 +59,7 @@ export class StrategyEngineService {
         tier: "medium",
         family: "cross_asset",
         description: "Market-wide breadth confirmation, not primary conviction.",
-        isComboEligible: true,
+        isComboEligible: false,
       },
       {
         strategyId: "s22",
@@ -67,7 +67,7 @@ export class StrategyEngineService {
         tier: "high",
         family: "cross_asset",
         description: "Follow lagging asset after BTC and ETH impulse.",
-        isComboEligible: true,
+        isComboEligible: false,
       },
       {
         strategyId: "s23",
@@ -623,6 +623,7 @@ export class StrategyEngineService {
       const averagePrice = recentUpMidpoints.reduce((aggregatedPrice, price) => aggregatedPrice + price, 0) / recentUpMidpoints.length;
       score = averagePrice === 0 ? 0 : (lastPrice - firstPrice) / averagePrice;
     }
+    score *= this.computeContinuationValidityFactor(context);
     return score;
   }
 
@@ -655,7 +656,13 @@ export class StrategyEngineService {
       previousEntry?.downMidpoint === null || previousEntry?.downMidpoint === undefined || context.current.down.midpoint === null
         ? 0
         : context.current.down.midpoint - previousEntry.downMidpoint;
-    const score = upMidpointChange - downMidpointChange;
+    const confirmationStrength = Math.max(
+      Math.abs(this.scoreChainlinkBasis(context)),
+      Math.abs(this.scoreFreshnessGap(context)),
+      Math.abs(this.scoreLiquidityShockFade(context)),
+      Math.abs(this.scoreBtcTrendReversalConfirmation(context)),
+    );
+    const score = (upMidpointChange - downMidpointChange) * Math.max(0.2, Math.min(1, confirmationStrength * 3));
     return score;
   }
 
@@ -682,7 +689,7 @@ export class StrategyEngineService {
   }
 
   private scoreSpotConsensusMomentum(context: PredictionContext): number {
-    const score = context.current.spotMomentum * 100;
+    const score = context.current.spotMomentum * 100 * this.computeContinuationValidityFactor(context);
     return score;
   }
 
@@ -720,7 +727,7 @@ export class StrategyEngineService {
   private scoreChainlinkBasis(context: PredictionContext): number {
     let score = 0;
     if (context.current.chainlinkPrice !== null && context.current.spotConsensusPrice !== null && context.current.chainlinkPrice !== 0) {
-      score = (context.current.spotConsensusPrice - context.current.chainlinkPrice) / context.current.chainlinkPrice;
+      score = ((context.current.spotConsensusPrice - context.current.chainlinkPrice) / context.current.chainlinkPrice) * 12;
     }
     return score;
   }
@@ -744,7 +751,7 @@ export class StrategyEngineService {
       config.SPOT_MAX_AGE_MS,
     );
     const freshnessGap = tokenAge - bestSpotAge;
-    const score = freshnessGap <= 0 ? 0 : context.current.spotMomentum * Math.min(5, freshnessGap / 1000);
+    const score = freshnessGap <= 0 ? 0 : context.current.spotMomentum * Math.min(8, freshnessGap / 1000);
     return score;
   }
 
@@ -755,8 +762,20 @@ export class StrategyEngineService {
   }
 
   private scoreLiquidityShockFade(context: PredictionContext): number {
-    const score = (context.current.up.distanceToHalf ?? 0.5) - (context.current.down.distanceToHalf ?? 0.5);
-    return score * -1;
+    const distanceBias = (context.current.up.distanceToHalf ?? 0.5) - (context.current.down.distanceToHalf ?? 0.5);
+    const recentRange = this.computeRecentTriggeredRange(context);
+    const moveExtension = this.computeTriggeredMoveExtension(context);
+    const affordabilityPenalty = 1 - this.computeNormalizedAffordability(context);
+    const reversalBoost = context.crossAssetRegime.reversalRiskScore;
+    const hasCrossedHalfTrigger = context.trigger.triggerType === "crossed_half";
+    const triggerDirectionSign = context.trigger.triggeredToken === "up" ? 1 : -1;
+    const triggeredTokenPrice = this.resolveTriggeredTokenPrice(context);
+    const centeredExtension = triggerDirectionSign === 1 ? Math.max(0, triggeredTokenPrice - 0.5) : Math.max(0, 0.5 - triggeredTokenPrice);
+    let score = triggerDirectionSign * -1 * (centeredExtension + moveExtension * 0.2) + distanceBias * -0.35;
+    if (hasCrossedHalfTrigger) {
+      score *= 1.3 + affordabilityPenalty * 0.6 + reversalBoost * 0.45 + Math.min(0.35, recentRange + moveExtension);
+    }
+    return score;
   }
 
   private scoreRecentPerformanceHedge(priorSignals: StrategySignal[]): number {
@@ -817,24 +836,70 @@ export class StrategyEngineService {
     const assetMultiplier = context.asset === "btc" ? 0.55 : context.asset === "eth" ? 1 : 1.1;
     const reversalEdge = Math.max(0, btcTriggeredMomentum - btcOppositeMomentum);
     let score = 0;
-    if (currentTriggerType === "btc_trend_reversal" || currentTriggerType === "anchor_follow_breakout") {
+    if (currentTriggerType === "btc_trend_reversal") {
       score = reversalEdge * 28 * assetMultiplier;
     }
     return score;
   }
 
   private scorePriceStretchPenalty(context: PredictionContext): number {
+    const normalizedAffordability = this.computeNormalizedAffordability(context);
+    const score = normalizedAffordability - 1;
+    return score;
+  }
+
+  private resolveTriggeredTokenPrice(context: PredictionContext): number {
     const triggerSide = context.trigger.triggeredToken;
     const tokenPrice =
       triggerSide === "up"
         ? (context.current.up.midpoint ?? context.current.up.price ?? 0.5)
         : (context.current.down.midpoint ?? context.current.down.price ?? 0.5);
+    return tokenPrice;
+  }
+
+  private computeNormalizedAffordability(context: PredictionContext): number {
+    const tokenPrice = this.resolveTriggeredTokenPrice(context);
     const idealEntryFloor = 0.2;
     const affordableCeiling = Math.min(0.8, config.ENTRY_TARGET_PRICE + config.TAKE_PROFIT_DELTA * 2);
     const affordableRange = Math.max(0.01, affordableCeiling - idealEntryFloor);
     const normalizedAffordability = Math.max(0, Math.min(1, (affordableCeiling - tokenPrice) / affordableRange));
-    const score = normalizedAffordability - 1;
-    return score;
+    return normalizedAffordability;
+  }
+
+  private computeRecentTriggeredRange(context: PredictionContext): number {
+    const triggerSide = context.trigger.triggeredToken;
+    const recentTriggeredPrices = context.history
+      .slice(-8)
+      .map((historyEntry) => {
+        return triggerSide === "up" ? (historyEntry.upMidpoint ?? historyEntry.upPrice) : (historyEntry.downMidpoint ?? historyEntry.downPrice);
+      })
+      .filter((historyPrice) => historyPrice !== null) as number[];
+    let recentTriggeredRange = 0;
+    if (recentTriggeredPrices.length >= 2) {
+      const minimumTriggeredPrice = Math.min(...recentTriggeredPrices);
+      const maximumTriggeredPrice = Math.max(...recentTriggeredPrices);
+      recentTriggeredRange = maximumTriggeredPrice - minimumTriggeredPrice;
+    }
+    return recentTriggeredRange;
+  }
+
+  private computeTriggeredMoveExtension(context: PredictionContext): number {
+    const triggerSide = context.trigger.triggeredToken;
+    const currentTriggeredDistance = triggerSide === "up" ? (context.current.up.distanceToHalf ?? 0) : (context.current.down.distanceToHalf ?? 0);
+    const normalizedExtension = Math.max(0, Math.min(1, currentTriggeredDistance / Math.max(0.0001, config.TAKE_PROFIT_DELTA)));
+    return normalizedExtension;
+  }
+
+  private computeContinuationValidityFactor(context: PredictionContext): number {
+    const affordability = this.computeNormalizedAffordability(context);
+    const reversalPenalty = Math.max(0.2, 1 - context.crossAssetRegime.reversalRiskScore * 0.9);
+    const moveExtensionPenalty = Math.max(0.2, 1 - this.computeTriggeredMoveExtension(context) * 0.7);
+    let continuationValidityFactor = affordability * 0.55 + reversalPenalty * 0.25 + moveExtensionPenalty * 0.2;
+    if (context.trigger.triggerType === "crossed_half") {
+      continuationValidityFactor *= Math.max(0.15, 1 - context.crossAssetRegime.reversalRiskScore * 0.5);
+    }
+    continuationValidityFactor = Math.max(0.05, Math.min(1, continuationValidityFactor));
+    return continuationValidityFactor;
   }
 
   /**

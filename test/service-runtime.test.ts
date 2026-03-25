@@ -123,14 +123,14 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   );
   serviceRuntime.ingestSnapshot(
     buildSnapshot(8_500, {
-      btc5m: { slug: "btc-5m", upPrice: 0.56, downPrice: 0.44, upMidpoint: 0.56, downMidpoint: 0.44 },
-      eth5m: { slug: "eth-5m", upPrice: 0.54, downPrice: 0.46, upMidpoint: 0.54, downMidpoint: 0.46 },
+      btc5m: { slug: "btc-5m", upPrice: 0.56, downPrice: 0.44, upMidpoint: 0.56, downMidpoint: 0.44, chainlinkPrice: 59_500 },
+      eth5m: { slug: "eth-5m", upPrice: 0.54, downPrice: 0.46, upMidpoint: 0.54, downMidpoint: 0.46, chainlinkPrice: 2_940 },
     }),
   );
   serviceRuntime.ingestSnapshot(
     buildSnapshot(12_000, {
-      btc5m: { slug: "btc-5m", upPrice: 0.6, downPrice: 0.4, upMidpoint: 0.6, downMidpoint: 0.4 },
-      eth5m: { slug: "eth-5m", upPrice: 0.57, downPrice: 0.43, upMidpoint: 0.57, downMidpoint: 0.43 },
+      btc5m: { slug: "btc-5m", upPrice: 0.6, downPrice: 0.4, upMidpoint: 0.6, downMidpoint: 0.4, chainlinkPrice: 59_400 },
+      eth5m: { slug: "eth-5m", upPrice: 0.57, downPrice: 0.43, upMidpoint: 0.57, downMidpoint: 0.43, chainlinkPrice: 2_930 },
     }),
   );
 
@@ -342,26 +342,26 @@ test("ServiceRuntime exposes ETH combo candidates from BTC anchor support before
   );
   serviceRuntime.ingestSnapshot(
     buildSnapshot(4_000, {
-      btc5m: { slug: "btc-5m", upPrice: 0.57, downPrice: 0.43, upMidpoint: 0.57, downMidpoint: 0.43 },
-      eth5m: { slug: "eth-5m", upPrice: 0.52, downPrice: 0.48, upMidpoint: 0.52, downMidpoint: 0.48 },
+      btc5m: { slug: "btc-5m", upPrice: 0.57, downPrice: 0.43, upMidpoint: 0.57, downMidpoint: 0.43, chainlinkPrice: 59_600 },
+      eth5m: { slug: "eth-5m", upPrice: 0.52, downPrice: 0.48, upMidpoint: 0.52, downMidpoint: 0.48, chainlinkPrice: 2_950 },
     }),
   );
   serviceRuntime.ingestSnapshot(
     buildSnapshot(7_000, {
-      btc5m: { slug: "btc-5m", upPrice: 0.61, downPrice: 0.39, upMidpoint: 0.61, downMidpoint: 0.39 },
-      eth5m: { slug: "eth-5m", upPrice: 0.56, downPrice: 0.44, upMidpoint: 0.56, downMidpoint: 0.44 },
+      btc5m: { slug: "btc-5m", upPrice: 0.61, downPrice: 0.39, upMidpoint: 0.61, downMidpoint: 0.39, chainlinkPrice: 59_300 },
+      eth5m: { slug: "eth-5m", upPrice: 0.56, downPrice: 0.44, upMidpoint: 0.56, downMidpoint: 0.44, chainlinkPrice: 2_920 },
     }),
   );
   serviceRuntime.ingestSnapshot(
     buildSnapshot(10_000, {
-      btc5m: { slug: "btc-5m", upPrice: 0.64, downPrice: 0.36, upMidpoint: 0.64, downMidpoint: 0.36 },
-      eth5m: { slug: "eth-5m", upPrice: 0.59, downPrice: 0.41, upMidpoint: 0.59, downMidpoint: 0.41 },
+      btc5m: { slug: "btc-5m", upPrice: 0.64, downPrice: 0.36, upMidpoint: 0.64, downMidpoint: 0.36, chainlinkPrice: 59_100 },
+      eth5m: { slug: "eth-5m", upPrice: 0.59, downPrice: 0.41, upMidpoint: 0.59, downMidpoint: 0.41, chainlinkPrice: 2_900 },
     }),
   );
   serviceRuntime.ingestSnapshot(
     buildSnapshot(12_000, {
-      btc5m: { slug: "btc-5m", upPrice: 0.645, downPrice: 0.355, upMidpoint: 0.645, downMidpoint: 0.355 },
-      eth5m: { slug: "eth-5m", upPrice: 0.595, downPrice: 0.405, upMidpoint: 0.595, downMidpoint: 0.405 },
+      btc5m: { slug: "btc-5m", upPrice: 0.645, downPrice: 0.355, upMidpoint: 0.645, downMidpoint: 0.355, chainlinkPrice: 59_000 },
+      eth5m: { slug: "eth-5m", upPrice: 0.595, downPrice: 0.405, upMidpoint: 0.595, downMidpoint: 0.405, chainlinkPrice: 2_890 },
     }),
   );
 
@@ -392,7 +392,7 @@ test("ServiceRuntime exposes ETH combo candidates from BTC anchor support before
   });
 });
 
-test("ServiceRuntime can create SOL predictions when BTC and ETH only provide soft aligned anchor support", async () => {
+test("ServiceRuntime keeps SOL combo candidates visible when BTC and ETH provide soft aligned anchor support", async () => {
   const serviceRuntime = ServiceRuntime.createDefault();
   const server = serviceRuntime.buildServer();
 
@@ -423,33 +423,33 @@ test("ServiceRuntime can create SOL predictions when BTC and ETH only provide so
   );
   serviceRuntime.ingestSnapshot(
     buildSnapshot(4_000, {
-      btc5m: { slug: "btc-5m", upPrice: 0.58, downPrice: 0.42, upMidpoint: 0.58, downMidpoint: 0.42 },
-      eth5m: { slug: "eth-5m", upPrice: 0.55, downPrice: 0.45, upMidpoint: 0.55, downMidpoint: 0.45 },
-      sol5m: { slug: "sol-5m", upPrice: 0.54, downPrice: 0.46, upMidpoint: 0.54, downMidpoint: 0.46 },
+      btc5m: { slug: "btc-5m", upPrice: 0.58, downPrice: 0.42, upMidpoint: 0.58, downMidpoint: 0.42, chainlinkPrice: 59_500 },
+      eth5m: { slug: "eth-5m", upPrice: 0.55, downPrice: 0.45, upMidpoint: 0.55, downMidpoint: 0.45, chainlinkPrice: 2_940 },
+      sol5m: { slug: "sol-5m", upPrice: 0.525, downPrice: 0.475, upMidpoint: 0.525, downMidpoint: 0.475, chainlinkPrice: 132 },
     }),
   );
   serviceRuntime.ingestSnapshot(
     buildSnapshot(7_000, {
-      btc5m: { slug: "btc-5m", upPrice: 0.61, downPrice: 0.39, upMidpoint: 0.61, downMidpoint: 0.39 },
-      eth5m: { slug: "eth-5m", upPrice: 0.58, downPrice: 0.42, upMidpoint: 0.58, downMidpoint: 0.42 },
-      sol5m: { slug: "sol-5m", upPrice: 0.57, downPrice: 0.43, upMidpoint: 0.57, downMidpoint: 0.43 },
+      btc5m: { slug: "btc-5m", upPrice: 0.61, downPrice: 0.39, upMidpoint: 0.61, downMidpoint: 0.39, chainlinkPrice: 59_250 },
+      eth5m: { slug: "eth-5m", upPrice: 0.58, downPrice: 0.42, upMidpoint: 0.58, downMidpoint: 0.42, chainlinkPrice: 2_910 },
+      sol5m: { slug: "sol-5m", upPrice: 0.54, downPrice: 0.46, upMidpoint: 0.54, downMidpoint: 0.46, chainlinkPrice: 131.5 },
     }),
   );
   serviceRuntime.ingestSnapshot(
     buildSnapshot(9_000, {
-      btc5m: { slug: "btc-5m", upPrice: 0.615, downPrice: 0.385, upMidpoint: 0.615, downMidpoint: 0.385 },
-      eth5m: { slug: "eth-5m", upPrice: 0.585, downPrice: 0.415, upMidpoint: 0.585, downMidpoint: 0.415 },
-      sol5m: { slug: "sol-5m", upPrice: 0.575, downPrice: 0.425, upMidpoint: 0.575, downMidpoint: 0.425 },
+      btc5m: { slug: "btc-5m", upPrice: 0.615, downPrice: 0.385, upMidpoint: 0.615, downMidpoint: 0.385, chainlinkPrice: 59_200 },
+      eth5m: { slug: "eth-5m", upPrice: 0.585, downPrice: 0.415, upMidpoint: 0.585, downMidpoint: 0.415, chainlinkPrice: 2_900 },
+      sol5m: { slug: "sol-5m", upPrice: 0.55, downPrice: 0.45, upMidpoint: 0.55, downMidpoint: 0.45, chainlinkPrice: 131 },
     }),
   );
 
-  const solPredictionsResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=sol&window=5m&limit=5`);
-  const solPredictionsJson = await solPredictionsResponse.json();
+  const solCombosResponse = await fetch(`http://127.0.0.1:${address.port}/v1/combos?asset=sol&window=5m&limit=5`);
+  const solCombosJson = await solCombosResponse.json();
 
-  assert.equal(solPredictionsResponse.status, 200);
-  assert.equal(Array.isArray(solPredictionsJson), true);
-  assert.equal(solPredictionsJson.length >= 1, true);
-  assert.equal(solPredictionsJson[0].marketKey, "sol:5m");
+  assert.equal(solCombosResponse.status, 200);
+  assert.equal(Array.isArray(solCombosJson), true);
+  assert.equal(solCombosJson.length >= 1, true);
+  assert.equal(solCombosJson[0].marketKey, "sol:5m");
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
@@ -553,6 +553,7 @@ type MarketOverride = {
   downPrice: number;
   upMidpoint: number | null;
   downMidpoint: number | null;
+  chainlinkPrice?: number;
 };
 
 function applyMarketOverride(
@@ -561,6 +562,7 @@ function applyMarketOverride(
   marketOverride: MarketOverride | undefined,
   generatedAt: number,
 ): void {
+  const [asset] = prefix.split("_");
   snapshot[`${prefix}_slug`] = marketOverride?.slug ?? null;
   snapshot[`${prefix}_market_start`] = marketOverride ? "2025-01-01T00:00:00.000Z" : null;
   snapshot[`${prefix}_market_end`] = marketOverride ? "2025-01-01T00:05:00.000Z" : null;
@@ -575,6 +577,9 @@ function applyMarketOverride(
   snapshot[`${prefix}_down_order_book_json`] =
     marketOverride && marketOverride.downMidpoint !== null ? buildOrderBookJson(marketOverride.downMidpoint - 0.01, marketOverride.downMidpoint + 0.01) : null;
   snapshot[`${prefix}_down_event_ts`] = marketOverride ? generatedAt : null;
+  if (marketOverride?.chainlinkPrice !== undefined) {
+    snapshot[`${asset}_chainlink_price`] = marketOverride.chainlinkPrice;
+  }
 }
 
 function buildOrderBookJson(bestBid: number, bestAsk: number): string {

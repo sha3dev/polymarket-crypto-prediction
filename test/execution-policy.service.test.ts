@@ -2,7 +2,7 @@ import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ExecutionPolicyService } from "../src/execution/execution-policy.service.ts";
-import type { MarketPerformanceSummary, PositionSide } from "../src/execution/execution.types.ts";
+import type { MarketPerformanceSummary, PaperPosition, PositionSide } from "../src/execution/execution.types.ts";
 import type { MarketQuality, MarketSnapshotSlice, PredictionDirection, SpotVenueMetrics, TokenMetrics } from "../src/market/market.types.ts";
 import type { PredictionResponse } from "../src/prediction/prediction.types.ts";
 
@@ -121,6 +121,38 @@ test("ExecutionPolicyService blocks entries when the historical market score is 
   }
   assert.equal(executionDecision.isEntryAllowed, false);
   assert.equal(executionDecision.blockingReasons.includes("market_score_too_low"), true);
+});
+
+test("ExecutionPolicyService keeps the position open at take profit when continuation still looks healthy", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const marketSlice = buildMarketSnapshotSlice("btc");
+  marketSlice.up.price = 0.64;
+  marketSlice.up.midpoint = 0.64;
+  marketSlice.up.bestBid = 0.635;
+  marketSlice.up.bestAsk = 0.645;
+  const openPosition = buildOpenPosition("up");
+  const prediction = buildPredictionResponse("UP", "btc", "UP", "UP");
+  const exitDecision = executionPolicyService.buildExitDecision(marketSlice, openPosition, prediction);
+
+  assert.equal(exitDecision.exitReason, null);
+  assert.equal(exitDecision.nextStopLossPrice, 0.5);
+});
+
+test("ExecutionPolicyService exits at take profit when continuation has degraded", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const marketSlice = buildMarketSnapshotSlice("btc");
+  marketSlice.up.price = 0.64;
+  marketSlice.up.midpoint = 0.64;
+  marketSlice.up.bestBid = 0.635;
+  marketSlice.up.bestAsk = 0.645;
+  const openPosition = buildOpenPosition("up");
+  const degradedPrediction = buildPredictionResponse("UP", "btc", "UP", "UP");
+  degradedPrediction.selectedCombo.comboScore = 0.54;
+  degradedPrediction.selectedCombo.affordabilityScore = 0.1;
+  const exitDecision = executionPolicyService.buildExitDecision(marketSlice, openPosition, degradedPrediction);
+
+  assert.equal(exitDecision.exitReason, "take_profit_hit");
+  assert.notEqual(exitDecision.executionStyle, null);
 });
 
 function buildMarketSnapshotSlice(asset: "btc" | "eth" | "sol" | "xrp" = "btc"): MarketSnapshotSlice {
@@ -319,6 +351,36 @@ function buildPredictionResponse(
       totalBoostApplied: 0,
       totalConfidencePenaltyApplied: 0,
     },
+  };
+}
+
+function buildOpenPosition(positionSide: PositionSide): PaperPosition {
+  return {
+    positionId: "position-1",
+    marketKey: "btc:5m",
+    asset: "btc" as const,
+    window: "5m" as const,
+    positionSide,
+    entryDecisionAt: 1_000,
+    entryExecutionStyle: "maker" as const,
+    shareCount: 10,
+    entryPostedPrice: null,
+    entryFillPrice: 0.5,
+    entryFilledAt: 1_100,
+    takeProfitPrice: 0.62,
+    stopLossPrice: 0.42,
+    status: "open" as const,
+    exitDecisionAt: null,
+    exitExecutionStyle: null,
+    exitPostedPrice: null,
+    exitFillPrice: null,
+    exitFilledAt: null,
+    exitReason: null,
+    realizedPnlTokenPrice: null,
+    realizedPnlAfterCosts: null,
+    makerAttempts: 1,
+    hasTakerFallbackUsed: false,
+    signalTimestamp: 1_000,
   };
 }
 
