@@ -1657,9 +1657,9 @@ export class DashboardViewService {
           const ethSignedValue = globalRegime === null ? 0 : globalRegime.ethUpTokenMomentum - globalRegime.ethDownTokenMomentum;
           const equalizerMarkup =
             '<div class="global-regime-equalizer">' +
-              renderCenteredEqualizer('BRD', breadthSignedValue, 1, 'Signed breadth strength. Right means upward breadth, left means downward breadth.') +
-              renderCenteredEqualizer('PAR', participationSignedValue, 1, 'Signed breadth participation. Right means more markets align up, left means more align down.') +
-              renderCenteredEqualizer('ACC', accelerationSignedValue, 1, 'Signed acceleration. Right means upward breadth is building faster, left means downward breadth is building faster.') +
+              renderCenteredEqualizer('BRD', breadthSignedValue, 1, 'Signed anchor breadth strength from BTC and ETH only. Right means upward anchor breadth, left means downward anchor breadth.') +
+              renderCenteredEqualizer('PAR', participationSignedValue, 1, 'Signed anchor participation from BTC and ETH only. Right means BTC and ETH align up, left means they align down.') +
+              renderCenteredEqualizer('ACC', accelerationSignedValue, 1, 'Signed anchor acceleration. Right means upward anchor pressure is building faster, left means downward anchor pressure is building faster.') +
               renderCenteredEqualizer('BTC', btcSignedValue, 0.25, 'Net BTC anchor momentum. Right means BTC UP token dominates, left means BTC DOWN token dominates.') +
               renderCenteredEqualizer('ETH', ethSignedValue, 0.25, 'Net ETH anchor momentum. Right means ETH UP token dominates, left means ETH DOWN token dominates.') +
             '</div>';
@@ -1669,9 +1669,9 @@ export class DashboardViewService {
                 '<div>' + (globalRegime === null ? renderInfoCode('regime', 'neutral', 'NEU') : renderInfoCode('regime', globalRegime.regimeId, renderRegimeName(globalRegime))) + '</div>' +
               '</div>' +
               '<div class="global-regime-kpis">' +
-                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.breadthStrength ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Breadth', 'Raw breadth strength. This still moves even when the regime id remains neutral.') + '</div></div>' +
-                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.breadthParticipation ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Part', 'Share of qualifying markets moving in the same direction.') + '</div></div>' +
-                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.accelerationScore ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Accel', 'How quickly the breadth picture is changing.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.breadthStrength ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Breadth', 'Anchor breadth strength from BTC and ETH only. Followers no longer define this number.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.breadthParticipation ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Part', 'Share of BTC and ETH anchor strength aligned in the same direction.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.accelerationScore ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Accel', 'How quickly the BTC and ETH anchor picture is changing.') + '</div></div>' +
                 '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.reversalRiskScore ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Rev', 'Reversal pressure against anchor-led continuation.') + '</div></div>' +
               '</div>' +
               '<div class="global-regime-token-grid">' +

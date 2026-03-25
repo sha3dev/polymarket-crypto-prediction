@@ -116,6 +116,7 @@ export type CrossAssetRegime = {
   hasEthAlignment: boolean;
   breadthStrength: number;
   breadthParticipation: number;
+  followerParticipation: number;
   averageSignedMove: number;
   targetSignedMove: number;
   peerAverageSignedMove: number;

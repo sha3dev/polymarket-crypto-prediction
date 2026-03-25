@@ -203,6 +203,7 @@ Important regime fields:
 - `ethDownTokenMomentum`
 - `breadthStrength`
 - `breadthParticipation`
+- `followerParticipation`
 - `synchronyScore`
 - `accelerationScore`
 - `reversalRiskScore`
@@ -210,6 +211,8 @@ Important regime fields:
 - `hasEthAlignment`
 - `isDirectional`
 - `isTradableGlobalContext`
+
+`breadthStrength` and `breadthParticipation` are anchor-only metrics built from `BTC` and `ETH`. `SOL` and `XRP` do not define regime breadth anymore; they only appear as followers through `followerParticipation`.
 
 ### Hard Anchor Rules
 

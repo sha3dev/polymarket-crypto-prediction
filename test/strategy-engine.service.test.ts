@@ -247,6 +247,7 @@ function buildPredictionContext(): PredictionContext {
       hasEthAlignment: true,
       breadthStrength: 0.84,
       breadthParticipation: 1,
+      followerParticipation: 1,
       averageSignedMove: 0.05,
       targetSignedMove: 0.02,
       peerAverageSignedMove: 0.06,

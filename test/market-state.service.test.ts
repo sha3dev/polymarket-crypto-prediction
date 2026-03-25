@@ -20,6 +20,35 @@ test("MarketStateService exposes bias regimes before strong breadth exists", () 
   assert.equal(Math.abs((crossAssetRegime?.reversalRiskScore ?? 1) - 0.19) > 0.01, true);
 });
 
+test("MarketStateService exposes btc-eth bias when anchor token momentum aligns before breadth wakes up", () => {
+  const marketStateService = new MarketStateService();
+
+  marketStateService.ingestSnapshot(buildAnchorBiasSnapshot(1_000));
+  marketStateService.ingestSnapshot(buildAnchorBiasSnapshot(20_000));
+
+  const crossAssetRegime = marketStateService.getCrossAssetRegime("btc:5m");
+
+  assert.notEqual(crossAssetRegime, null);
+  assert.equal(crossAssetRegime?.regimeId, "btc_eth_bias_down");
+  assert.equal((crossAssetRegime?.breadthStrength ?? 1) < 0.04, true);
+  assert.equal((crossAssetRegime?.breadthParticipation ?? 0) >= 0.55, true);
+});
+
+test("MarketStateService ignores follower-only moves when building anchor breadth", () => {
+  const marketStateService = new MarketStateService();
+
+  marketStateService.ingestSnapshot(buildFollowerOnlySnapshot(1_000));
+  marketStateService.ingestSnapshot(buildFollowerOnlySnapshot(20_000));
+
+  const crossAssetRegime = marketStateService.getCrossAssetRegime("btc:5m");
+
+  assert.notEqual(crossAssetRegime, null);
+  assert.equal(crossAssetRegime?.regimeId, "neutral");
+  assert.equal(crossAssetRegime?.breadthDirection, "NEUTRAL");
+  assert.equal(crossAssetRegime?.breadthStrength, 0);
+  assert.equal((crossAssetRegime?.followerParticipation ?? 0) > 0, false);
+});
+
 test("MarketStateService detects anchor-follow breakout triggers outside the half-cross", () => {
   const marketStateService = new MarketStateService();
 
@@ -130,6 +159,52 @@ function buildSelectiveSnapshot(generatedAt: number, upMidpoints: Partial<Record
   return snapshot;
 }
 
+function buildAnchorBiasSnapshot(generatedAt: number): InputSnapshot {
+  const snapshot: InputSnapshot = {
+    generated_at: generatedAt,
+  };
+
+  appendCustomMarketSnapshot(snapshot, generatedAt, "btc", "5m", 0.498, 59_982, "btc-5m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "btc", "15m", 0.498, 59_982, "btc-15m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "eth", "5m", 0.4985, 2_999.1, "eth-5m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "eth", "15m", 0.4985, 2_999.1, "eth-15m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "sol", "5m", 0.4998, 149.97, "sol-5m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "sol", "15m", 0.4998, 149.97, "sol-15m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "xrp", "5m", 0.4998, 0.59988, "xrp-5m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "xrp", "15m", 0.4998, 0.59988, "xrp-15m");
+
+  if (generatedAt === 1_000) {
+    appendCustomMarketSnapshot(snapshot, generatedAt, "btc", "5m", 0.5, 60_000, "btc-5m");
+    appendCustomMarketSnapshot(snapshot, generatedAt, "btc", "15m", 0.5, 60_000, "btc-15m");
+    appendCustomMarketSnapshot(snapshot, generatedAt, "eth", "5m", 0.5, 3_000, "eth-5m");
+    appendCustomMarketSnapshot(snapshot, generatedAt, "eth", "15m", 0.5, 3_000, "eth-15m");
+    appendCustomMarketSnapshot(snapshot, generatedAt, "sol", "5m", 0.5, 150, "sol-5m");
+    appendCustomMarketSnapshot(snapshot, generatedAt, "sol", "15m", 0.5, 150, "sol-15m");
+    appendCustomMarketSnapshot(snapshot, generatedAt, "xrp", "5m", 0.5, 0.6, "xrp-5m");
+    appendCustomMarketSnapshot(snapshot, generatedAt, "xrp", "15m", 0.5, 0.6, "xrp-15m");
+  }
+
+  return snapshot;
+}
+
+function buildFollowerOnlySnapshot(generatedAt: number): InputSnapshot {
+  const snapshot: InputSnapshot = {
+    generated_at: generatedAt,
+  };
+
+  const hasBaselineSnapshot = generatedAt === 1_000;
+  appendCustomMarketSnapshot(snapshot, generatedAt, "btc", "5m", hasBaselineSnapshot ? 0.5 : 0.5, 60_000, "btc-5m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "btc", "15m", hasBaselineSnapshot ? 0.5 : 0.5, 60_000, "btc-15m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "eth", "5m", hasBaselineSnapshot ? 0.5 : 0.5, 3_000, "eth-5m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "eth", "15m", hasBaselineSnapshot ? 0.5 : 0.5, 3_000, "eth-15m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "sol", "5m", hasBaselineSnapshot ? 0.5 : 0.58, hasBaselineSnapshot ? 150 : 174, "sol-5m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "sol", "15m", hasBaselineSnapshot ? 0.5 : 0.58, hasBaselineSnapshot ? 150 : 174, "sol-15m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "xrp", "5m", hasBaselineSnapshot ? 0.5 : 0.56, hasBaselineSnapshot ? 0.6 : 0.672, "xrp-5m");
+  appendCustomMarketSnapshot(snapshot, generatedAt, "xrp", "15m", hasBaselineSnapshot ? 0.5 : 0.56, hasBaselineSnapshot ? 0.6 : 0.672, "xrp-15m");
+
+  return snapshot;
+}
+
 function appendMarketSnapshot(
   snapshot: Record<string, number | string | null>,
   generatedAt: number,
@@ -195,5 +270,35 @@ function appendSelectiveMarketSnapshot(
   snapshot[`${asset}_okx_price`] = baseSpotPrice * driftMultiplier * 1.0002;
   snapshot[`${asset}_okx_event_ts`] = generatedAt;
   snapshot[`${asset}_chainlink_price`] = baseSpotPrice * driftMultiplier;
+  snapshot[`${asset}_chainlink_event_ts`] = generatedAt;
+}
+
+function appendCustomMarketSnapshot(
+  snapshot: Record<string, number | string | null>,
+  generatedAt: number,
+  asset: AssetSymbol,
+  window: MarketWindow,
+  upMidpoint: number,
+  spotConsensusPrice: number,
+  slug: string,
+): void {
+  const prefix = `${asset}_${window}`;
+  const downMidpoint = Math.max(0.01, Math.min(0.99, 1 - upMidpoint));
+
+  snapshot[`${prefix}_slug`] = slug;
+  snapshot[`${prefix}_up_price`] = upMidpoint;
+  snapshot[`${prefix}_down_price`] = downMidpoint;
+  snapshot[`${prefix}_up_event_ts`] = generatedAt;
+  snapshot[`${prefix}_down_event_ts`] = generatedAt;
+
+  snapshot[`${asset}_binance_price`] = spotConsensusPrice;
+  snapshot[`${asset}_binance_event_ts`] = generatedAt;
+  snapshot[`${asset}_coinbase_price`] = spotConsensusPrice * 1.0004;
+  snapshot[`${asset}_coinbase_event_ts`] = generatedAt;
+  snapshot[`${asset}_kraken_price`] = spotConsensusPrice * 0.9996;
+  snapshot[`${asset}_kraken_event_ts`] = generatedAt;
+  snapshot[`${asset}_okx_price`] = spotConsensusPrice * 1.0002;
+  snapshot[`${asset}_okx_event_ts`] = generatedAt;
+  snapshot[`${asset}_chainlink_price`] = spotConsensusPrice;
   snapshot[`${asset}_chainlink_event_ts`] = generatedAt;
 }

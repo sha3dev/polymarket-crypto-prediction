@@ -244,6 +244,7 @@ function buildPredictionResponse(
       hasEthAlignment: btcDirection !== "NEUTRAL" && btcDirection === ethDirection,
       breadthStrength: 0.91,
       breadthParticipation: 1,
+      followerParticipation: 1,
       averageSignedMove: 0.08,
       targetSignedMove: 0.01,
       peerAverageSignedMove: 0.09,

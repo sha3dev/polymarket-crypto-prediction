@@ -420,6 +420,7 @@ function buildLivePredictionResponse(): PredictionResponse {
       hasEthAlignment: true,
       breadthStrength: 0.78,
       breadthParticipation: 1,
+      followerParticipation: 1,
       averageSignedMove: 0.04,
       targetSignedMove: 0.02,
       peerAverageSignedMove: 0.04,
