@@ -426,19 +426,6 @@ This is the best panel for judging research quality:
 - combo score
 - final result
 
-### Discovery Board
-
-Rolling learning surface for combos.
-
-It groups recent resolved predictions by combo and shows:
-
-- hit rate
-- average combo score
-- average affordability
-- average confidence
-- sample count
-- markets where the combo appeared
-
 ### Market PnL
 
 Per-market performance summary:
@@ -639,7 +626,6 @@ Key fields:
 - `winningCombinations`
 - `executionNow`
 - `tradeCandidates`
-- `discoveryBoard`
 - `marketPnlTable`
 - `recentTrades`
 - `openPositions`
@@ -984,7 +970,7 @@ Read:
 
 - `Execution Now`
 - `Trade Candidates`
-- `Discovery Board`
+- `Combo Board`
 
 ### Combos never become actionable
 

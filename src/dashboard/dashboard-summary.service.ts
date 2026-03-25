@@ -60,15 +60,6 @@ export type DashboardSummaryPayload = {
   recentTrades: ExecutionTrade[];
   marketPerformance: MarketPerformanceSummary[];
   marketPnlTable: MarketPerformanceSummary[];
-  discoveryBoard: Array<{
-    comboKey: string;
-    hitRate: number;
-    averageComboScore: number;
-    averageAffordabilityScore: number;
-    averageConfidence: number;
-    sampleCount: number;
-    markets: string[];
-  }>;
   tradeCandidates: Array<{
     marketKey: string;
     comboKey: string | null;
@@ -142,60 +133,6 @@ export class DashboardSummaryService {
     return globalRegimes;
   }
 
-  private buildDiscoveryBoard(latestPredictions: PredictionResponse[]): DashboardSummaryPayload["discoveryBoard"] {
-    const discoveryMap = new Map<
-      string,
-      {
-        comboKey: string;
-        hits: number;
-        totalConfidence: number;
-        totalComboScore: number;
-        totalAffordabilityScore: number;
-        sampleCount: number;
-        markets: Set<string>;
-      }
-    >();
-    for (const prediction of latestPredictions) {
-      const discoveryKey = prediction.selectedCombo.comboKey;
-      let discoveryEntry = discoveryMap.get(discoveryKey);
-      if (!discoveryEntry) {
-        discoveryEntry = {
-          comboKey: prediction.selectedCombo.comboKey,
-          hits: 0,
-          totalConfidence: 0,
-          totalComboScore: 0,
-          totalAffordabilityScore: 0,
-          sampleCount: 0,
-          markets: new Set<string>(),
-        };
-        discoveryMap.set(discoveryKey, discoveryEntry);
-      }
-      if (prediction.result.status === "ok") {
-        discoveryEntry.hits += 1;
-      }
-      discoveryEntry.totalConfidence += prediction.confidence;
-      discoveryEntry.totalComboScore += prediction.selectedCombo.comboScore;
-      discoveryEntry.totalAffordabilityScore += prediction.selectedCombo.affordabilityScore;
-      discoveryEntry.sampleCount += 1;
-      discoveryEntry.markets.add(prediction.marketKey);
-    }
-    const discoveryBoard = [...discoveryMap.values()]
-      .map((discoveryEntry) => {
-        return {
-          comboKey: discoveryEntry.comboKey,
-          hitRate: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.hits / discoveryEntry.sampleCount,
-          averageComboScore: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalComboScore / discoveryEntry.sampleCount,
-          averageAffordabilityScore: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalAffordabilityScore / discoveryEntry.sampleCount,
-          averageConfidence: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalConfidence / discoveryEntry.sampleCount,
-          sampleCount: discoveryEntry.sampleCount,
-          markets: [...discoveryEntry.markets],
-        };
-      })
-      .sort((leftEntry, rightEntry) => rightEntry.hitRate - leftEntry.hitRate || rightEntry.sampleCount - leftEntry.sampleCount)
-      .slice(0, 10);
-    return discoveryBoard;
-  }
-
   private buildTradeCandidates(executionNow: MarketExecutionSummary[]): DashboardSummaryPayload["tradeCandidates"] {
     const tradeCandidates = [...executionNow]
       .map((marketExecution) => {
@@ -257,7 +194,6 @@ export class DashboardSummaryService {
       return rightMarketPerformance.cumulativeNetPnl - leftMarketPerformance.cumulativeNetPnl;
     });
     const winningCombinations = latestPredictions.slice(0, 12);
-    const discoveryBoard = this.buildDiscoveryBoard(latestPredictions);
     const tradeCandidates = this.buildTradeCandidates(executionNow);
     const executionPerformance = this.executionService.getPortfolioSummary();
     const paperExecutionPerformance = executionPerformance;
@@ -293,7 +229,6 @@ export class DashboardSummaryService {
       recentTrades,
       marketPerformance,
       marketPnlTable,
-      discoveryBoard,
       tradeCandidates,
       executionPerformance,
       paperExecutionPerformance,

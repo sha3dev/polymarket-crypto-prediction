@@ -483,7 +483,6 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(summaryJson.marketPerformance.length, 8);
   assert.equal(summaryJson.marketPnlTable.length, 8);
   assert.equal(Array.isArray(summaryJson.winningCombinations), true);
-  assert.equal(Array.isArray(summaryJson.discoveryBoard), true);
   assert.equal(Array.isArray(summaryJson.tradeCandidates), true);
   assert.equal(typeof summaryJson.executionPerformance.tradeCount, "number");
   assert.equal(typeof summaryJson.paperExecutionPerformance.tradeCount, "number");

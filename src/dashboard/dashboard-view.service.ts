@@ -703,11 +703,6 @@ export class DashboardViewService {
             <p class="tiny panel-intro">Performance summary by market. It helps separate markets that look interesting for research from markets that are actually proving they deserve execution capital.</p>
             <div id="market-pnl" class="loading panel-scroll">Loading market pnl…</div>
           </article>
-          <article class="panel panel-medium">
-            <h2><span class="panel-title"><span>Discovery Board</span><button type="button" class="panel-info-button" data-full-label="Discovery Board" data-description="Learning board for recent combo behavior. It summarizes which strategy combinations are resolving well or badly, so you can see what the system is actually discovering." aria-label="Discovery Board. Learning board for recent combo behavior. It summarizes which strategy combinations are resolving well or badly, so you can see what the system is actually discovering.">i</button></span></h2>
-            <p class="tiny panel-intro">Compact learning board for the combo engine. It summarizes which strategy combinations are resolving well, which helps you see whether the discovery layer is learning anything useful.</p>
-            <div id="discovery" class="loading panel-scroll">Loading discovery board…</div>
-          </article>
           <article class="panel panel-compact">
             <h2><span class="panel-title"><span>Health</span><button type="button" class="panel-info-button" data-full-label="Health" data-description="Operational status of the service. Check it first if the rest of the dashboard looks suspicious, stale, or inconsistent." aria-label="Health. Operational status of the service. Check it first if the rest of the dashboard looks suspicious, stale, or inconsistent.">i</button></span></h2>
             <p class="tiny panel-intro">Operational status of the feed and the service itself. If another panel looks suspicious, check here first to confirm the data is fresh and the runtime is behaving normally.</p>
@@ -2045,23 +2040,6 @@ export class DashboardViewService {
           : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Dir', 'Direction chosen by the winning combo for this prediction.') + '</th><th>' + renderHintLabel('Combo', 'Winning strategy combo for the prediction.') + '</th><th>' + renderHintLabel('Score', 'Main combo score for the selected combination. Real execution expects at least ' + formatNumber(${config.MIN_COMBO_EXECUTION_SCORE}, 2) + '.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen combo. Real entry also needs at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Why', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
-      function renderDiscoveryBoard(summary) {
-        const rows = summary.discoveryBoard.map((discoveryEntry) => {
-          return '<tr>' +
-            '<td><span title="' + discoveryEntry.markets.join(', ') + '">' + renderCodeListGroup('strategy', discoveryEntry.comboKey.split('+'), 3) + '</span></td>' +
-            '<td>' + formatNumber(discoveryEntry.hitRate, 2) + '</td>' +
-            '<td>' + formatNumber(discoveryEntry.averageComboScore, 2) + '</td>' +
-            '<td>' + formatNumber(discoveryEntry.averageAffordabilityScore, 2) + '</td>' +
-            '<td>' + formatNumber(discoveryEntry.averageConfidence, 2) + '</td>' +
-            '<td>' + discoveryEntry.sampleCount + '</td>' +
-            '<td><span title="' + discoveryEntry.markets.join(', ') + '">' + discoveryEntry.markets.join(', ') + '</span></td>' +
-            '</tr>';
-        }).join('');
-        replacePanelContent('discovery', summary.discoveryBoard.length === 0
-          ? '<div class="tiny">No combo learning history yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Strategy combo being learned.') + '</th><th>' + renderHintLabel('Hit', 'Resolved hit rate for that combo.') + '</th><th>' + renderHintLabel('Score', 'Average combo score for that combo across recent resolved predictions.') + '</th><th>' + renderHintLabel('Aff', 'Average affordability score for that combo.') + '</th><th>' + renderHintLabel('Avg conf', 'Average confidence for that combo.') + '</th><th>' + renderHintLabel('N', 'Number of resolved predictions inside the dashboard window.') + '</th><th>' + renderHintLabel('Markets', 'Markets where this combo has recently appeared.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
-      }
-
       function renderPositions(summary) {
         const rows = summary.openPositions.map((position) => {
           return '<tr>' +
@@ -2126,7 +2104,6 @@ export class DashboardViewService {
         renderTradeProximity(summary);
         renderWinningCombinations(summary);
         renderMarketPnl(summary);
-        renderDiscoveryBoard(summary);
         renderPositions(summary);
         renderTrades(summary);
         renderHealth(summary);
