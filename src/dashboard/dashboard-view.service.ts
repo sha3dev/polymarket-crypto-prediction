@@ -260,6 +260,9 @@ export class DashboardViewService {
         height: 100%;
         background: linear-gradient(90deg, var(--accent), var(--accent-2));
       }
+      .combo-direction-pill {
+        margin-right: 6px;
+      }
       .global-regime-stack {
         display: grid;
         gap: 12px;
@@ -982,10 +985,11 @@ export class DashboardViewService {
         return convictionLabel;
       }
 
-      function renderDirectionPill(direction) {
+      function renderDirectionPill(direction, extraClass = "") {
         const directionClass = direction === "UP" || direction === "up" ? "up" : "down";
         const directionLabel = direction === "UP" || direction === "up" ? "U" : "D";
-        return '<span class="pill ' + directionClass + '">' + directionLabel + '</span>';
+        const extraClassLabel = extraClass ? ' ' + extraClass : '';
+        return '<span class="pill ' + directionClass + extraClassLabel + '">' + directionLabel + '</span>';
       }
 
       function renderPositionSideLabel(positionSide) {
@@ -1703,7 +1707,7 @@ export class DashboardViewService {
               ? 'no execution decision yet'
               : renderCrossAssetHover(latestPrediction.crossAssetRegime);
           const comboLabel = latestPrediction ? renderCodeListGroup('strategy', latestPrediction.selectedCombo.memberStrategyIds, 3) : '—';
-          const comboDirectionLabel = latestPrediction ? renderDirectionPill(latestPrediction.direction) : '—';
+          const comboDirectionLabel = latestPrediction ? renderDirectionPill(latestPrediction.direction, "combo-direction-pill") : '—';
           return '<tr>' +
             '<td><strong>' + market.asset.toUpperCase() + '</strong> <span class="tiny">' + market.window + '</span></td>' +
             '<td>' + formatNumber(market.latestUpMidpoint) + '</td>' +
@@ -1893,9 +1897,26 @@ export class DashboardViewService {
           const market = marketSummaryMap[tradeCandidate.marketKey];
           const proximity = computeTradeProximity(decision, market);
           const proximityLabel = decision.isEntryAllowed ? 'RDY' : proximity.proximity >= 0.75 ? 'HOT' : proximity.proximity >= 0.5 ? 'MID' : 'COLD';
-          const comboDirectionLabel = decision.selectedComboDirection === null ? '<span class="tiny">no side</span>' : renderDirectionPill(decision.selectedComboDirection);
+          const comboDirectionCode = decision.selectedComboDirection === null ? '—' : decision.selectedComboDirection;
           const historyValues = pushTradeProximityHistory(tradeCandidate.marketKey, proximity.proximity);
           const trendCanvasId = buildTradeProximityDomId('trade-proximity-trend', tradeCandidate.marketKey);
+          const directionFactorMarkup =
+            '<button type="button" class="proximity-factor" data-full-label="Side" data-description="' +
+            escapeHtml(
+              decision.selectedComboDirection === null
+                ? 'Current combo side is not available because no active combo has been selected for this market yet.'
+                : 'Current combo side. This tells you whether the candidate is being evaluated as an UP or DOWN idea.',
+            ) +
+            '" aria-label="' +
+            escapeHtml(
+              decision.selectedComboDirection === null
+                ? 'Side. No combo side is available yet for this market.'
+                : 'Side. Current combo side is ' + decision.selectedComboDirection + '.',
+            ) +
+            '">' +
+            'Side ' +
+            escapeHtml(comboDirectionCode) +
+            '</button>';
           const factorEntries = [
             ['Score', proximity.comboStrength, 'How strong the currently selected strategy combo looks right now. High means the idea itself is convincing and closer to passing the combo gate.'],
             ['Price', proximity.affordabilityStrength, 'Whether the current token price still looks attractive for entry, or whether the move already feels too stretched.'],
@@ -1915,18 +1936,19 @@ export class DashboardViewService {
               ' ' +
               formatNumber(value, 2) +
               '</button>';
-          }).join('');
+            }).join('');
+          const allFactorMarkup = directionFactorMarkup + factorMarkup;
           chartRows.push({
             trendCanvasId,
             history: historyValues,
           });
           const meterWidth = Math.round(proximity.proximity * 100);
           return '<div class="proximity-row">' +
-            '<div class="proximity-market"><strong>' + tradeCandidate.marketKey.replace(':', ' ') + '</strong><span>' + comboDirectionLabel + '</span></div>' +
+            '<div class="proximity-market"><strong>' + tradeCandidate.marketKey.replace(':', ' ') + '</strong></div>' +
             '<div class="proximity-main">' +
               '<div class="proximity-meter"><span class="proximity-meter-fill" style="width:' + meterWidth + '%"></span></div>' +
               '<div class="proximity-meta">' +
-                '<div class="proximity-factors">' + factorMarkup + '</div>' +
+                '<div class="proximity-factors">' + allFactorMarkup + '</div>' +
                 '<div class="proximity-sparkline"><canvas id="' + trendCanvasId + '"></canvas></div>' +
               '</div>' +
             '</div>' +
