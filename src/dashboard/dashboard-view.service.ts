@@ -559,7 +559,7 @@ export class DashboardViewService {
       }
       @media (max-width: 700px) {
         .shell { width: min(100vw - 20px, 1600px); }
-        .kpi-strip { grid-template-columns: 1fr; }
+        .kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .health-grid { grid-template-columns: 1fr; }
         .global-regime-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
         .global-regime-token-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -567,6 +567,8 @@ export class DashboardViewService {
         .global-regime-equalizer { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .global-regime-equalizer-card { padding-top: 6px; padding-bottom: 4px; }
         .global-regime-equalizer-card + .global-regime-equalizer-card { padding-left: 10px; }
+        .kpi { min-height: 72px; }
+        .kpi strong { font-size: 18px; }
         .proximity-row {
           grid-template-columns: 1fr;
           gap: 8px;
@@ -696,6 +698,20 @@ export class DashboardViewService {
       const globalRegimeCharts = new Map();
 
       const typedCodeCatalog = {
+        strategy: {
+          s01: { code: 's01', label: 'Momentum EWMA', description: 'Short-horizon drift continuation sensor built from local token momentum.' },
+          s02: { code: 's02', label: 'Token Microprice', description: 'Top-of-book pressure sensor using the local UP and DOWN token order book.' },
+          s05: { code: 's05', label: 'Order Book Churn', description: 'Detects fast order-book rotation and pressure changes around the best prices.' },
+          s09: { code: 's09', label: 'Spot Consensus Momentum', description: 'Cross-venue spot drift sensor that looks for broad spot follow-through.' },
+          s12: { code: 's12', label: 'Volatility Breakout', description: 'Flags local breakout conditions when the market starts expanding out of a quieter state.' },
+          s14: { code: 's14', label: 'Chainlink Basis', description: 'Measures token mispricing versus the Chainlink anchor price.' },
+          s16: { code: 's16', label: 'Freshness Gap', description: 'Detects stale-token repricing when spot is moving faster than the token quotes.' },
+          s18: { code: 's18', label: 'Liquidity Shock Fade', description: 'Mean-reversion sensor for short-lived liquidity shocks and failed pushes.' },
+          s21: { code: 's21', label: 'Cross-Asset Breadth Impulse', description: 'Anchor-breadth confirmation from BTC and ETH. It confirms context more than it creates conviction.' },
+          s22: { code: 's22', label: 'Anchor Follow Catch-Up', description: 'Follower catch-up sensor for markets that start moving after BTC and ETH already aligned.' },
+          s23: { code: 's23', label: 'BTC Trend Reversal Confirmation', description: 'Looks for a real BTC side flip and whether the new direction is starting to confirm.' },
+          s24: { code: 's24', label: 'Price Stretch Penalty', description: 'Negative risk sensor that penalizes entries already too expensive for the expected take-profit.' },
+        },
         regime: {
           neutral: { code: 'NEU', label: 'Neutral', description: 'No coherent cross-asset directional structure is dominant.' },
           btc_bias_up: { code: 'BBU', label: 'BTC Bias Up', description: 'BTC is leaning upward, but the move is not yet strong enough to count as a confirmed anchor regime.' },
