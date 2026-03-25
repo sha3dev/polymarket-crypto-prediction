@@ -24,6 +24,9 @@ import type { PredictionOutcome, PredictionRecord, PredictionResponse } from "./
 const MODEL_TRIGGER_MIN_SCORE = 0.58;
 const MODEL_TRIGGER_MIN_CONFIDENCE = 0.58;
 const MODEL_TRIGGER_MIN_SCORE_DELTA = 0.16;
+const RESEARCH_TRIGGER_MIN_SCORE = 0.46;
+const RESEARCH_TRIGGER_MIN_CONFIDENCE = 0.52;
+const RESEARCH_TRIGGER_MIN_QUALITY = 0.68;
 
 /**
  * @section types
@@ -160,6 +163,11 @@ export class PredictionEngineService {
       shouldHoldResearchAfterTakeProfit = hasDirectionMatch && hasComboSupport && hasAnchorConfirmation && hasAffordabilitySupport && hasQualitySupport;
     }
     return shouldHoldResearchAfterTakeProfit;
+  }
+
+  private hasResearchQualityConfirmation(qualityScore: number): boolean {
+    const hasResearchQualityConfirmation = qualityScore >= RESEARCH_TRIGGER_MIN_QUALITY;
+    return hasResearchQualityConfirmation;
   }
 
   private maybeResolveResearchPredictions(): void {
@@ -364,9 +372,9 @@ export class PredictionEngineService {
       const ageMs = nowTimestamp - marketTrigger.triggeredAt;
       const isPastDelay = ageMs >= config.TRIGGER_CONFIRMATION_DELAY_MS;
       const hasDirectionMatch = selectedCombo?.direction === expectedDirection;
-      const hasScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= MODEL_TRIGGER_MIN_SCORE;
-      const hasConfidenceConfirmation = (selectedCombo?.comboConfidence ?? 0) >= MODEL_TRIGGER_MIN_CONFIDENCE;
-      const hasQualityConfirmation = modelEvaluationSnapshot.predictionContext.current.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
+      const hasScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= RESEARCH_TRIGGER_MIN_SCORE;
+      const hasConfidenceConfirmation = (selectedCombo?.comboConfidence ?? 0) >= RESEARCH_TRIGGER_MIN_CONFIDENCE;
+      const hasQualityConfirmation = this.hasResearchQualityConfirmation(modelEvaluationSnapshot.predictionContext.current.quality.score);
       const hasAnchorConfirmation = this.hasAnchorConfirmation(marketTrigger.marketKey, marketTrigger.triggeredToken);
       hasModelTriggerConfirmed =
         isPastDelay && hasDirectionMatch && hasScoreConfirmation && hasConfidenceConfirmation && hasQualityConfirmation && hasAnchorConfirmation;
@@ -384,7 +392,7 @@ export class PredictionEngineService {
       const expectedDirection: PredictionDirection = marketTrigger.triggeredToken === "up" ? "UP" : "DOWN";
       const ageMs = nowTimestamp - marketTrigger.triggeredAt;
       const hasDirectionMismatch = selectedCombo?.direction !== expectedDirection;
-      const hasWeakCombo = (selectedCombo?.comboScore ?? 0) < 0.5;
+      const hasWeakCombo = (selectedCombo?.comboScore ?? 0) < RESEARCH_TRIGGER_MIN_SCORE;
       shouldDropModelTrigger = ageMs > config.TRIGGER_CONFIRMATION_DELAY_MS * 4 || hasDirectionMismatch || hasWeakCombo;
     }
     return shouldDropModelTrigger;
@@ -405,14 +413,15 @@ export class PredictionEngineService {
         const isPastDelay = ageMs >= config.TRIGGER_CONFIRMATION_DELAY_MS;
         const hasMovedAwayFromHalf = signedDistanceFromHalf >= config.MIN_TRIGGER_DISTANCE_FROM_HALF;
         const hasMomentumConfirmation = this.hasMomentumConfirmation(marketTrigger.marketKey, marketSlice, positionSide);
-        const hasQualityConfirmation = marketSlice.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
+        const hasQualityConfirmation = this.hasResearchQualityConfirmation(marketSlice.quality.score);
         const hasBreadthConfirmation = this.hasBreadthConfirmation(marketTrigger.marketKey);
         const hasAnchorConfirmation = this.hasAnchorConfirmation(marketTrigger.marketKey, positionSide);
         const modelEvaluationSnapshot = this.evaluateCurrentModel(marketTrigger.marketKey);
         const selectedCombo = modelEvaluationSnapshot?.comboApplicationResult.selectedCombo ?? null;
         const expectedDirection: PredictionDirection = positionSide === "up" ? "UP" : "DOWN";
         const hasComboDirectionMatch = selectedCombo?.direction === expectedDirection;
-        const hasComboScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= 0.54;
+        const hasComboScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= RESEARCH_TRIGGER_MIN_SCORE;
+        const hasComboConfidenceConfirmation = (selectedCombo?.comboConfidence ?? 0) >= RESEARCH_TRIGGER_MIN_CONFIDENCE;
         hasPendingTriggerConfirmed =
           isPastDelay &&
           hasMovedAwayFromHalf &&
@@ -420,7 +429,8 @@ export class PredictionEngineService {
           hasQualityConfirmation &&
           (hasBreadthConfirmation || hasAnchorConfirmation) &&
           hasComboDirectionMatch &&
-          hasComboScoreConfirmation;
+          hasComboScoreConfirmation &&
+          hasComboConfidenceConfirmation;
       }
     }
     return hasPendingTriggerConfirmed;

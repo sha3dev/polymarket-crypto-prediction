@@ -1,8 +1,8 @@
 {
   "counts": {
-    "predictionsCreated": 28,
-    "predictionsResolved": 6,
-    "wins": 6,
+    "predictionsCreated": 38,
+    "predictionsResolved": 8,
+    "wins": 8,
     "losses": 0,
     "tradesClosed": 0
   },
@@ -15,9 +15,9 @@
   "markets": {
     "btc:5m": {
       "marketKey": "btc:5m",
-      "predictionCount": 17,
-      "resolvedCount": 6,
-      "winCount": 6,
+      "predictionCount": 23,
+      "resolvedCount": 8,
+      "winCount": 8,
       "lossCount": 0,
       "resolvedAccuracy": 1,
       "tradeCount": 0,
@@ -25,7 +25,7 @@
     },
     "eth:5m": {
       "marketKey": "eth:5m",
-      "predictionCount": 11,
+      "predictionCount": 15,
       "resolvedCount": 0,
       "winCount": 0,
       "lossCount": 0,
@@ -39,8 +39,8 @@
       "strategyId": "s01",
       "name": "Momentum EWMA",
       "tier": "low",
-      "appearances": 6,
-      "wins": 6,
+      "appearances": 8,
+      "wins": 8,
       "losses": 0,
       "hitRate": 1,
       "averageWeight": 1
@@ -49,8 +49,8 @@
       "strategyId": "s02",
       "name": "Token Microprice",
       "tier": "low",
-      "appearances": 6,
-      "wins": 6,
+      "appearances": 8,
+      "wins": 8,
       "losses": 0,
       "hitRate": 1,
       "averageWeight": 1
@@ -59,8 +59,8 @@
       "strategyId": "s09",
       "name": "Spot Consensus Momentum",
       "tier": "low",
-      "appearances": 6,
-      "wins": 6,
+      "appearances": 8,
+      "wins": 8,
       "losses": 0,
       "hitRate": 1,
       "averageWeight": 1
@@ -69,8 +69,8 @@
       "strategyId": "s14",
       "name": "Chainlink Basis",
       "tier": "low",
-      "appearances": 6,
-      "wins": 6,
+      "appearances": 8,
+      "wins": 8,
       "losses": 0,
       "hitRate": 1,
       "averageWeight": 1
@@ -79,8 +79,8 @@
       "strategyId": "s16",
       "name": "Freshness Gap",
       "tier": "low",
-      "appearances": 6,
-      "wins": 6,
+      "appearances": 8,
+      "wins": 8,
       "losses": 0,
       "hitRate": 1,
       "averageWeight": 1
@@ -89,48 +89,48 @@
       "strategyId": "s05",
       "name": "Order Book Churn",
       "tier": "medium",
-      "appearances": 6,
-      "wins": 6,
+      "appearances": 8,
+      "wins": 8,
       "losses": 0,
       "hitRate": 1,
-      "averageWeight": 0.9
+      "averageWeight": 0.9000000000000001
     },
     "s12": {
       "strategyId": "s12",
       "name": "Volatility Breakout",
       "tier": "medium",
-      "appearances": 6,
-      "wins": 6,
+      "appearances": 8,
+      "wins": 8,
       "losses": 0,
       "hitRate": 1,
-      "averageWeight": 0.9
+      "averageWeight": 0.9000000000000001
     },
     "s18": {
       "strategyId": "s18",
       "name": "Liquidity Shock Fade",
       "tier": "medium",
-      "appearances": 6,
-      "wins": 6,
+      "appearances": 8,
+      "wins": 8,
       "losses": 0,
       "hitRate": 1,
-      "averageWeight": 0.9
+      "averageWeight": 0.9000000000000001
     },
     "s21": {
       "strategyId": "s21",
       "name": "Cross-Asset Breadth Impulse",
       "tier": "medium",
-      "appearances": 6,
-      "wins": 6,
+      "appearances": 8,
+      "wins": 8,
       "losses": 0,
       "hitRate": 1,
-      "averageWeight": 0.9
+      "averageWeight": 0.9000000000000001
     }
   },
   "combos": {
     "s01+s14": {
       "comboKey": "s01+s14",
-      "resolvedCount": 6,
-      "wins": 6,
+      "resolvedCount": 8,
+      "wins": 8,
       "losses": 0,
       "hitRate": 1
     }
@@ -319,8 +319,8 @@
     }
   ],
   "confidenceTotals": {
-    "resolved": 3.675430674148386,
-    "wins": 3.675430674148386,
+    "resolved": 4.900574232197848,
+    "wins": 4.900574232197848,
     "losses": 0
   }
 }
