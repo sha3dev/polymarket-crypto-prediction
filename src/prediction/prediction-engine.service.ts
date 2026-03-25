@@ -8,13 +8,39 @@ import type { ComboSummary, MarketComboBoard } from "../combo/combo.types.ts";
 import config from "../config.ts";
 import type { ComboSource, PositionSide, TradeExitReason } from "../execution/execution.types.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
-import type { AssetSymbol, MarketKey, MarketSnapshotSlice, MarketTrigger, MarketWindow, PredictionDirection } from "../market/market.types.ts";
+import type { AssetSymbol, MarketKey, MarketSnapshotSlice, MarketTrigger, MarketWindow, PredictionDirection, TriggerType } from "../market/market.types.ts";
 import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
 import type { StrategyEngineService } from "../strategy/strategy-engine.service.ts";
 import type { StrategyMetricsService } from "../strategy/strategy-metrics.service.ts";
 import type { EngineBoard, StrategySummary } from "../strategy/strategy.types.ts";
 import type { PredictionStoreService } from "./prediction-store.service.ts";
 import type { PredictionOutcome, PredictionRecord, PredictionResponse } from "./prediction.types.ts";
+
+/**
+ * @section consts
+ */
+
+const MODEL_TRIGGER_MIN_SCORE = 0.55;
+const MODEL_TRIGGER_MIN_CONFIDENCE = 0.56;
+const MODEL_TRIGGER_MIN_SCORE_DELTA = 0.12;
+
+/**
+ * @section types
+ */
+
+type ModelStateSnapshot = {
+  comboKey: string | null;
+  direction: PredictionDirection | null;
+  comboScore: number;
+  comboConfidence: number;
+  regimeId: string;
+};
+
+type ModelEvaluationSnapshot = {
+  predictionContext: NonNullable<ReturnType<MarketStateService["getContinuousPredictionContext"]>>;
+  evaluationResult: ReturnType<StrategyEngineService["evaluate"]>;
+  comboApplicationResult: ReturnType<ComboMetricsService["applyComboEffects"]>;
+};
 
 /**
  * @section class
@@ -31,6 +57,7 @@ export class PredictionEngineService {
   private readonly predictionStoreService: PredictionStoreService;
   private readonly comboMetricsService: ComboMetricsService;
   private readonly pendingTriggers: Map<MarketKey, MarketTrigger>;
+  private readonly modelStateSnapshots: Map<MarketKey, ModelStateSnapshot>;
 
   /**
    * @section constructor
@@ -49,6 +76,7 @@ export class PredictionEngineService {
     this.predictionStoreService = predictionStoreService;
     this.comboMetricsService = comboMetricsService;
     this.pendingTriggers = new Map<MarketKey, MarketTrigger>();
+    this.modelStateSnapshots = new Map<MarketKey, ModelStateSnapshot>();
   }
 
   /**
@@ -206,38 +234,175 @@ export class PredictionEngineService {
     return hasAnchorConfirmation;
   }
 
-  private hasPendingTriggerConfirmed(marketTrigger: MarketTrigger, nowTimestamp: number): boolean {
-    const marketSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
-    let hasPendingTriggerConfirmed = false;
-    if (marketSlice !== null) {
+  private isModelTriggerType(triggerType: TriggerType): boolean {
+    const isModelTriggerType = triggerType === "combo_state_shift" || triggerType === "regime_state_shift";
+    return isModelTriggerType;
+  }
+
+  private evaluateCurrentModel(marketKey: MarketKey): ModelEvaluationSnapshot | null {
+    let modelEvaluationSnapshot: ModelEvaluationSnapshot | null = null;
+    const predictionContext = this.marketStateService.getContinuousPredictionContext(marketKey);
+    if (predictionContext !== null) {
+      const evaluationResult = this.strategyEngineService.evaluate(predictionContext);
+      const strategySummaries = this.strategyMetricsService.getSummaries(predictionContext.marketKey);
+      const comboApplicationResult = this.comboMetricsService.applyComboEffects(
+        predictionContext.marketKey,
+        evaluationResult.strategyBreakdown,
+        strategySummaries,
+        evaluationResult.weightedScore,
+        evaluationResult.finalConfidence,
+        predictionContext.crossAssetRegime,
+        predictionContext.current.quality.score,
+      );
+      modelEvaluationSnapshot = {
+        predictionContext,
+        evaluationResult,
+        comboApplicationResult,
+      };
+    }
+    return modelEvaluationSnapshot;
+  }
+
+  private buildModelStateSnapshot(modelEvaluationSnapshot: ModelEvaluationSnapshot): ModelStateSnapshot {
+    const selectedCombo = modelEvaluationSnapshot.comboApplicationResult.selectedCombo;
+    const modelStateSnapshot: ModelStateSnapshot = {
+      comboKey: selectedCombo?.comboKey ?? null,
+      direction: selectedCombo?.direction ?? null,
+      comboScore: selectedCombo?.comboScore ?? 0,
+      comboConfidence: selectedCombo?.comboConfidence ?? 0,
+      regimeId: modelEvaluationSnapshot.predictionContext.crossAssetRegime.regimeId,
+    };
+    return modelStateSnapshot;
+  }
+
+  private resolveTriggerPrices(
+    marketSlice: MarketSnapshotSlice,
+    previousSlice: MarketSnapshotSlice | null,
+    triggeredToken: PositionSide,
+  ): { previousPrice: number | null; currentPrice: number | null; distanceToHalf: number | null } {
+    const currentPrice = this.resolveConfirmationTokenPrice(marketSlice, triggeredToken);
+    const previousPrice = previousSlice === null ? null : this.resolveConfirmationTokenPrice(previousSlice, triggeredToken);
+    const distanceToHalf = currentPrice === null ? null : Math.abs(currentPrice - 0.5);
+    return {
+      previousPrice,
+      currentPrice,
+      distanceToHalf,
+    };
+  }
+
+  private buildModelDrivenTrigger(modelEvaluationSnapshot: ModelEvaluationSnapshot, triggeredAt: number): MarketTrigger | null {
+    const currentModelStateSnapshot = this.buildModelStateSnapshot(modelEvaluationSnapshot);
+    const previousModelStateSnapshot = this.modelStateSnapshots.get(modelEvaluationSnapshot.predictionContext.marketKey) ?? null;
+    this.modelStateSnapshots.set(modelEvaluationSnapshot.predictionContext.marketKey, currentModelStateSnapshot);
+    let marketTrigger: MarketTrigger | null = null;
+    const selectedCombo = modelEvaluationSnapshot.comboApplicationResult.selectedCombo;
+    if (previousModelStateSnapshot !== null && selectedCombo !== null && currentModelStateSnapshot.direction !== null) {
+      const hasDirectionShift = previousModelStateSnapshot.direction !== currentModelStateSnapshot.direction;
+      const hasComboIdentityShift = previousModelStateSnapshot.comboKey !== currentModelStateSnapshot.comboKey;
+      const hasRegimeShift = previousModelStateSnapshot.regimeId !== currentModelStateSnapshot.regimeId && currentModelStateSnapshot.regimeId !== "neutral";
+      const hasScoreShift = Math.abs(previousModelStateSnapshot.comboScore - currentModelStateSnapshot.comboScore) >= MODEL_TRIGGER_MIN_SCORE_DELTA;
+      const hasMeaningfulShift = hasDirectionShift || hasComboIdentityShift || hasRegimeShift || hasScoreShift;
+      const hasStrongEnoughModelState =
+        currentModelStateSnapshot.comboScore >= MODEL_TRIGGER_MIN_SCORE && currentModelStateSnapshot.comboConfidence >= MODEL_TRIGGER_MIN_CONFIDENCE;
+      if (hasMeaningfulShift && hasStrongEnoughModelState) {
+        const triggerType: TriggerType = hasRegimeShift && !hasDirectionShift && !hasComboIdentityShift ? "regime_state_shift" : "combo_state_shift";
+        const triggeredToken = this.resolvePositionSide(currentModelStateSnapshot.direction);
+        const triggerPrices = this.resolveTriggerPrices(
+          modelEvaluationSnapshot.predictionContext.current,
+          modelEvaluationSnapshot.predictionContext.previous,
+          triggeredToken,
+        );
+        marketTrigger = {
+          marketKey: modelEvaluationSnapshot.predictionContext.marketKey,
+          asset: modelEvaluationSnapshot.predictionContext.asset,
+          window: modelEvaluationSnapshot.predictionContext.window,
+          triggeredToken,
+          triggerType,
+          previousPrice: triggerPrices.previousPrice,
+          currentPrice: triggerPrices.currentPrice,
+          distanceToHalf: triggerPrices.distanceToHalf,
+          triggeredAt,
+        };
+      }
+    }
+    return marketTrigger;
+  }
+
+  private hasModelTriggerConfirmed(marketTrigger: MarketTrigger, nowTimestamp: number): boolean {
+    const modelEvaluationSnapshot = this.evaluateCurrentModel(marketTrigger.marketKey);
+    let hasModelTriggerConfirmed = false;
+    if (modelEvaluationSnapshot !== null) {
+      const selectedCombo = modelEvaluationSnapshot.comboApplicationResult.selectedCombo;
+      const expectedDirection: PredictionDirection = marketTrigger.triggeredToken === "up" ? "UP" : "DOWN";
       const ageMs = nowTimestamp - marketTrigger.triggeredAt;
-      const positionSide: PositionSide = marketTrigger.triggeredToken;
-      const signedDirection = this.resolveSignedDirection(positionSide);
-      const tokenPrice = this.resolveConfirmationTokenPrice(marketSlice, positionSide);
-      const signedDistanceFromHalf = tokenPrice === null ? 0 : signedDirection * (tokenPrice - 0.5);
       const isPastDelay = ageMs >= config.TRIGGER_CONFIRMATION_DELAY_MS;
-      const hasMovedAwayFromHalf = signedDistanceFromHalf >= config.MIN_TRIGGER_DISTANCE_FROM_HALF;
-      const hasMomentumConfirmation = this.hasMomentumConfirmation(marketTrigger.marketKey, marketSlice, positionSide);
-      const hasQualityConfirmation = marketSlice.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
-      const hasBreadthConfirmation = this.hasBreadthConfirmation(marketTrigger.marketKey);
-      const hasAnchorConfirmation = this.hasAnchorConfirmation(marketTrigger.marketKey, positionSide);
-      hasPendingTriggerConfirmed =
-        isPastDelay && hasMovedAwayFromHalf && hasMomentumConfirmation && hasQualityConfirmation && (hasBreadthConfirmation || hasAnchorConfirmation);
+      const hasDirectionMatch = selectedCombo?.direction === expectedDirection;
+      const hasScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= MODEL_TRIGGER_MIN_SCORE;
+      const hasConfidenceConfirmation = (selectedCombo?.comboConfidence ?? 0) >= MODEL_TRIGGER_MIN_CONFIDENCE;
+      const hasQualityConfirmation = modelEvaluationSnapshot.predictionContext.current.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
+      const hasAnchorConfirmation = this.hasAnchorConfirmation(marketTrigger.marketKey, marketTrigger.triggeredToken);
+      hasModelTriggerConfirmed =
+        isPastDelay && hasDirectionMatch && hasScoreConfirmation && hasConfidenceConfirmation && hasQualityConfirmation && hasAnchorConfirmation;
+    }
+    return hasModelTriggerConfirmed;
+  }
+
+  private shouldDropModelTrigger(marketTrigger: MarketTrigger, nowTimestamp: number): boolean {
+    const modelEvaluationSnapshot = this.evaluateCurrentModel(marketTrigger.marketKey);
+    let shouldDropModelTrigger = false;
+    if (modelEvaluationSnapshot === null) {
+      shouldDropModelTrigger = true;
+    } else {
+      const selectedCombo = modelEvaluationSnapshot.comboApplicationResult.selectedCombo;
+      const expectedDirection: PredictionDirection = marketTrigger.triggeredToken === "up" ? "UP" : "DOWN";
+      const ageMs = nowTimestamp - marketTrigger.triggeredAt;
+      const hasDirectionMismatch = selectedCombo?.direction !== expectedDirection;
+      const hasWeakCombo = (selectedCombo?.comboScore ?? 0) < 0.45;
+      shouldDropModelTrigger = ageMs > config.TRIGGER_CONFIRMATION_DELAY_MS * 4 || hasDirectionMismatch || hasWeakCombo;
+    }
+    return shouldDropModelTrigger;
+  }
+
+  private hasPendingTriggerConfirmed(marketTrigger: MarketTrigger, nowTimestamp: number): boolean {
+    let hasPendingTriggerConfirmed = false;
+    if (this.isModelTriggerType(marketTrigger.triggerType)) {
+      hasPendingTriggerConfirmed = this.hasModelTriggerConfirmed(marketTrigger, nowTimestamp);
+    } else {
+      const marketSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
+      if (marketSlice !== null) {
+        const ageMs = nowTimestamp - marketTrigger.triggeredAt;
+        const positionSide: PositionSide = marketTrigger.triggeredToken;
+        const signedDirection = this.resolveSignedDirection(positionSide);
+        const tokenPrice = this.resolveConfirmationTokenPrice(marketSlice, positionSide);
+        const signedDistanceFromHalf = tokenPrice === null ? 0 : signedDirection * (tokenPrice - 0.5);
+        const isPastDelay = ageMs >= config.TRIGGER_CONFIRMATION_DELAY_MS;
+        const hasMovedAwayFromHalf = signedDistanceFromHalf >= config.MIN_TRIGGER_DISTANCE_FROM_HALF;
+        const hasMomentumConfirmation = this.hasMomentumConfirmation(marketTrigger.marketKey, marketSlice, positionSide);
+        const hasQualityConfirmation = marketSlice.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
+        const hasBreadthConfirmation = this.hasBreadthConfirmation(marketTrigger.marketKey);
+        const hasAnchorConfirmation = this.hasAnchorConfirmation(marketTrigger.marketKey, positionSide);
+        hasPendingTriggerConfirmed =
+          isPastDelay && hasMovedAwayFromHalf && hasMomentumConfirmation && hasQualityConfirmation && (hasBreadthConfirmation || hasAnchorConfirmation);
+      }
     }
     return hasPendingTriggerConfirmed;
   }
 
   private shouldDropPendingTrigger(marketTrigger: MarketTrigger, nowTimestamp: number): boolean {
-    const marketSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
     let shouldDropPendingTrigger = false;
-    if (marketSlice === null) {
-      shouldDropPendingTrigger = true;
+    if (this.isModelTriggerType(marketTrigger.triggerType)) {
+      shouldDropPendingTrigger = this.shouldDropModelTrigger(marketTrigger, nowTimestamp);
     } else {
-      const ageMs = nowTimestamp - marketTrigger.triggeredAt;
-      const tokenPrice = this.resolveConfirmationTokenPrice(marketSlice, marketTrigger.triggeredToken);
-      const signedDirection = this.resolveSignedDirection(marketTrigger.triggeredToken);
-      const signedDistanceFromHalf = tokenPrice === null ? 0 : signedDirection * (tokenPrice - 0.5);
-      shouldDropPendingTrigger = ageMs > config.TRIGGER_CONFIRMATION_DELAY_MS * 4 || signedDistanceFromHalf <= 0;
+      const marketSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
+      if (marketSlice === null) {
+        shouldDropPendingTrigger = true;
+      } else {
+        const ageMs = nowTimestamp - marketTrigger.triggeredAt;
+        const tokenPrice = this.resolveConfirmationTokenPrice(marketSlice, marketTrigger.triggeredToken);
+        const signedDirection = this.resolveSignedDirection(marketTrigger.triggeredToken);
+        const signedDistanceFromHalf = tokenPrice === null ? 0 : signedDirection * (tokenPrice - 0.5);
+        shouldDropPendingTrigger = ageMs > config.TRIGGER_CONFIRMATION_DELAY_MS * 4 || signedDistanceFromHalf <= 0;
+      }
     }
     return shouldDropPendingTrigger;
   }
@@ -247,6 +412,15 @@ export class PredictionEngineService {
     if (existingTrigger !== null && existingTrigger.triggeredToken !== nextTrigger.triggeredToken) {
       shouldReplacePendingTrigger = true;
     }
+    if (existingTrigger !== null && existingTrigger.triggerType !== nextTrigger.triggerType) {
+      shouldReplacePendingTrigger = true;
+    }
+    if (existingTrigger !== null && !this.isModelTriggerType(existingTrigger.triggerType) && this.isModelTriggerType(nextTrigger.triggerType)) {
+      shouldReplacePendingTrigger = false;
+    }
+    if (existingTrigger !== null && this.isModelTriggerType(nextTrigger.triggerType) && nextTrigger.triggeredAt > existingTrigger.triggeredAt) {
+      shouldReplacePendingTrigger = this.isModelTriggerType(existingTrigger.triggerType);
+    }
     return shouldReplacePendingTrigger;
   }
 
@@ -255,19 +429,11 @@ export class PredictionEngineService {
     const isCoolingDown = lastPredictionTimestamp !== null && createdAt - lastPredictionTimestamp < config.MARKET_COOLDOWN_MS;
     let hasCreatedPrediction = false;
     if (!isCoolingDown) {
-      const predictionContext = this.marketStateService.getPredictionContext(marketTrigger.marketKey);
-      if (predictionContext) {
-        const evaluationResult = this.strategyEngineService.evaluate(predictionContext);
-        const strategySummaries = this.strategyMetricsService.getSummaries(predictionContext.marketKey);
-        const comboApplicationResult = this.comboMetricsService.applyComboEffects(
-          predictionContext.marketKey,
-          evaluationResult.strategyBreakdown,
-          strategySummaries,
-          evaluationResult.weightedScore,
-          evaluationResult.finalConfidence,
-          predictionContext.crossAssetRegime,
-          predictionContext.current.quality.score,
-        );
+      const modelEvaluationSnapshot = this.evaluateCurrentModel(marketTrigger.marketKey);
+      if (modelEvaluationSnapshot !== null) {
+        const predictionContext = modelEvaluationSnapshot.predictionContext;
+        const evaluationResult = modelEvaluationSnapshot.evaluationResult;
+        const comboApplicationResult = modelEvaluationSnapshot.comboApplicationResult;
         const selectedCombo = comboApplicationResult.selectedCombo;
         if (selectedCombo !== null) {
           const winningDirection = selectedCombo.direction;
@@ -430,7 +596,20 @@ export class PredictionEngineService {
 
   public handleSnapshot(_generatedAt: number, triggeredMarkets: MarketTrigger[]): void {
     this.maybeResolveResearchPredictions();
-    for (const marketTrigger of triggeredMarkets) {
+    const allTriggeredMarkets: MarketTrigger[] = [...triggeredMarkets];
+    for (const asset of SUPPORTED_ASSETS) {
+      for (const window of SUPPORTED_WINDOWS) {
+        const marketKey: MarketKey = `${asset}:${window}`;
+        const modelEvaluationSnapshot = this.evaluateCurrentModel(marketKey);
+        if (modelEvaluationSnapshot !== null) {
+          const modelDrivenTrigger = this.buildModelDrivenTrigger(modelEvaluationSnapshot, _generatedAt);
+          if (modelDrivenTrigger !== null) {
+            allTriggeredMarkets.push(modelDrivenTrigger);
+          }
+        }
+      }
+    }
+    for (const marketTrigger of allTriggeredMarkets) {
       const existingTrigger = this.pendingTriggers.get(marketTrigger.marketKey) ?? null;
       if (this.shouldReplacePendingTrigger(existingTrigger, marketTrigger)) {
         this.pendingTriggers.set(marketTrigger.marketKey, marketTrigger);

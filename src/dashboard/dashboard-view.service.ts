@@ -242,6 +242,18 @@ export class DashboardViewService {
       }
       .up { background: rgba(15, 157, 88, 0.12); color: var(--success); }
       .down { background: rgba(192, 57, 43, 0.12); color: var(--danger); }
+      .pnl-positive {
+        color: var(--success);
+        font-weight: 700;
+      }
+      .pnl-negative {
+        color: var(--danger);
+        font-weight: 700;
+      }
+      .pnl-neutral {
+        color: var(--muted);
+        font-weight: 700;
+      }
       .muted { color: var(--muted); }
       .quality-bar {
         width: 100px;
@@ -503,6 +515,21 @@ export class DashboardViewService {
         font-weight: 700;
         cursor: pointer;
       }
+      .proximity-factor-side {
+        min-width: 30px;
+        justify-content: center;
+        padding: 4px 10px;
+      }
+      .proximity-factor-side.up {
+        border-color: rgba(15, 157, 88, 0.18);
+        background: rgba(15, 157, 88, 0.12);
+        color: var(--success);
+      }
+      .proximity-factor-side.down {
+        border-color: rgba(192, 57, 43, 0.18);
+        background: rgba(192, 57, 43, 0.12);
+        color: var(--danger);
+      }
       .proximity-sparkline {
         position: relative;
         width: 88px;
@@ -629,6 +656,11 @@ export class DashboardViewService {
       </section>
       <section class="dashboard-layout">
         <div class="stack">
+          <article class="panel panel-medium">
+            <h2><span class="panel-title"><span>Open Positions</span><button type="button" class="panel-info-button" data-full-label="Open Positions" data-description="Positions that are currently alive. Use it to see what the bot is holding right now, at what price it entered, where TP and SL sit, and what unrealized PnL looks like." aria-label="Open Positions. Positions that are currently alive. Use it to see what the bot is holding right now, at what price it entered, where TP and SL sit, and what unrealized PnL looks like.">i</button></span></h2>
+            <p class="tiny panel-intro">Current paper positions that are still alive. Use this panel to understand active exposure, where TP and SL sit, and what risk is still on the table right now.</p>
+            <div id="positions" class="loading panel-scroll">Loading open positions…</div>
+          </article>
           <article class="panel panel-compact">
             <h2><span class="panel-title"><span>Global Regime</span><button type="button" class="panel-info-button" data-full-label="Global Regime" data-description="Dominant cross-asset context across the monitored markets. It summarizes the broad market regime for 5m and 15m windows, including breadth, participation, token momentum on BTC/ETH, acceleration, and reversal pressure." aria-label="Global Regime. Dominant cross-asset context across the monitored markets. It summarizes the broad market regime for 5m and 15m windows, including breadth, participation, token momentum on BTC/ETH, acceleration, and reversal pressure.">i</button></span></h2>
             <p class="tiny panel-intro">This panel explains the current market-wide context: what BTC and ETH are doing, whether they align, whether followers are allowed to move with them, and how much reversal pressure is building.</p>
@@ -663,11 +695,6 @@ export class DashboardViewService {
             <h2><span class="panel-title"><span>Recent Trades</span><button type="button" class="panel-info-button" data-full-label="Recent Trades" data-description="Most recent closed trades from the active execution backend. This is the panel that tells you what the system actually executed, not just what it predicted." aria-label="Recent Trades. Most recent closed trades from the active execution backend. This is the panel that tells you what the system actually executed, not just what it predicted.">i</button></span></h2>
             <p class="tiny panel-intro">Closed paper trades only. It shows what the system really executed, how those trades ended, and whether execution quality is matching what the research layer suggests.</p>
             <div id="trades" class="loading panel-scroll">Loading recent trades…</div>
-          </article>
-          <article class="panel panel-medium">
-            <h2><span class="panel-title"><span>Open Positions</span><button type="button" class="panel-info-button" data-full-label="Open Positions" data-description="Positions that are currently alive. Use it to see what the bot is holding right now, at what price it entered, where TP and SL sit, and what unrealized PnL looks like." aria-label="Open Positions. Positions that are currently alive. Use it to see what the bot is holding right now, at what price it entered, where TP and SL sit, and what unrealized PnL looks like.">i</button></span></h2>
-            <p class="tiny panel-intro">Current paper positions that are still alive. Use this panel to understand active exposure, where TP and SL sit, and what risk is still on the table right now.</p>
-            <div id="positions" class="loading panel-scroll">Loading open positions…</div>
           </article>
         </div>
         <div class="stack">
@@ -997,6 +1024,18 @@ export class DashboardViewService {
         return positionSideLabel;
       }
 
+      function renderUnrealizedPnlLabel(unrealizedPnlTokenPrice) {
+        let pnlLabel = '<span class="pnl-neutral">' + formatNumber(unrealizedPnlTokenPrice) + '</span>';
+        if (unrealizedPnlTokenPrice > 0) {
+          pnlLabel = '<span class="pnl-positive">+' + formatNumber(unrealizedPnlTokenPrice) + '</span>';
+        } else {
+          if (unrealizedPnlTokenPrice < 0) {
+            pnlLabel = '<span class="pnl-negative">' + formatNumber(unrealizedPnlTokenPrice) + '</span>';
+          }
+        }
+        return pnlLabel;
+      }
+
       function renderActionLabel(decision) {
         let actionLabel = '<span class="pill down">NO</span>';
         if (decision.isEntryAllowed && decision.positionSide === 'up') {
@@ -1142,6 +1181,12 @@ export class DashboardViewService {
         if (reasonCode === 'btc_trend_reversal') {
           humanReason = 'btc trend reversal';
         }
+        if (reasonCode === 'combo_state_shift') {
+          humanReason = 'combo state shift';
+        }
+        if (reasonCode === 'regime_state_shift') {
+          humanReason = 'regime state shift';
+        }
         return humanReason;
       }
 
@@ -1191,6 +1236,12 @@ export class DashboardViewService {
         }
         if (triggerType === 'btc_trend_reversal') {
           triggerCode = 'BTR';
+        }
+        if (triggerType === 'combo_state_shift') {
+          triggerCode = 'CSS';
+        }
+        if (triggerType === 'regime_state_shift') {
+          triggerCode = 'RSS';
         }
         return triggerCode;
       }
@@ -1738,7 +1789,7 @@ export class DashboardViewService {
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo. Real entry also expects confidence of at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half, AFB = anchor-follow breakout, PBR = pullback resume, LGR = laggard release, BTR = BTC trend reversal.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Combo score used to rank the combo at prediction time. This is idea quality before hard entry gates.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo. Real entry also expects confidence of at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half, AFB = anchor-follow breakout, PBR = pullback resume, LGR = laggard release, BTR = BTC trend reversal, CSS = combo state shift, RSS = regime state shift.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Combo score used to rank the combo at prediction time. This is idea quality before hard entry gates.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderExecution(summary) {
@@ -1897,11 +1948,20 @@ export class DashboardViewService {
           const market = marketSummaryMap[tradeCandidate.marketKey];
           const proximity = computeTradeProximity(decision, market);
           const proximityLabel = decision.isEntryAllowed ? 'RDY' : proximity.proximity >= 0.75 ? 'HOT' : proximity.proximity >= 0.5 ? 'MID' : 'COLD';
-          const comboDirectionCode = decision.selectedComboDirection === null ? '—' : decision.selectedComboDirection;
+          const comboDirectionCode = decision.selectedComboDirection === null
+            ? '—'
+            : decision.selectedComboDirection === 'UP'
+              ? 'U'
+              : 'D';
+          const comboDirectionClass = decision.selectedComboDirection === null
+            ? ''
+            : decision.selectedComboDirection === 'UP'
+              ? ' up'
+              : ' down';
           const historyValues = pushTradeProximityHistory(tradeCandidate.marketKey, proximity.proximity);
           const trendCanvasId = buildTradeProximityDomId('trade-proximity-trend', tradeCandidate.marketKey);
           const directionFactorMarkup =
-            '<button type="button" class="proximity-factor" data-full-label="Side" data-description="' +
+            '<button type="button" class="proximity-factor proximity-factor-side' + comboDirectionClass + '" data-full-label="Side" data-description="' +
             escapeHtml(
               decision.selectedComboDirection === null
                 ? 'Current combo side is not available because no active combo has been selected for this market yet.'
@@ -1914,7 +1974,6 @@ export class DashboardViewService {
                 : 'Side. Current combo side is ' + decision.selectedComboDirection + '.',
             ) +
             '">' +
-            'Side ' +
             escapeHtml(comboDirectionCode) +
             '</button>';
           const factorEntries = [
@@ -2019,7 +2078,7 @@ export class DashboardViewService {
             '<td>' + position.shareCount + '</td>' +
             '<td>' + formatNumber(position.entryFillPrice) + '</td>' +
             '<td>' + formatNumber(position.liveTokenPrice) + '</td>' +
-            '<td>' + formatNumber(position.unrealizedPnlTokenPrice) + '</td>' +
+            '<td>' + renderUnrealizedPnlLabel(position.unrealizedPnlTokenPrice) + '</td>' +
             '<td>' + formatNumber(position.takeProfitPrice) + '</td>' +
             '<td>' + formatNumber(position.stopLossPrice) + '</td>' +
             '</tr>';

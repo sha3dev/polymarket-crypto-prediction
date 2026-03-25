@@ -15,7 +15,14 @@ export type MarketWindow = (typeof SUPPORTED_WINDOWS)[number];
 export type SpotVenue = (typeof SPOT_VENUES)[number];
 export type MarketKey = `${AssetSymbol}:${MarketWindow}`;
 export type TriggeredToken = "up" | "down";
-export type TriggerType = "crossed_half" | "anchor_follow_breakout" | "pullback_resume" | "laggard_release" | "btc_trend_reversal";
+export type TriggerType =
+  | "crossed_half"
+  | "anchor_follow_breakout"
+  | "pullback_resume"
+  | "laggard_release"
+  | "btc_trend_reversal"
+  | "combo_state_shift"
+  | "regime_state_shift";
 export type PredictionDirection = "UP" | "DOWN";
 export type CrossAssetBreadthDirection = PredictionDirection | "NEUTRAL";
 export type CrossAssetRegimeId =

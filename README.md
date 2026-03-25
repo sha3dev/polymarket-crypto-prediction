@@ -300,6 +300,14 @@ Current triggers are:
 - `PBR` = `pullback_resume`
 - `LGR` = `laggard_release`
 - `BTR` = `btc_trend_reversal`
+- `CSS` = `combo_state_shift`
+- `RSS` = `regime_state_shift`
+
+The first five are market-event triggers.
+`CSS` and `RSS` are model-state triggers:
+
+- `CSS` fires when the best combo changes meaningfully
+- `RSS` fires when the cross-asset regime changes meaningfully and that change improves the current combo state
 
 ## Execution Gate
 

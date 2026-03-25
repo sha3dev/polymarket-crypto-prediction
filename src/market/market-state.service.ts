@@ -347,6 +347,32 @@ export class MarketStateService {
     return resolvedPrice;
   }
 
+  private buildSyntheticTrigger(
+    marketKey: MarketKey,
+    latestSlice: MarketSnapshotSlice,
+    previousSlice: MarketSnapshotSlice | null,
+    triggerType: TriggerType,
+  ): MarketTrigger {
+    const upPrice = this.resolveTriggerPrice(latestSlice, "up") ?? 0.5;
+    const downPrice = this.resolveTriggerPrice(latestSlice, "down") ?? 0.5;
+    const triggeredToken: TriggeredToken = upPrice >= downPrice ? "up" : "down";
+    const currentPrice = this.resolveTriggerPrice(latestSlice, triggeredToken);
+    const previousPrice = previousSlice === null ? null : this.resolveTriggerPrice(previousSlice, triggeredToken);
+    const distanceToHalf = currentPrice === null ? null : Math.abs(currentPrice - 0.5);
+    const syntheticTrigger: MarketTrigger = {
+      marketKey,
+      asset: latestSlice.asset,
+      window: latestSlice.window,
+      triggeredToken,
+      triggerType,
+      previousPrice,
+      currentPrice,
+      distanceToHalf,
+      triggeredAt: latestSlice.generatedAt,
+    };
+    return syntheticTrigger;
+  }
+
   private computeSignedTokenChange(previousPrice: number | null, currentPrice: number | null, tokenSide: TriggeredToken): number {
     const unsignedChange = this.computeSignedChange(previousPrice, currentPrice);
     const signedTokenChange = tokenSide === "up" ? unsignedChange : unsignedChange * -1;
@@ -1150,6 +1176,26 @@ export class MarketStateService {
         window: latestSlice.window,
         triggeredAt: marketRecord.lastTrigger.triggeredAt,
         trigger: marketRecord.lastTrigger,
+        current: latestSlice,
+        previous: marketRecord.previous,
+        history: [...marketRecord.history],
+        crossAssetRegime: this.buildCrossAssetRegime(marketKey, latestSlice.window),
+      };
+    }
+    return predictionContext;
+  }
+
+  public getContinuousPredictionContext(marketKey: MarketKey, triggerType: TriggerType = "combo_state_shift"): PredictionContext | null {
+    const marketRecord = this.requireMarketRecord(marketKey);
+    const latestSlice = marketRecord.latest;
+    let predictionContext: PredictionContext | null = null;
+    if (latestSlice !== null) {
+      predictionContext = {
+        marketKey,
+        asset: latestSlice.asset,
+        window: latestSlice.window,
+        triggeredAt: latestSlice.generatedAt,
+        trigger: marketRecord.lastTrigger ?? this.buildSyntheticTrigger(marketKey, latestSlice, marketRecord.previous, triggerType),
         current: latestSlice,
         previous: marketRecord.previous,
         history: [...marketRecord.history],
