@@ -10,6 +10,7 @@ import type { StrategySummary } from "../src/index.ts";
 import type { LlmPromptService } from "../src/llm/llm-prompt.service.ts";
 import type { MarketStateService } from "../src/market/market-state.service.ts";
 import type { PredictionEngineService } from "../src/prediction/prediction-engine.service.ts";
+import type { StrategySignal } from "../src/strategy/strategy.types.ts";
 import type { UpdateService } from "../src/update/update.service.ts";
 
 test("ServiceRuntime serves the dashboard HTML", async () => {
@@ -36,6 +37,8 @@ test("ServiceRuntime serves the dashboard HTML", async () => {
   assert.match(html, /Combo Search/);
   assert.match(html, /Trade Candidates/);
   assert.match(html, /Direction chosen by the winning combo/);
+  assert.match(html, /No-Arb Consistency/);
+  assert.match(html, /Spot-Token Divergence/);
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
@@ -280,6 +283,7 @@ test("HttpServerService exposes the prompt endpoint", async () => {
 
 test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outcomes, and updates summaries", async () => {
   const serviceRuntime = ServiceRuntime.createDefault();
+  seedReplayComboHistory(serviceRuntime, "btc:5m");
   const server = serviceRuntime.buildServer();
 
   await new Promise<void>((resolve) => {
@@ -398,7 +402,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const strategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies`);
   const strategiesJson = (await strategiesResponse.json()) as StrategySummary[];
   assert.equal(strategiesResponse.status, 200);
-  assert.equal(strategiesJson.length, 11);
+  assert.equal(strategiesJson.length, 24);
   assert.equal(
     strategiesJson.every((strategy) => strategy.totalResolved >= 0),
     true,
@@ -408,7 +412,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const btcStrategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies?asset=btc&window=5m`);
   const btcStrategiesJson = (await btcStrategiesResponse.json()) as StrategySummary[];
   assert.equal(btcStrategiesResponse.status, 200);
-  assert.equal(btcStrategiesJson.length, 11);
+  assert.equal(btcStrategiesJson.length, 24);
   assert.equal(btcStrategiesJson[0]?.marketKey, "btc:5m");
   assert.equal(
     btcStrategiesJson.every((strategy) => strategy.totalResolved >= 0),
@@ -418,7 +422,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const solStrategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies?asset=sol&window=5m`);
   const solStrategiesJson = (await solStrategiesResponse.json()) as StrategySummary[];
   assert.equal(solStrategiesResponse.status, 200);
-  assert.equal(solStrategiesJson.length, 11);
+  assert.equal(solStrategiesJson.length, 24);
   assert.equal(solStrategiesJson[0]?.marketKey, "sol:5m");
   assert.ok(solStrategiesJson.every((strategy) => strategy.totalResolved === 0));
 
@@ -517,6 +521,8 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
 
 test("ServiceRuntime exposes ETH combo candidates from BTC anchor support before strong breadth exists", async () => {
   const serviceRuntime = ServiceRuntime.createDefault();
+  seedReplayComboHistory(serviceRuntime, "btc:5m");
+  seedReplayComboHistory(serviceRuntime, "eth:5m");
   const server = serviceRuntime.buildServer();
 
   await new Promise<void>((resolve) => {
@@ -757,6 +763,92 @@ type MarketOverride = {
   downMidpoint: number | null;
   chainlinkPrice?: number;
 };
+
+function seedReplayComboHistory(serviceRuntime: ServiceRuntime, marketKey: "btc:5m" | "eth:5m"): void {
+  const predictionEngineService = Reflect.get(serviceRuntime, "predictionEngineService") as PredictionEngineService;
+  const comboMetricsService = Reflect.get(predictionEngineService, "comboMetricsService") as {
+    recordPredictionMoment: (targetMarketKey: string, predictionId: string, strategySignals: StrategySignal[], createdAt: number) => void;
+    resolvePredictionMoment: (targetMarketKey: string, predictionId: string, resolvedDirection: "UP" | "DOWN" | null, resolvedAt: number | null) => void;
+  };
+  for (let index = 0; index < 6; index += 1) {
+    const predictionId = `${marketKey}-seed-${index}`;
+    comboMetricsService.recordPredictionMoment(marketKey, predictionId, buildReplaySignals(), 1_000 + index * 100);
+    comboMetricsService.resolvePredictionMoment(marketKey, predictionId, "UP", 31_000 + index * 100);
+  }
+}
+
+function buildReplaySignals(): StrategySignal[] {
+  return [
+    {
+      strategyId: "s09",
+      name: "Spot Consensus Momentum",
+      tier: "low",
+      family: "momentum",
+      direction: "UP",
+      score: 0.88,
+      confidence: 0.86,
+      weight: 1,
+      snapshotUtility: 0.9,
+      qualityFactor: 1,
+      didRun: true,
+      didParticipate: true,
+      isComboEligible: true,
+      reason: "seed momentum",
+      debug: {},
+    },
+    {
+      strategyId: "s14",
+      name: "Chainlink Basis",
+      tier: "low",
+      family: "pricing",
+      direction: "UP",
+      score: 0.8,
+      confidence: 0.83,
+      weight: 1,
+      snapshotUtility: 0.86,
+      qualityFactor: 1,
+      didRun: true,
+      didParticipate: true,
+      isComboEligible: true,
+      reason: "seed pricing",
+      debug: {},
+    },
+    {
+      strategyId: "s08",
+      name: "Barrier Timing",
+      tier: "medium",
+      family: "pricing",
+      direction: "UP",
+      score: 0.78,
+      confidence: 0.8,
+      weight: 1,
+      snapshotUtility: 0.82,
+      qualityFactor: 1,
+      didRun: true,
+      didParticipate: true,
+      isComboEligible: true,
+      reason: "seed timing",
+      debug: {},
+    },
+    {
+      strategyId: "s07",
+      name: "Spread Compression",
+      tier: "low",
+      family: "microstructure",
+      direction: "UP",
+      score: 0.74,
+      confidence: 0.78,
+      weight: 1,
+      snapshotUtility: 0.8,
+      qualityFactor: 1,
+      didRun: true,
+      didParticipate: true,
+      isComboEligible: true,
+      reason: "seed confirmation",
+      debug: {},
+    },
+  ];
+}
 
 function applyMarketOverride(
   snapshot: Record<string, number | string | null>,

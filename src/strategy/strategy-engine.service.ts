@@ -361,7 +361,8 @@ export class StrategyEngineService {
       engineBias = context.current.up.imbalance - context.current.down.imbalance;
     }
     if (engineId === "mispricing_engine") {
-      engineBias = this.scoreChainlinkBasis(context) * -1.5 + this.scoreTheoreticalProbabilityGap(context) * 0.7;
+      // Bias should REINFORCE the pricing signal, not invert it
+      engineBias = this.scoreChainlinkBasis(context) * 1.2 + this.scoreTheoreticalProbabilityGap(context) * 0.7;
     }
     if (engineId === "reversion_engine") {
       engineBias = this.scoreLiquidityShockFade(context) + context.crossAssetRegime.reversalRiskScore * 0.25;
@@ -397,8 +398,9 @@ export class StrategyEngineService {
       regimeFit = (crossAssetRegime.regimeClass === "anchor" || crossAssetRegime.regimeClass === "aligned") && isDirectionAligned ? 0.78 : 1.02;
     }
     if (engineId === "reversion_engine") {
+      // Reversion should only be active in reversal/fragmented regimes; strongly suppress in trending markets
       regimeFit =
-        crossAssetRegime.regimeClass === "reversal" || crossAssetRegime.regimeClass === "fragmented" ? 1.15 : crossAssetRegime.hasStrongBreadth ? 0.55 : 0.85;
+        crossAssetRegime.regimeClass === "reversal" || crossAssetRegime.regimeClass === "fragmented" ? 1.15 : crossAssetRegime.hasStrongBreadth ? 0.3 : 0.4;
     }
     if (engineId === "meta_engine") {
       regimeFit = 0.92 + context.current.quality.score * 0.12;
@@ -877,7 +879,8 @@ export class StrategyEngineService {
     const hasCrossedHalfTrigger = context.trigger.triggerType === "crossed_half";
     const triggerDirectionSign = context.trigger.triggeredToken === "up" ? 1 : -1;
     const triggeredTokenPrice = this.resolveTriggeredTokenPrice(context);
-    const centeredExtension = triggerDirectionSign === 1 ? Math.max(0, triggeredTokenPrice - 0.5) : Math.max(0, 0.5 - triggeredTokenPrice);
+    // Both up and down tokens trade above 0.50 when winning
+    const centeredExtension = Math.max(0, triggeredTokenPrice - 0.5);
     let score = triggerDirectionSign * -1 * (centeredExtension + moveExtension * 0.2) + distanceBias * -0.35;
     if (hasCrossedHalfTrigger) {
       score *= 1.3 + affordabilityPenalty * 0.6 + reversalBoost * 0.45 + Math.min(0.35, recentRange + moveExtension);
@@ -983,7 +986,8 @@ export class StrategyEngineService {
   private computeNormalizedAffordability(context: PredictionContext): number {
     const tokenPrice = this.resolveTriggeredTokenPrice(context);
     const idealEntryFloor = 0.2;
-    const affordableCeiling = Math.min(0.8, config.ENTRY_TARGET_PRICE + config.TAKE_PROFIT_DELTA * 2);
+    // Fixed ceiling independent of TP delta — tokens above 0.75 are genuinely too expensive
+    const affordableCeiling = 0.75;
     const affordableRange = Math.max(0.01, affordableCeiling - idealEntryFloor);
     const normalizedAffordability = Math.max(0, Math.min(1, (affordableCeiling - tokenPrice) / affordableRange));
     return normalizedAffordability;
@@ -1009,19 +1013,22 @@ export class StrategyEngineService {
   private computeTriggeredMoveExtension(context: PredictionContext): number {
     const triggerSide = context.trigger.triggeredToken;
     const currentTriggeredDistance = triggerSide === "up" ? (context.current.up.distanceToHalf ?? 0) : (context.current.down.distanceToHalf ?? 0);
-    const normalizedExtension = Math.max(0, Math.min(1, currentTriggeredDistance / Math.max(0.0001, config.TAKE_PROFIT_DELTA)));
+    // Fixed threshold independent of TP delta — a 12-cent move from 0.50 is genuinely extended
+    const extensionThreshold = 0.12;
+    const normalizedExtension = Math.max(0, Math.min(1, currentTriggeredDistance / extensionThreshold));
     return normalizedExtension;
   }
 
   private computeContinuationValidityFactor(context: PredictionContext): number {
     const affordability = this.computeNormalizedAffordability(context);
-    const reversalPenalty = Math.max(0.2, 1 - context.crossAssetRegime.reversalRiskScore * 0.9);
-    const moveExtensionPenalty = Math.max(0.2, 1 - this.computeTriggeredMoveExtension(context) * 0.7);
-    let continuationValidityFactor = affordability * 0.55 + reversalPenalty * 0.25 + moveExtensionPenalty * 0.2;
+    const reversalPenalty = Math.max(0.3, 1 - context.crossAssetRegime.reversalRiskScore * 0.7);
+    const moveExtensionPenalty = Math.max(0.3, 1 - this.computeTriggeredMoveExtension(context) * 0.5);
+    // Rebalanced: reversal risk and move extension matter most; affordability is secondary
+    let continuationValidityFactor = reversalPenalty * 0.4 + moveExtensionPenalty * 0.3 + affordability * 0.3;
     if (context.trigger.triggerType === "crossed_half") {
-      continuationValidityFactor *= Math.max(0.15, 1 - context.crossAssetRegime.reversalRiskScore * 0.5);
+      continuationValidityFactor *= Math.max(0.3, 1 - context.crossAssetRegime.reversalRiskScore * 0.35);
     }
-    continuationValidityFactor = Math.max(0.05, Math.min(1, continuationValidityFactor));
+    continuationValidityFactor = Math.max(0.15, Math.min(1, continuationValidityFactor));
     return continuationValidityFactor;
   }
 

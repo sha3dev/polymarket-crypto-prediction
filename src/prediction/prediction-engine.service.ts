@@ -60,6 +60,8 @@ export class PredictionEngineService {
   private readonly llmLogService: LlmLogService | null;
   private readonly pendingTriggers: Map<MarketKey, MarketTrigger>;
   private readonly modelStateSnapshots: Map<MarketKey, ModelStateSnapshot>;
+  // Per-snapshot cache: cleared at the start of each handleSnapshot to avoid redundant evaluations
+  private readonly modelEvaluationCache: Map<MarketKey, ModelEvaluationSnapshot | null>;
 
   /**
    * @section constructor
@@ -81,6 +83,7 @@ export class PredictionEngineService {
     this.llmLogService = llmLogService ?? null;
     this.pendingTriggers = new Map<MarketKey, MarketTrigger>();
     this.modelStateSnapshots = new Map<MarketKey, ModelStateSnapshot>();
+    this.modelEvaluationCache = new Map<MarketKey, ModelEvaluationSnapshot | null>();
   }
 
   /**
@@ -110,37 +113,57 @@ export class PredictionEngineService {
   private resolveResearchOutcome(
     predictionRecord: PredictionRecord,
     marketSlice: MarketSnapshotSlice | null,
-  ): { status: PredictionOutcome["status"]; resolvedDirection: PredictionDirection | null; evaluationPrice: number | null; resolvedAt: number | null } | null {
+  ): {
+    status: PredictionOutcome["status"];
+    resolvedDirection: PredictionDirection | null;
+    evaluationPrice: number | null;
+    resolvedAt: number | null;
+    reason: string;
+  } | null {
     const liveTokenPrice =
       marketSlice === null
         ? null
         : predictionRecord.positionSide === "up"
           ? (marketSlice.up.midpoint ?? marketSlice.up.price)
           : (marketSlice.down.midpoint ?? marketSlice.down.price);
+    const nowTimestamp = marketSlice?.generatedAt ?? Date.now();
     let researchOutcome: {
       status: PredictionOutcome["status"];
       resolvedDirection: PredictionDirection | null;
       evaluationPrice: number | null;
       resolvedAt: number | null;
+      reason: string;
     } | null = null;
+    // --- TP hit: always resolve as a win immediately (no more trailing stop that converts wins to losses) ---
     if (liveTokenPrice !== null && predictionRecord.takeProfitPrice !== null && liveTokenPrice >= predictionRecord.takeProfitPrice) {
-      if (this.shouldHoldResearchAfterTakeProfit(predictionRecord, marketSlice)) {
-        predictionRecord.stopLossPrice = Math.max(predictionRecord.stopLossPrice ?? 0, predictionRecord.entryReferencePrice ?? 0);
-      } else {
-        researchOutcome = {
-          status: "ok",
-          resolvedDirection: predictionRecord.direction,
-          evaluationPrice: liveTokenPrice,
-          resolvedAt: marketSlice?.generatedAt ?? null,
-        };
-      }
+      researchOutcome = {
+        status: "ok",
+        resolvedDirection: predictionRecord.direction,
+        evaluationPrice: liveTokenPrice,
+        resolvedAt: nowTimestamp,
+        reason: "take_profit_hit",
+      };
     }
-    if (liveTokenPrice !== null && predictionRecord.stopLossPrice !== null && liveTokenPrice <= predictionRecord.stopLossPrice) {
+    // --- SL hit: resolve as a loss (only if TP wasn't also hit on this tick) ---
+    if (researchOutcome === null && liveTokenPrice !== null && predictionRecord.stopLossPrice !== null && liveTokenPrice <= predictionRecord.stopLossPrice) {
       researchOutcome = {
         status: "ko",
         resolvedDirection: predictionRecord.direction === "UP" ? "DOWN" : "UP",
         evaluationPrice: liveTokenPrice,
-        resolvedAt: marketSlice?.generatedAt ?? null,
+        resolvedAt: nowTimestamp,
+        reason: "stop_loss_hit",
+      };
+    }
+    // --- Time-based resolution: if prediction horizon has passed, resolve on current P&L ---
+    if (researchOutcome === null && nowTimestamp >= predictionRecord.evaluationDueAt && liveTokenPrice !== null) {
+      const entryPrice = predictionRecord.entryReferencePrice ?? 0.5;
+      const isInProfit = liveTokenPrice > entryPrice;
+      researchOutcome = {
+        status: isInProfit ? "ok" : "ko",
+        resolvedDirection: isInProfit ? predictionRecord.direction : predictionRecord.direction === "UP" ? "DOWN" : "UP",
+        evaluationPrice: liveTokenPrice,
+        resolvedAt: nowTimestamp,
+        reason: isInProfit ? "horizon_profit" : "horizon_loss",
       };
     }
     return researchOutcome;
@@ -181,7 +204,7 @@ export class PredictionEngineService {
           evaluationPrice: researchOutcome.evaluationPrice,
           baselinePrice: predictionRecord.entryReferencePrice,
           isFallbackPriceUsed: false,
-          reason: researchOutcome.status === "ok" ? "take_profit_hit" : "stop_loss_hit",
+          reason: researchOutcome.reason,
         };
         this.strategyMetricsService.recordResolution(
           predictionRecord.marketKey,
@@ -232,12 +255,10 @@ export class PredictionEngineService {
           ? (previousSlice.up.midpoint ?? previousSlice.up.price)
           : (previousSlice.down.midpoint ?? previousSlice.down.price);
     const currentTokenPrice = this.resolveConfirmationTokenPrice(marketSlice, positionSide);
-    const signedDirection = this.resolveSignedDirection(positionSide);
-    const signedMomentum =
-      previousTokenPrice === null || currentTokenPrice === null || previousTokenPrice === 0
-        ? 0
-        : signedDirection * ((currentTokenPrice - previousTokenPrice) / previousTokenPrice);
-    const hasMomentumConfirmation = signedMomentum >= config.MIN_TRIGGER_SPOT_MOMENTUM;
+    // Token prices always go UP when the position is winning, regardless of up/down side
+    const tokenMomentum =
+      previousTokenPrice === null || currentTokenPrice === null || previousTokenPrice === 0 ? 0 : (currentTokenPrice - previousTokenPrice) / previousTokenPrice;
+    const hasMomentumConfirmation = tokenMomentum >= config.MIN_TRIGGER_SPOT_MOMENTUM;
     return hasMomentumConfirmation;
   }
 
@@ -271,31 +292,61 @@ export class PredictionEngineService {
     return hasAnchorConfirmation;
   }
 
+  private computeAdaptiveTakeProfitDelta(confidence: number, comboScore: number, regimeClass: string): number {
+    // High-confidence + strong regime = wider TP to capture more upside
+    // Low-confidence = tighter TP to lock in small gains
+    const confidenceMultiplier = 0.7 + confidence * 0.6;
+    const comboMultiplier = 0.8 + Math.max(0, comboScore - 0.5) * 0.8;
+    const regimeMultiplier =
+      regimeClass === "anchor" || regimeClass === "aligned" ? 1.15 : regimeClass === "reversal" || regimeClass === "fragmented" ? 0.8 : 1;
+    const adaptiveDelta = config.TAKE_PROFIT_DELTA * confidenceMultiplier * comboMultiplier * regimeMultiplier;
+    // Clamp to reasonable bounds: 60% to 160% of base delta
+    const clampedDelta = Math.max(config.TAKE_PROFIT_DELTA * 0.6, Math.min(config.TAKE_PROFIT_DELTA * 1.6, adaptiveDelta));
+    return clampedDelta;
+  }
+
+  private computeAdaptiveStopLossDelta(confidence: number, comboScore: number, regimeClass: string): number {
+    // Low-confidence = tighter SL to cut losses fast
+    // High-confidence + strong regime = slightly wider SL to avoid noise stops
+    const confidenceMultiplier = 0.75 + confidence * 0.5;
+    const comboMultiplier = 0.85 + Math.max(0, comboScore - 0.5) * 0.5;
+    const regimeMultiplier =
+      regimeClass === "reversal" || regimeClass === "fragmented" ? 0.75 : regimeClass === "anchor" || regimeClass === "aligned" ? 1.1 : 1;
+    const adaptiveDelta = config.STOP_LOSS_DELTA * confidenceMultiplier * comboMultiplier * regimeMultiplier;
+    // Clamp to reasonable bounds: 50% to 140% of base delta
+    const clampedDelta = Math.max(config.STOP_LOSS_DELTA * 0.5, Math.min(config.STOP_LOSS_DELTA * 1.4, adaptiveDelta));
+    return clampedDelta;
+  }
+
   private isModelTriggerType(triggerType: TriggerType): boolean {
     const isModelTriggerType = triggerType === "combo_state_shift" || triggerType === "regime_state_shift";
     return isModelTriggerType;
   }
 
   private evaluateCurrentModel(marketKey: MarketKey): ModelEvaluationSnapshot | null {
-    let modelEvaluationSnapshot: ModelEvaluationSnapshot | null = null;
-    const predictionContext = this.marketStateService.getContinuousPredictionContext(marketKey);
-    if (predictionContext !== null) {
-      const evaluationResult = this.strategyEngineService.evaluate(predictionContext);
-      const strategySummaries = this.strategyMetricsService.getSummaries(predictionContext.marketKey);
-      const comboApplicationResult = this.comboMetricsService.applyComboEffects(
-        predictionContext.marketKey,
-        evaluationResult.strategyBreakdown,
-        strategySummaries,
-        evaluationResult.weightedScore,
-        evaluationResult.finalConfidence,
-        predictionContext.crossAssetRegime,
-        predictionContext.current.quality.score,
-      );
-      modelEvaluationSnapshot = {
-        predictionContext,
-        evaluationResult,
-        comboApplicationResult,
-      };
+    let modelEvaluationSnapshot = this.modelEvaluationCache.get(marketKey) ?? null;
+    const hasCachedSnapshot = this.modelEvaluationCache.has(marketKey);
+    if (!hasCachedSnapshot) {
+      const predictionContext = this.marketStateService.getContinuousPredictionContext(marketKey);
+      if (predictionContext !== null) {
+        const evaluationResult = this.strategyEngineService.evaluate(predictionContext);
+        const strategySummaries = this.strategyMetricsService.getSummaries(predictionContext.marketKey);
+        const comboApplicationResult = this.comboMetricsService.applyComboEffects(
+          predictionContext.marketKey,
+          evaluationResult.strategyBreakdown,
+          strategySummaries,
+          evaluationResult.weightedScore,
+          evaluationResult.finalConfidence,
+          predictionContext.crossAssetRegime,
+          predictionContext.current.quality.score,
+        );
+        modelEvaluationSnapshot = {
+          predictionContext,
+          evaluationResult,
+          comboApplicationResult,
+        };
+      }
+      this.modelEvaluationCache.set(marketKey, modelEvaluationSnapshot);
     }
     return modelEvaluationSnapshot;
   }
@@ -405,11 +456,11 @@ export class PredictionEngineService {
       if (marketSlice !== null) {
         const ageMs = nowTimestamp - marketTrigger.triggeredAt;
         const positionSide: PositionSide = marketTrigger.triggeredToken;
-        const signedDirection = this.resolveSignedDirection(positionSide);
         const tokenPrice = this.resolveConfirmationTokenPrice(marketSlice, positionSide);
-        const signedDistanceFromHalf = tokenPrice === null ? 0 : signedDirection * (tokenPrice - 0.5);
+        // Token prices always go above 0.50 when winning, regardless of up/down side
+        const distanceFromHalf = tokenPrice === null ? 0 : tokenPrice - 0.5;
         const isPastDelay = ageMs >= config.TRIGGER_CONFIRMATION_DELAY_MS;
-        const hasMovedAwayFromHalf = signedDistanceFromHalf >= config.MIN_TRIGGER_DISTANCE_FROM_HALF;
+        const hasMovedAwayFromHalf = distanceFromHalf >= config.MIN_TRIGGER_DISTANCE_FROM_HALF;
         const hasMomentumConfirmation = this.hasMomentumConfirmation(marketTrigger.marketKey, marketSlice, positionSide);
         const hasQualityConfirmation = this.hasResearchQualityConfirmation(marketSlice.quality.score);
         const hasBreadthConfirmation = this.hasBreadthConfirmation(marketTrigger.marketKey);
@@ -443,9 +494,9 @@ export class PredictionEngineService {
       } else {
         const ageMs = nowTimestamp - marketTrigger.triggeredAt;
         const tokenPrice = this.resolveConfirmationTokenPrice(marketSlice, marketTrigger.triggeredToken);
-        const signedDirection = this.resolveSignedDirection(marketTrigger.triggeredToken);
-        const signedDistanceFromHalf = tokenPrice === null ? 0 : signedDirection * (tokenPrice - 0.5);
-        shouldDropPendingTrigger = ageMs > config.TRIGGER_CONFIRMATION_DELAY_MS * 4 || signedDistanceFromHalf <= 0;
+        // Token prices always go above 0.50 when winning, regardless of up/down side
+        const distanceFromHalf = tokenPrice === null ? 0 : tokenPrice - 0.5;
+        shouldDropPendingTrigger = ageMs > config.TRIGGER_CONFIRMATION_DELAY_MS * 4 || distanceFromHalf <= 0;
       }
     }
     return shouldDropPendingTrigger;
@@ -471,9 +522,30 @@ export class PredictionEngineService {
     return shouldReplacePendingTrigger;
   }
 
+  private computeAdaptiveCooldownMs(marketKey: MarketKey): number {
+    const modelEvaluationSnapshot = this.evaluateCurrentModel(marketKey);
+    let cooldownMs = config.MARKET_COOLDOWN_MS;
+    if (modelEvaluationSnapshot !== null) {
+      const regimeClass = modelEvaluationSnapshot.predictionContext.crossAssetRegime.regimeClass;
+      // Extend cooldown in noisy regimes to avoid whipsawing
+      if (regimeClass === "reversal") {
+        cooldownMs = config.MARKET_COOLDOWN_MS * 2;
+      }
+      if (regimeClass === "fragmented") {
+        cooldownMs = config.MARKET_COOLDOWN_MS * 1.5;
+      }
+      // Slightly shorter cooldown in strong directional regimes
+      if (regimeClass === "anchor" || regimeClass === "aligned") {
+        cooldownMs = config.MARKET_COOLDOWN_MS * 0.75;
+      }
+    }
+    return cooldownMs;
+  }
+
   private maybeCreatePrediction(marketTrigger: MarketTrigger, createdAt: number): boolean {
     const lastPredictionTimestamp = this.marketStateService.getLastPredictionTimestamp(marketTrigger.marketKey);
-    const isCoolingDown = lastPredictionTimestamp !== null && createdAt - lastPredictionTimestamp < config.MARKET_COOLDOWN_MS;
+    const adaptiveCooldownMs = this.computeAdaptiveCooldownMs(marketTrigger.marketKey);
+    const isCoolingDown = lastPredictionTimestamp !== null && createdAt - lastPredictionTimestamp < adaptiveCooldownMs;
     let hasCreatedPrediction = false;
     if (!isCoolingDown) {
       const modelEvaluationSnapshot = this.evaluateCurrentModel(marketTrigger.marketKey);
@@ -487,8 +559,11 @@ export class PredictionEngineService {
           const positionSide = this.resolvePositionSide(winningDirection);
           const baselineSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
           const entryReferencePrice = this.resolveEntryReferencePrice(baselineSlice, positionSide);
-          const takeProfitPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice + config.TAKE_PROFIT_DELTA);
-          const stopLossPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice - config.STOP_LOSS_DELTA);
+          const regimeClass = predictionContext.crossAssetRegime.regimeClass;
+          const takeProfitDelta = this.computeAdaptiveTakeProfitDelta(comboApplicationResult.adjustedConfidence, selectedCombo.comboScore, regimeClass);
+          const stopLossDelta = this.computeAdaptiveStopLossDelta(comboApplicationResult.adjustedConfidence, selectedCombo.comboScore, regimeClass);
+          const takeProfitPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice + takeProfitDelta);
+          const stopLossPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice - stopLossDelta);
           const predictionRecord = this.buildPredictionRecord(
             marketTrigger.marketKey,
             winningDirection,
@@ -651,6 +726,8 @@ export class PredictionEngineService {
    */
 
   public handleSnapshot(_generatedAt: number, triggeredMarkets: MarketTrigger[]): void {
+    // Clear per-snapshot evaluation cache so each tick gets fresh evaluations
+    this.modelEvaluationCache.clear();
     this.maybeResolveResearchPredictions();
     const allTriggeredMarkets: MarketTrigger[] = [...triggeredMarkets];
     for (const asset of SUPPORTED_ASSETS) {

@@ -373,21 +373,21 @@ export class MarketStateService {
     return syntheticTrigger;
   }
 
-  private computeSignedTokenChange(previousPrice: number | null, currentPrice: number | null, tokenSide: TriggeredToken): number {
-    const unsignedChange = this.computeSignedChange(previousPrice, currentPrice);
-    const signedTokenChange = tokenSide === "up" ? unsignedChange : unsignedChange * -1;
+  private computeSignedTokenChange(previousPrice: number | null, currentPrice: number | null, _tokenSide: TriggeredToken): number {
+    // Token prices always rise when the triggered side is winning, regardless of up/down
+    const signedTokenChange = this.computeSignedChange(previousPrice, currentPrice);
     return signedTokenChange;
   }
 
-  private isPriceOnTriggeredSide(currentPrice: number | null, tokenSide: TriggeredToken): boolean {
-    const isPriceOnTriggeredSide =
-      currentPrice !== null &&
-      (tokenSide === "up" ? currentPrice > 0.5 + config.MIN_TRIGGER_DISTANCE_FROM_HALF : currentPrice < 0.5 - config.MIN_TRIGGER_DISTANCE_FROM_HALF);
+  private isPriceOnTriggeredSide(currentPrice: number | null, _tokenSide: TriggeredToken): boolean {
+    // Both up and down tokens trade above 0.50 when their side is winning
+    const isPriceOnTriggeredSide = currentPrice !== null && currentPrice > 0.5 + config.MIN_TRIGGER_DISTANCE_FROM_HALF;
     return isPriceOnTriggeredSide;
   }
 
   private resolveTriggerPriceCeiling(): number {
-    const triggerPriceCeiling = Math.min(0.8, config.ENTRY_TARGET_PRICE + config.TAKE_PROFIT_DELTA * 2);
+    // Fixed ceiling independent of TP delta — tokens above 0.72 are genuinely too expensive
+    const triggerPriceCeiling = 0.72;
     return triggerPriceCeiling;
   }
 
@@ -443,7 +443,7 @@ export class MarketStateService {
     const hasPersistentHold = persistenceCount >= 2;
     const hasMeaningfulMove = signedTokenChange >= config.MIN_TRIGGER_SPOT_MOMENTUM * 1.5;
     const triggerPriceCeiling = this.resolveTriggerPriceCeiling();
-    const hasRoomToTarget = currentPrice !== null && currentPrice <= triggerPriceCeiling - config.TAKE_PROFIT_DELTA * 0.2;
+    const hasRoomToTarget = currentPrice !== null && currentPrice <= triggerPriceCeiling;
     if (hasDominanceCross && hasPersistentHold && hasMeaningfulMove && hasRoomToTarget) {
       triggerType = "crossed_half";
     }
