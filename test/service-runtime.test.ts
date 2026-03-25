@@ -204,7 +204,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const strategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies`);
   const strategiesJson = (await strategiesResponse.json()) as StrategySummary[];
   assert.equal(strategiesResponse.status, 200);
-  assert.equal(strategiesJson.length, 12);
+  assert.equal(strategiesJson.length, 11);
   assert.equal(
     strategiesJson.every((strategy) => strategy.totalResolved >= 0),
     true,
@@ -214,7 +214,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const btcStrategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies?asset=btc&window=5m`);
   const btcStrategiesJson = (await btcStrategiesResponse.json()) as StrategySummary[];
   assert.equal(btcStrategiesResponse.status, 200);
-  assert.equal(btcStrategiesJson.length, 12);
+  assert.equal(btcStrategiesJson.length, 11);
   assert.equal(btcStrategiesJson[0]?.marketKey, "btc:5m");
   assert.equal(
     btcStrategiesJson.every((strategy) => strategy.totalResolved >= 0),
@@ -224,7 +224,7 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const solStrategiesResponse = await fetch(`http://127.0.0.1:${address.port}/v1/strategies?asset=sol&window=5m`);
   const solStrategiesJson = (await solStrategiesResponse.json()) as StrategySummary[];
   assert.equal(solStrategiesResponse.status, 200);
-  assert.equal(solStrategiesJson.length, 12);
+  assert.equal(solStrategiesJson.length, 11);
   assert.equal(solStrategiesJson[0]?.marketKey, "sol:5m");
   assert.ok(solStrategiesJson.every((strategy) => strategy.totalResolved === 0));
 

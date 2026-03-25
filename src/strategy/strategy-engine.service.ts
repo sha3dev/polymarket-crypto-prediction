@@ -77,14 +77,6 @@ export class StrategyEngineService {
         description: "BTC flips and followers start confirming the new side.",
         isComboEligible: true,
       },
-      {
-        strategyId: "s24",
-        name: "Price Stretch Penalty",
-        tier: "high",
-        family: "risk",
-        description: "Penalize late entries already too stretched for the TP target.",
-        isComboEligible: true,
-      },
     ];
     return strategyDefinitions;
   }
@@ -529,6 +521,7 @@ export class StrategyEngineService {
       breadthDirection: context.crossAssetRegime.breadthDirection,
       breadthStrength: context.crossAssetRegime.breadthStrength,
       lagRatio: context.crossAssetRegime.lagRatio,
+      normalizedAffordability: this.computeNormalizedAffordability(context),
       finalScoreHint: weightedScore,
       strategyId,
     };
@@ -604,9 +597,6 @@ export class StrategyEngineService {
     }
     if (strategyId === "s23") {
       score = this.scoreBtcTrendReversalConfirmation(context);
-    }
-    if (strategyId === "s24") {
-      score = this.scorePriceStretchPenalty(context);
     }
     return score;
   }
@@ -839,12 +829,6 @@ export class StrategyEngineService {
     if (currentTriggerType === "btc_trend_reversal") {
       score = reversalEdge * 28 * assetMultiplier;
     }
-    return score;
-  }
-
-  private scorePriceStretchPenalty(context: PredictionContext): number {
-    const normalizedAffordability = this.computeNormalizedAffordability(context);
-    const score = normalizedAffordability - 1;
     return score;
   }
 

@@ -241,7 +241,7 @@ export class ComboMetricsService {
 
   private hasSanityCheckMember(activeComboCandidate: ActiveComboCandidate): boolean {
     const hasSanityCheckMember = activeComboCandidate.memberSignals.some((memberSignal) => {
-      return memberSignal.family === "pricing" || memberSignal.family === "reversion" || memberSignal.family === "risk";
+      return memberSignal.family === "pricing" || memberSignal.family === "reversion";
     });
     return hasSanityCheckMember;
   }
@@ -287,14 +287,13 @@ export class ComboMetricsService {
     return normalizedMarketQualityScore;
   }
 
-  private computeAffordabilityScore(activeComboCandidate: ActiveComboCandidate, strategySignals: StrategySignal[]): number {
-    const stretchSignal =
-      strategySignals.find((strategySignal) => strategySignal.strategyId === "s24" && strategySignal.direction === activeComboCandidate.direction) ??
-      strategySignals.find((strategySignal) => strategySignal.strategyId === "s24") ??
-      null;
+  private computeAffordabilityScore(strategySignals: StrategySignal[]): number {
+    const normalizedAffordability = strategySignals.find((strategySignal) => {
+      return typeof strategySignal.debug.normalizedAffordability === "number";
+    })?.debug.normalizedAffordability;
     let affordabilityScore = 1;
-    if (stretchSignal !== null) {
-      affordabilityScore = Math.max(0, Math.min(1, 1 + stretchSignal.score));
+    if (typeof normalizedAffordability === "number") {
+      affordabilityScore = Math.max(0, Math.min(1, normalizedAffordability));
     }
     return affordabilityScore;
   }
@@ -411,7 +410,7 @@ export class ComboMetricsService {
     const semanticOverlapPenalty = this.computeSemanticOverlapPenalty(activeComboCandidate);
     const anchorFitScore = this.computeAnchorFitScore(activeComboCandidate.comboDefinition.marketKey, crossAssetRegime, direction);
     const normalizedQualityScore = this.computeMarketQualityScore(marketQualityScore);
-    const affordabilityScore = this.computeAffordabilityScore(activeComboCandidate, strategySignals);
+    const affordabilityScore = this.computeAffordabilityScore(strategySignals);
     const sampleFloor = activeComboCandidate.comboDefinition.size === 2 ? config.MIN_COMBO_SAMPLES_PAIR : config.MIN_COMBO_SAMPLES_TRIO;
     const sampleScore = Math.max(0, Math.min(1, comboSummary.sampleCount / Math.max(1, sampleFloor)));
     const historicalHitScore = Math.max(0, Math.min(1, comboSummary.hitRate));
@@ -432,17 +431,13 @@ export class ComboMetricsService {
       familyRedundancyPenalty * 0.14 -
       semanticOverlapPenalty * 0.14;
     const hasEnoughAgreement = activeComboCandidate.comboDefinition.size === 2 ? agreementScore >= 0.75 : agreementScore >= 0.67 && diversityScore >= 0.67;
-    const hasContrarianStretchSignal = activeComboCandidate.memberSignals.some(
-      (memberSignal) => memberSignal.strategyId === "s24" && memberSignal.direction !== direction,
-    );
     const isResearchEligible =
       direction !== null &&
       hasEnoughAgreement &&
       hasSanityCheckMember &&
       activeComboCandidate.comboConfidence >= minimumComboConfidence &&
       comboScore >= minimumResearchComboScore &&
-      anchorFitScore >= minimumAnchorFit &&
-      !hasContrarianStretchSignal;
+      anchorFitScore >= minimumAnchorFit;
     const isExecutionEligible = isResearchEligible && comboScore >= 0.58 && affordabilityScore >= 0.35;
     let selectedStrategyCombo: SelectedStrategyCombo | null = null;
     if (direction !== null) {

@@ -740,7 +740,6 @@ export class DashboardViewService {
           s21: { code: 's21', label: 'Cross-Asset Breadth Impulse', description: 'Anchor-breadth confirmation from BTC and ETH. It confirms context more than it creates conviction.' },
           s22: { code: 's22', label: 'Anchor Follow Catch-Up', description: 'Follower catch-up sensor for markets that start moving after BTC and ETH already aligned.' },
           s23: { code: 's23', label: 'BTC Trend Reversal Confirmation', description: 'Looks for a real BTC side flip and whether the new direction is starting to confirm.' },
-          s24: { code: 's24', label: 'Price Stretch Penalty', description: 'Negative risk sensor that penalizes entries already too expensive for the expected take-profit.' },
         },
         regime: {
           neutral: { code: 'NEU', label: 'Neutral', description: 'No coherent cross-asset directional structure is dominant.' },

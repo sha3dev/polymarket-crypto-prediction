@@ -248,7 +248,8 @@ The most important visible strategies today are:
 - `s21` Cross-Asset Breadth Impulse
 - `s22` Anchor Follow Catch-Up
 - `s23` BTC Trend Reversal Confirmation
-- `s24` Price Stretch Penalty
+
+Affordability is still part of the system, but it is no longer modeled as a strategy. It now acts as a direct entry filter and combo penalty instead of appearing as a combo member.
 
 The combo engine is now deliberately pruned. These strategies are no longer first-class combo members:
 

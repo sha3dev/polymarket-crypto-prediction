@@ -9,7 +9,7 @@ import type { MarketKey, PredictionContext, PredictionDirection } from "../marke
  */
 
 export const STRATEGY_TIERS = ["low", "medium", "high"] as const;
-export const STRATEGY_FAMILIES = ["momentum", "microstructure", "pricing", "reversion", "cross_asset", "risk"] as const;
+export const STRATEGY_FAMILIES = ["momentum", "microstructure", "pricing", "reversion", "cross_asset"] as const;
 
 /**
  * @section types

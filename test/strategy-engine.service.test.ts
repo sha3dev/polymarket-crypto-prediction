@@ -52,7 +52,7 @@ test("StrategyEngineService detects BTC trend reversal confirmation through s23"
   assert.equal(trendReversalScore > 0.1, true);
 });
 
-test("StrategyEngineService turns s24 into a continuous affordability curve", () => {
+test("StrategyEngineService exposes a continuous affordability curve in debug context", () => {
   const strategyDefinitions = buildStrategyDefinitions();
   const strategyMetricsService = new StrategyMetricsService(strategyDefinitions);
   const strategyEngineService = new StrategyEngineService(strategyMetricsService);
@@ -104,19 +104,21 @@ test("StrategyEngineService turns s24 into a continuous affordability curve", ()
       },
     },
   };
-  const priceStretchFunction = Reflect.get(strategyEngineService, "scorePriceStretchPenalty") as ((context: PredictionContext) => number) | undefined;
+  const buildDebugFunction = Reflect.get(strategyEngineService, "buildDebug") as
+    | ((strategyId: string, context: PredictionContext, priorSignals: [], weightedScore: number) => Record<string, number | string | boolean | null>)
+    | undefined;
 
-  if (!priceStretchFunction) {
-    throw new Error("expected price stretch helper");
+  if (!buildDebugFunction) {
+    throw new Error("expected debug helper");
   }
 
-  const cheapPriceStretchScore = priceStretchFunction.call(strategyEngineService, cheapPredictionContext);
-  const mediumPriceStretchScore = priceStretchFunction.call(strategyEngineService, mediumPredictionContext);
-  const expensivePriceStretchScore = priceStretchFunction.call(strategyEngineService, expensivePredictionContext);
+  const cheapAffordability = buildDebugFunction.call(strategyEngineService, "s01", cheapPredictionContext, [], 0).normalizedAffordability as number;
+  const mediumAffordability = buildDebugFunction.call(strategyEngineService, "s01", mediumPredictionContext, [], 0).normalizedAffordability as number;
+  const expensiveAffordability = buildDebugFunction.call(strategyEngineService, "s01", expensivePredictionContext, [], 0).normalizedAffordability as number;
 
-  assert.equal(cheapPriceStretchScore > mediumPriceStretchScore, true);
-  assert.equal(mediumPriceStretchScore > expensivePriceStretchScore, true);
-  assert.equal(expensivePriceStretchScore < -0.9, true);
+  assert.equal(cheapAffordability > mediumAffordability, true);
+  assert.equal(mediumAffordability > expensiveAffordability, true);
+  assert.equal(expensiveAffordability < 0.1, true);
 });
 
 test("StrategyEngineService weakens continuation and boosts fade when the move is already stretched", () => {
@@ -197,14 +199,6 @@ function buildStrategyDefinitions(): StrategyDefinition[] {
       tier: "high",
       family: "momentum",
       description: "BTC flips and followers start confirming the new side.",
-      isComboEligible: true,
-    },
-    {
-      strategyId: "s24",
-      name: "Price Stretch Penalty",
-      tier: "high",
-      family: "risk",
-      description: "Penalize late entries already too stretched for the TP target.",
       isComboEligible: true,
     },
   ];

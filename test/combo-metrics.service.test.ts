@@ -70,19 +70,16 @@ test("ComboMetricsService uses affordability to weaken late-entry combos", () =>
     | ((marketKey: MarketKey, strategySignals: StrategySignal[]) => object)
     | undefined;
   const computeAffordabilityScore = Reflect.get(comboMetricsService, "computeAffordabilityScore") as
-    | ((activeComboCandidate: object, strategySignals: StrategySignal[]) => number)
+    | ((strategySignals: StrategySignal[]) => number)
     | undefined;
 
   if (!buildCandidateFromMembers || !computeAffordabilityScore) {
     throw new Error("expected affordability helpers");
   }
 
-  const activeComboCandidate = buildCandidateFromMembers.call(comboMetricsService, "btc:5m", [
-    buildStrategySignal("s14", "pricing", 0.78, 0.9, 0.88, true),
-    buildStrategySignal("s24", "risk", -0.9, 0.92, 0.93, true),
-  ]);
-  const affordabilitySignals = [buildStrategySignal("s14", "pricing", 0.78, 0.9, 0.88, true), buildStrategySignal("s24", "risk", -0.9, 0.92, 0.93, true)];
-  const affordabilityScore = computeAffordabilityScore.call(comboMetricsService, activeComboCandidate, affordabilitySignals);
+  buildCandidateFromMembers.call(comboMetricsService, "btc:5m", [buildStrategySignal("s14", "pricing", 0.78, 0.9, 0.88, true)]);
+  const affordabilitySignals = [buildStrategySignal("s14", "pricing", 0.78, 0.9, 0.88, true, undefined, { normalizedAffordability: 0.08 })];
+  const affordabilityScore = computeAffordabilityScore.call(comboMetricsService, affordabilitySignals);
 
   assert.equal(affordabilityScore < 0.2, true);
 });
@@ -95,6 +92,7 @@ function buildStrategySignal(
   snapshotUtility: number,
   isComboEligible: boolean,
   direction?: PredictionDirection,
+  debug?: Record<string, number | string | boolean | null>,
 ): StrategySignal {
   const resolvedDirection = direction ?? (score >= 0 ? "UP" : "DOWN");
   return {
@@ -112,7 +110,7 @@ function buildStrategySignal(
     didParticipate: true,
     isComboEligible,
     reason: null,
-    debug: {},
+    debug: debug ?? {},
   };
 }
 

@@ -186,7 +186,7 @@ export class ServiceRuntime {
         tier: "medium",
         family: "cross_asset",
         description: "Market-wide synchronous move confirmation.",
-        isComboEligible: true,
+        isComboEligible: false,
       },
       {
         strategyId: "s22",
@@ -194,7 +194,7 @@ export class ServiceRuntime {
         tier: "high",
         family: "cross_asset",
         description: "Follow lagging asset after BTC and ETH impulse.",
-        isComboEligible: true,
+        isComboEligible: false,
       },
       {
         strategyId: "s23",
@@ -202,14 +202,6 @@ export class ServiceRuntime {
         tier: "high",
         family: "momentum",
         description: "BTC flips and followers start confirming the new side.",
-        isComboEligible: true,
-      },
-      {
-        strategyId: "s24",
-        name: "Price Stretch Penalty",
-        tier: "high",
-        family: "risk",
-        description: "Penalize late entries already too stretched for the TP target.",
         isComboEligible: true,
       },
     ];
