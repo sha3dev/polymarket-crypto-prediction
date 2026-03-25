@@ -17,7 +17,7 @@ test("ExecutionPolicyService blocks entries that fight a strong cross-asset brea
   assert.equal(executionDecision.isEntryAllowed, false);
   assert.equal(executionDecision.breadthDirection, "UP");
   assert.equal(executionDecision.hasBreadthAlignment, false);
-  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
 });
 
 test("ExecutionPolicyService blocks alt longs when the BTC anchor is clearly down", () => {
@@ -29,7 +29,7 @@ test("ExecutionPolicyService blocks alt longs when the BTC anchor is clearly dow
     throw new Error("expected execution decision");
   }
   assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
 });
 
 test("ExecutionPolicyService blocks ETH when BTC is clearly moving the other way", () => {
@@ -41,7 +41,7 @@ test("ExecutionPolicyService blocks ETH when BTC is clearly moving the other way
     throw new Error("expected execution decision");
   }
   assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
 });
 
 test("ExecutionPolicyService blocks ETH UP when BTC UP token momentum is not supportive", () => {
@@ -55,7 +55,7 @@ test("ExecutionPolicyService blocks ETH UP when BTC UP token momentum is not sup
     throw new Error("expected execution decision");
   }
   assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
 });
 
 test("ExecutionPolicyService blocks SOL when BTC and ETH align against it", () => {
@@ -67,7 +67,7 @@ test("ExecutionPolicyService blocks SOL when BTC and ETH align against it", () =
     throw new Error("expected execution decision");
   }
   assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
 });
 
 test("ExecutionPolicyService blocks XRP when BTC and ETH are not aligned", () => {
@@ -79,7 +79,7 @@ test("ExecutionPolicyService blocks XRP when BTC and ETH are not aligned", () =>
     throw new Error("expected execution decision");
   }
   assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
 });
 
 test("ExecutionPolicyService allows SOL only when BTC and ETH align with it", () => {
@@ -90,7 +90,7 @@ test("ExecutionPolicyService allows SOL only when BTC and ETH align with it", ()
   if (executionDecision === null) {
     throw new Error("expected execution decision");
   }
-  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), false);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), false);
 });
 
 test("ExecutionPolicyService blocks SOL UP when BTC and ETH UP tokens do not both support it", () => {
@@ -105,7 +105,7 @@ test("ExecutionPolicyService blocks SOL UP when BTC and ETH UP tokens do not bot
     throw new Error("expected execution decision");
   }
   assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.gateFailures.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
 });
 
 function buildMarketSnapshotSlice(asset: "btc" | "eth" | "sol" | "xrp" = "btc"): MarketSnapshotSlice {
@@ -215,8 +215,24 @@ function buildPredictionResponse(
       gateReason: null,
     },
     crossAssetRegime: {
-      regimeId: "leader_laggard_up",
-      regimeClass: "leader_laggard",
+      regimeId:
+        btcDirection === "UP" && ethDirection === "UP"
+          ? "btc_eth_up"
+          : btcDirection === "DOWN" && ethDirection === "DOWN"
+            ? "btc_eth_down"
+            : btcDirection === "UP"
+              ? "btc_up"
+              : btcDirection === "DOWN"
+                ? "btc_down"
+                : "fragmented",
+      regimeClass:
+        btcDirection === "UP" && ethDirection === "UP"
+          ? "aligned"
+          : btcDirection === "DOWN" && ethDirection === "DOWN"
+            ? "aligned"
+            : btcDirection === "NEUTRAL"
+              ? "fragmented"
+              : "anchor",
       breadthDirection: "UP",
       btcDirection,
       ethDirection,
@@ -224,8 +240,8 @@ function buildPredictionResponse(
       btcDownTokenMomentum: tokenMomentumOverrides.btcDownTokenMomentum ?? 0.02,
       ethUpTokenMomentum: tokenMomentumOverrides.ethUpTokenMomentum ?? 0.02,
       ethDownTokenMomentum: tokenMomentumOverrides.ethDownTokenMomentum ?? 0.02,
-      anchorAsset: "btc",
-      anchorDirection: btcDirection === "NEUTRAL" ? ethDirection : btcDirection,
+      hasBtcAnchor: btcDirection !== "NEUTRAL",
+      hasEthAlignment: btcDirection !== "NEUTRAL" && btcDirection === ethDirection,
       breadthStrength: 0.91,
       breadthParticipation: 1,
       averageSignedMove: 0.08,
@@ -234,9 +250,6 @@ function buildPredictionResponse(
       lagRatio: 0.88,
       alignedMarketCount: 4,
       qualifyingMarketCount: 4,
-      leaderMarketKey: "eth:5m",
-      leaderGroup: ["eth:5m", "btc:5m"],
-      laggardGroup: [`${asset}:5m`],
       synchronyScore: 1,
       accelerationScore: 0.72,
       exhaustionScore: 0.28,
@@ -244,10 +257,9 @@ function buildPredictionResponse(
       isDirectional: true,
       isTradableGlobalContext: true,
       hasStrongBreadth: true,
-      hasLeaderLaggardOpportunity: true,
     },
     isExecutionEligible: false,
-    executionGateFailures: [],
+    executionBlockingReasons: [],
     wasExecuted: false,
     executionComboSource: "research",
     result: {
@@ -260,12 +272,28 @@ function buildPredictionResponse(
       reason: null,
     },
     strategyBreakdown: [],
-    engineBreakdown: [],
-    winningSetupType: "leader_laggard_catchup",
-    winningEngineIds: ["breadth_engine", "propagation_engine", "local_momentum_engine"],
-    winningEngineComboKey: "breadth_engine+propagation_engine+local_momentum_engine",
-    winningEngineComboScore: 0.84,
-    combinationReason: "leaders move first, laggard catches up",
+    selectedCombo: {
+      comboKey: "s09+s21",
+      marketKey: `${asset}:5m`,
+      memberStrategyIds: ["s09", "s21"],
+      size: 2,
+      direction,
+      comboConfidence: 0.88,
+      comboScore: 0.84,
+      agreementScore: 1,
+      historicalHitRate: 0.7,
+      historicalPnlProxy: 0.2,
+      sampleCount: 10,
+      drawdownProxy: 0.1,
+      diversityScore: 1,
+      anchorFitScore: asset === "btc" ? 1 : asset === "eth" ? 0.95 : btcDirection === ethDirection && btcDirection === direction ? 1 : 0.2,
+      marketQualityScore: 0.95,
+      executionReadinessScore: 0.79,
+      selectionReason: "research good agr 1.00 fit 1.00",
+      isResearchEligible: true,
+      isExecutionEligible: true,
+      selectionSource: "research",
+    },
     comboBreakdown: {
       activeCombos: [],
       appliedBoostCombos: [],

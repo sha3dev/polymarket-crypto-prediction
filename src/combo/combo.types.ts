@@ -31,6 +31,28 @@ export type ComboUsage = {
   didAffectFinalConfidence: boolean;
   reason: string;
 };
+export type SelectedStrategyCombo = {
+  comboKey: string;
+  marketKey: MarketKey;
+  memberStrategyIds: string[];
+  size: ComboSize;
+  direction: PredictionDirection;
+  comboConfidence: number;
+  comboScore: number;
+  agreementScore: number;
+  historicalHitRate: number;
+  historicalPnlProxy: number;
+  sampleCount: number;
+  drawdownProxy: number;
+  diversityScore: number;
+  anchorFitScore: number;
+  marketQualityScore: number;
+  executionReadinessScore: number;
+  selectionReason: string;
+  isResearchEligible: boolean;
+  isExecutionEligible: boolean;
+  selectionSource: ComboSource;
+};
 export type ComboSummary = {
   comboKey: string;
   marketKey: MarketKey;

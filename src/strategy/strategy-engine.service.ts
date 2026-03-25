@@ -227,7 +227,7 @@ export class StrategyEngineService {
     }
     if (engineId === "propagation_engine") {
       engineBias =
-        context.crossAssetRegime.hasLeaderLaggardOpportunity && directionSign !== 0
+        context.crossAssetRegime.hasEthAlignment && context.crossAssetRegime.lagRatio >= config.CROSS_ASSET_LAGGARD_THRESHOLD && directionSign !== 0
           ? directionSign * (context.crossAssetRegime.lagRatio * 0.8 + context.crossAssetRegime.breadthStrength * 0.4)
           : 0;
     }
@@ -257,7 +257,12 @@ export class StrategyEngineService {
       regimeFit = crossAssetRegime.isDirectional ? 0.92 + crossAssetRegime.breadthStrength * 0.22 : 0.4;
     }
     if (engineId === "propagation_engine") {
-      regimeFit = crossAssetRegime.hasLeaderLaggardOpportunity ? 1.1 + crossAssetRegime.lagRatio * 0.35 : crossAssetRegime.isDirectional ? 0.7 : 0.3;
+      regimeFit =
+        crossAssetRegime.hasEthAlignment && crossAssetRegime.lagRatio >= config.CROSS_ASSET_LAGGARD_THRESHOLD
+          ? 1.1 + crossAssetRegime.lagRatio * 0.35
+          : crossAssetRegime.isDirectional
+            ? 0.7
+            : 0.3;
     }
     if (engineId === "local_momentum_engine") {
       regimeFit = crossAssetRegime.regimeClass === "reversal" ? 0.55 : isDirectionAligned ? 1 + crossAssetRegime.breadthStrength * 0.2 : 0.72;
@@ -266,7 +271,7 @@ export class StrategyEngineService {
       regimeFit = context.current.quality.score >= 0.75 ? 0.95 : 0.65;
     }
     if (engineId === "mispricing_engine") {
-      regimeFit = crossAssetRegime.regimeClass === "directional" && isDirectionAligned ? 0.78 : 1.02;
+      regimeFit = (crossAssetRegime.regimeClass === "anchor" || crossAssetRegime.regimeClass === "aligned") && isDirectionAligned ? 0.78 : 1.02;
     }
     if (engineId === "reversion_engine") {
       regimeFit =
@@ -403,16 +408,20 @@ export class StrategyEngineService {
     const isDirectionAligned = crossAssetRegime.breadthDirection === "NEUTRAL" ? true : crossAssetRegime.breadthDirection === direction;
     let regimeFitScore = 0.8;
     if (setupType === "broad_continuation") {
-      regimeFitScore = crossAssetRegime.regimeClass === "directional" && isDirectionAligned ? 1.1 + crossAssetRegime.breadthStrength * 0.35 : 0.3;
+      regimeFitScore =
+        (crossAssetRegime.regimeClass === "anchor" || crossAssetRegime.regimeClass === "aligned") && isDirectionAligned
+          ? 1.1 + crossAssetRegime.breadthStrength * 0.35
+          : 0.3;
     }
     if (setupType === "leader_laggard_catchup") {
-      regimeFitScore = crossAssetRegime.hasLeaderLaggardOpportunity ? 1.15 + crossAssetRegime.lagRatio * 0.2 : 0.35;
+      regimeFitScore =
+        crossAssetRegime.hasEthAlignment && crossAssetRegime.lagRatio >= config.CROSS_ASSET_LAGGARD_THRESHOLD ? 1.15 + crossAssetRegime.lagRatio * 0.2 : 0.35;
     }
     if (setupType === "local_breakout_confirmed") {
       regimeFitScore = crossAssetRegime.regimeClass === "reversal" ? 0.45 : isDirectionAligned ? 1 : 0.75;
     }
     if (setupType === "mispricing_repricing") {
-      regimeFitScore = crossAssetRegime.regimeClass === "directional" && !isDirectionAligned ? 0.68 : 1;
+      regimeFitScore = (crossAssetRegime.regimeClass === "anchor" || crossAssetRegime.regimeClass === "aligned") && !isDirectionAligned ? 0.68 : 1;
     }
     if (setupType === "fade_failed_cross") {
       regimeFitScore = crossAssetRegime.regimeClass === "reversal" || crossAssetRegime.regimeClass === "fragmented" ? 1.08 : 0.55;
@@ -746,7 +755,11 @@ export class StrategyEngineService {
   private scoreLeaderLaggardCatchUp(context: PredictionContext): number {
     const crossAssetRegime = context.crossAssetRegime;
     let score = 0;
-    if (crossAssetRegime.hasLeaderLaggardOpportunity && crossAssetRegime.breadthDirection !== "NEUTRAL") {
+    if (
+      crossAssetRegime.hasEthAlignment &&
+      crossAssetRegime.lagRatio >= config.CROSS_ASSET_LAGGARD_THRESHOLD &&
+      crossAssetRegime.breadthDirection !== "NEUTRAL"
+    ) {
       const breadthDirectionSign = crossAssetRegime.breadthDirection === "UP" ? 1 : -1;
       score = breadthDirectionSign * Math.min(1, crossAssetRegime.breadthStrength * Math.max(0.6, crossAssetRegime.lagRatio * 1.4));
     }

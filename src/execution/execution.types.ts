@@ -2,8 +2,8 @@
  * @section imports:internals
  */
 
+import type { ComboSize } from "../combo/combo.types.ts";
 import type { AssetSymbol, CrossAssetBreadthDirection, MarketKey, MarketWindow, PredictionDirection } from "../market/market.types.ts";
-import type { EngineId, SetupType } from "../strategy/strategy.types.ts";
 
 /**
  * @section types
@@ -15,6 +15,15 @@ export type TradeLifecycleStatus = "idle" | "entry_pending_maker" | "open" | "ex
 export type TradeExitReason = "take_profit_hit" | "stop_loss_hit";
 export type ComboSource = "research" | "execution";
 export type ExecutionMode = "paper" | "real";
+export type SelectedComboSnapshot = {
+  selectedComboKey: string | null;
+  selectedComboSize: ComboSize | null;
+  selectedComboSource: ComboSource | null;
+  selectedComboDirection: PredictionDirection | null;
+  selectedComboScore: number | null;
+  selectedComboConfidence: number | null;
+  selectedComboStrategyIds: string[];
+};
 export type ExecutionDecision = {
   marketKey: MarketKey;
   asset: AssetSymbol;
@@ -43,17 +52,16 @@ export type ExecutionDecision = {
   breadthStrength: number | null;
   hasStrongBreadth: boolean;
   hasBreadthAlignment: boolean;
-  hasComboGatePassed: boolean;
   selectedComboKey: string | null;
-  selectedComboSize: 2 | 3 | null;
+  selectedComboSize: ComboSize | null;
   selectedComboSource: ComboSource | null;
-  winningSetupType: SetupType | null;
-  winningEngineIds: EngineId[];
-  winningEngineComboKey: string | null;
-  winningEngineComboScore: number | null;
+  selectedComboDirection: PredictionDirection | null;
+  selectedComboScore: number | null;
+  selectedComboConfidence: number | null;
+  selectedComboStrategyIds: string[];
   regimeId: string | null;
-  executionProfile: string | null;
-  gateFailures: string[];
+  readinessScore: number;
+  blockingReasons: string[];
   generatedAt: number | null;
 };
 export type PaperPosition = {

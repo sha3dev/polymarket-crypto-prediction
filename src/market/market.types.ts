@@ -18,16 +18,7 @@ export type TriggeredToken = "up" | "down";
 export type TriggerType = "crossed_half";
 export type PredictionDirection = "UP" | "DOWN";
 export type CrossAssetBreadthDirection = PredictionDirection | "NEUTRAL";
-export type CrossAssetRegimeId =
-  | "neutral"
-  | "broad_up_weak"
-  | "broad_up_strong"
-  | "broad_down_weak"
-  | "broad_down_strong"
-  | "leader_laggard_up"
-  | "leader_laggard_down"
-  | "fragmented"
-  | "reversal_risk";
+export type CrossAssetRegimeId = "neutral" | "btc_up" | "btc_down" | "btc_eth_up" | "btc_eth_down" | "fragmented" | "reversal_risk";
 export type SnapshotValue = number | string | null;
 export type InputSnapshot = { generated_at: number } & Record<string, SnapshotValue>;
 export type OrderBookLevel = { price: number; size: number };
@@ -102,7 +93,7 @@ export type MarketTrigger = {
 };
 export type CrossAssetRegime = {
   regimeId: CrossAssetRegimeId;
-  regimeClass: "neutral" | "directional" | "leader_laggard" | "fragmented" | "reversal";
+  regimeClass: "neutral" | "anchor" | "aligned" | "fragmented" | "reversal";
   breadthDirection: CrossAssetBreadthDirection;
   btcDirection: CrossAssetBreadthDirection;
   ethDirection: CrossAssetBreadthDirection;
@@ -110,8 +101,8 @@ export type CrossAssetRegime = {
   btcDownTokenMomentum: number;
   ethUpTokenMomentum: number;
   ethDownTokenMomentum: number;
-  anchorAsset: AssetSymbol | null;
-  anchorDirection: CrossAssetBreadthDirection;
+  hasBtcAnchor: boolean;
+  hasEthAlignment: boolean;
   breadthStrength: number;
   breadthParticipation: number;
   averageSignedMove: number;
@@ -120,9 +111,6 @@ export type CrossAssetRegime = {
   lagRatio: number;
   alignedMarketCount: number;
   qualifyingMarketCount: number;
-  leaderMarketKey: MarketKey | null;
-  leaderGroup: MarketKey[];
-  laggardGroup: MarketKey[];
   synchronyScore: number;
   accelerationScore: number;
   exhaustionScore: number;
@@ -130,7 +118,6 @@ export type CrossAssetRegime = {
   isDirectional: boolean;
   isTradableGlobalContext: boolean;
   hasStrongBreadth: boolean;
-  hasLeaderLaggardOpportunity: boolean;
 };
 export type MarketUpdateResult = {
   generatedAt: number;

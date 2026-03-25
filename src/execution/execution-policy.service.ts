@@ -20,7 +20,7 @@ export class ExecutionPolicyService {
     marketSlice: MarketSnapshotSlice,
     prediction: PredictionResponse | null,
     marketPerformanceSummary: MarketPerformanceSummary | null,
-    gateFailures: string[],
+    blockingReasons: string[],
   ): ExecutionDecision {
     const positionSide = this.resolvePositionSide(prediction?.direction ?? null);
     const referencePrice = positionSide === null ? null : this.resolveTokenPrice(marketSlice, positionSide);
@@ -56,17 +56,16 @@ export class ExecutionPolicyService {
       breadthStrength: prediction?.crossAssetRegime.breadthStrength ?? null,
       hasStrongBreadth: prediction?.crossAssetRegime.hasStrongBreadth ?? false,
       hasBreadthAlignment: this.hasBreadthAlignment(prediction),
-      hasComboGatePassed: prediction?.comboGate.hasComboGatePassed ?? false,
-      selectedComboKey: prediction?.comboGate.selectedComboKey ?? null,
-      selectedComboSize: prediction?.comboGate.selectedComboSize ?? null,
-      selectedComboSource: prediction?.comboGate.selectedComboSource ?? null,
-      winningSetupType: prediction?.winningSetupType ?? null,
-      winningEngineIds: prediction?.winningEngineIds ?? [],
-      winningEngineComboKey: prediction?.winningEngineComboKey ?? null,
-      winningEngineComboScore: prediction?.winningEngineComboScore ?? null,
+      selectedComboKey: prediction?.selectedCombo.comboKey ?? null,
+      selectedComboSize: prediction?.selectedCombo.size ?? null,
+      selectedComboSource: prediction?.selectedCombo.selectionSource ?? null,
+      selectedComboDirection: prediction?.selectedCombo.direction ?? null,
+      selectedComboScore: prediction?.selectedCombo.comboScore ?? null,
+      selectedComboConfidence: prediction?.selectedCombo.comboConfidence ?? null,
+      selectedComboStrategyIds: prediction?.selectedCombo.memberStrategyIds ?? [],
       regimeId: prediction?.crossAssetRegime.regimeId ?? null,
-      executionProfile: prediction?.winningSetupType ?? null,
-      gateFailures,
+      readinessScore: prediction === null ? 0 : this.computeReadinessScore(prediction, marketPerformanceSummary, false),
+      blockingReasons,
       generatedAt: marketSlice.generatedAt,
     };
   }
@@ -92,37 +91,9 @@ export class ExecutionPolicyService {
     return hasBreadthAlignment;
   }
 
-  private appendSetupGateFailures(gateFailures: string[], prediction: PredictionResponse, marketSlice: MarketSnapshotSlice): void {
-    if (prediction.winningSetupType === "broad_continuation") {
-      if (!prediction.crossAssetRegime.isDirectional) {
-        gateFailures.push("setup_requires_directional_regime");
-      }
-      if (prediction.crossAssetRegime.reversalRiskScore >= 0.72) {
-        gateFailures.push("setup_reversal_risk");
-      }
-    }
-    if (prediction.winningSetupType === "leader_laggard_catchup") {
-      if (!prediction.crossAssetRegime.hasLeaderLaggardOpportunity) {
-        gateFailures.push("setup_needs_laggard");
-      }
-      if (prediction.crossAssetRegime.leaderMarketKey === null) {
-        gateFailures.push("setup_needs_leader");
-      }
-    }
-    if (prediction.winningSetupType === "local_breakout_confirmed" && Math.abs(marketSlice.spotMomentum) < config.MIN_TRIGGER_SPOT_MOMENTUM) {
-      gateFailures.push("setup_needs_momentum");
-    }
-    if (prediction.winningSetupType === "mispricing_repricing" && marketSlice.chainlinkPrice === null) {
-      gateFailures.push("setup_needs_basis");
-    }
-    if (prediction.winningSetupType === "fade_failed_cross" && prediction.crossAssetRegime.hasStrongBreadth) {
-      gateFailures.push("setup_fade_conflicts_with_breadth");
-    }
-  }
-
-  private appendGateFailureIfMissing(gateFailures: string[], gateFailure: string): void {
-    if (!gateFailures.includes(gateFailure)) {
-      gateFailures.push(gateFailure);
+  private appendBlockingReasonIfMissing(blockingReasons: string[], blockingReason: string): void {
+    if (!blockingReasons.includes(blockingReason)) {
+      blockingReasons.push(blockingReason);
     }
   }
 
@@ -141,29 +112,45 @@ export class ExecutionPolicyService {
     return hasAnchorTokenMomentumSupport;
   }
 
-  private appendAnchorGateFailures(gateFailures: string[], prediction: PredictionResponse, marketSlice: MarketSnapshotSlice): void {
+  private appendAnchorGateFailures(blockingReasons: string[], prediction: PredictionResponse, marketSlice: MarketSnapshotSlice): void {
     const btcDirection = prediction.crossAssetRegime.btcDirection;
     const ethDirection = prediction.crossAssetRegime.ethDirection;
     const predictionDirection = prediction.direction;
     if (marketSlice.asset === "eth") {
       const hasEthConflictWithBtc = btcDirection !== "NEUTRAL" && predictionDirection !== btcDirection;
       if (hasEthConflictWithBtc) {
-        this.appendGateFailureIfMissing(gateFailures, "cross_asset_regime_conflict");
+        this.appendBlockingReasonIfMissing(blockingReasons, "cross_asset_regime_conflict");
       }
       if (!this.hasAnchorTokenMomentumSupport(prediction, marketSlice.asset)) {
-        this.appendGateFailureIfMissing(gateFailures, "cross_asset_regime_conflict");
+        this.appendBlockingReasonIfMissing(blockingReasons, "cross_asset_regime_conflict");
       }
     }
     if (marketSlice.asset === "sol" || marketSlice.asset === "xrp") {
       const hasMissingDirectionalAlignment = btcDirection === "NEUTRAL" || ethDirection === "NEUTRAL" || btcDirection !== ethDirection;
       const hasAltDirectionConflict = !hasMissingDirectionalAlignment && predictionDirection !== btcDirection;
       if (hasMissingDirectionalAlignment || hasAltDirectionConflict) {
-        this.appendGateFailureIfMissing(gateFailures, "cross_asset_regime_conflict");
+        this.appendBlockingReasonIfMissing(blockingReasons, "cross_asset_regime_conflict");
       }
       if (!this.hasAnchorTokenMomentumSupport(prediction, marketSlice.asset)) {
-        this.appendGateFailureIfMissing(gateFailures, "cross_asset_regime_conflict");
+        this.appendBlockingReasonIfMissing(blockingReasons, "cross_asset_regime_conflict");
       }
     }
+  }
+
+  private computeReadinessScore(prediction: PredictionResponse, marketPerformanceSummary: MarketPerformanceSummary | null, hasPassedAnchors: boolean): number {
+    const comboScore = prediction.selectedCombo.comboScore;
+    const comboConfidence = prediction.selectedCombo.comboConfidence;
+    const qualityScore = prediction.crossAssetRegime.isTradableGlobalContext ? 1 : 0.7;
+    const executionScore = marketPerformanceSummary?.effectiveExecutionScore ?? 0.35;
+    const readinessScore =
+      comboScore * 0.28 +
+      comboConfidence * 0.22 +
+      prediction.selectedCombo.anchorFitScore * 0.2 +
+      prediction.selectedCombo.marketQualityScore * 0.12 +
+      prediction.selectedCombo.executionReadinessScore * 0.1 +
+      executionScore * 0.08;
+    const normalizedReadinessScore = Math.max(0, Math.min(1, readinessScore * (hasPassedAnchors ? 1 : 0.55) * qualityScore));
+    return normalizedReadinessScore;
   }
 
   private resolveTokenPrice(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number | null {
@@ -302,42 +289,44 @@ export class ExecutionPolicyService {
           executionDecision = this.buildBlockedDecision(marketSlice, prediction, marketPerformanceSummary, ["invalid_direction"]);
         } else {
           const referencePrice = this.resolveTokenPrice(marketSlice, positionSide);
-          const gateFailures: string[] = [];
+          const blockingReasons: string[] = [];
           if (referencePrice === null) {
-            gateFailures.push("no_reference_price");
-          }
-          if (!prediction.comboGate.hasComboGatePassed) {
-            gateFailures.push("combo_gate_failed");
+            blockingReasons.push("no_reference_price");
           }
           if (!this.hasBreadthAlignment(prediction)) {
-            gateFailures.push("cross_asset_regime_conflict");
+            blockingReasons.push("cross_asset_regime_conflict");
           }
-          this.appendAnchorGateFailures(gateFailures, prediction, marketSlice);
+          this.appendAnchorGateFailures(blockingReasons, prediction, marketSlice);
           if (!marketSlice.quality.hasLiveMarket) {
-            gateFailures.push("market_not_live");
+            blockingReasons.push("market_not_live");
           }
           if (marketSlice.quality.score < config.MIN_MARKET_QUALITY_FOR_ENTRY) {
-            gateFailures.push("quality_too_low");
+            blockingReasons.push("quality_too_low");
           }
-          if (prediction.confidence < config.MIN_ENTRY_CONFIDENCE) {
-            gateFailures.push("confidence_too_low");
+          if (prediction.selectedCombo.comboConfidence < config.MIN_ENTRY_CONFIDENCE) {
+            blockingReasons.push("confidence_too_low");
+          }
+          if (prediction.selectedCombo.comboScore < 0.45) {
+            blockingReasons.push("combo_score_too_low");
+          }
+          if (prediction.selectedCombo.anchorFitScore < 0.9) {
+            blockingReasons.push("anchor_fit_too_low");
           }
           if (referencePrice !== null && Math.abs(referencePrice - config.ENTRY_TARGET_PRICE) > config.ENTRY_BAND_HALF_WIDTH) {
-            gateFailures.push("outside_entry_band");
+            blockingReasons.push("outside_entry_band");
           }
           const spread = this.resolveSpread(marketSlice, positionSide);
           if (spread > config.MAX_SPREAD_FOR_ENTRY) {
-            gateFailures.push("spread_too_wide");
+            blockingReasons.push("spread_too_wide");
           }
-          this.appendSetupGateFailures(gateFailures, prediction, marketSlice);
           if (marketPerformanceSummary !== null && marketPerformanceSummary.status === "warming_up") {
-            gateFailures.push("market_warming_up");
+            blockingReasons.push("market_warming_up");
           }
           if (marketPerformanceSummary !== null && marketPerformanceSummary.executionScore === null) {
-            gateFailures.push("insufficient_execution_history");
+            blockingReasons.push("insufficient_execution_history");
           }
           if (marketPerformanceSummary !== null && marketPerformanceSummary.effectiveExecutionScore < config.MIN_EXECUTION_SCORE_FOR_ENTRY) {
-            gateFailures.push(
+            blockingReasons.push(
               marketPerformanceSummary.executionScore === null || !marketPerformanceSummary.hasSufficientHistory
                 ? "bootstrap_discount_too_low"
                 : "execution_score_too_low",
@@ -346,13 +335,18 @@ export class ExecutionPolicyService {
           const orderShareCount = referencePrice === null ? 0 : this.computeMinimumShareCount(referencePrice);
           const orderNotionalUsd = referencePrice === null ? null : this.computeOrderNotionalUsd(referencePrice, orderShareCount);
           if (orderNotionalUsd !== null && orderNotionalUsd < config.MIN_ORDER_USD) {
-            gateFailures.push("order_notional_too_low");
+            blockingReasons.push("order_notional_too_low");
           }
           if (orderShareCount < config.MIN_ORDER_SHARES) {
-            gateFailures.push("order_share_count_too_low");
+            blockingReasons.push("order_share_count_too_low");
           }
-          if (gateFailures.length > 0 || referencePrice === null || marketPerformanceSummary === null) {
-            executionDecision = this.buildBlockedDecision(marketSlice, prediction, marketPerformanceSummary, gateFailures);
+          const hasPassedAnchors = !blockingReasons.includes("cross_asset_regime_conflict") && !blockingReasons.includes("anchor_fit_too_low");
+          const readinessScore = this.computeReadinessScore(prediction, marketPerformanceSummary, hasPassedAnchors);
+          if (readinessScore < 0.55) {
+            blockingReasons.push("readiness_too_low");
+          }
+          if (blockingReasons.length > 0 || referencePrice === null || marketPerformanceSummary === null) {
+            executionDecision = this.buildBlockedDecision(marketSlice, prediction, marketPerformanceSummary, blockingReasons);
           } else {
             const depth = this.resolveDepth(marketSlice, positionSide);
             const imbalance = this.resolveImbalance(marketSlice, positionSide);
@@ -390,17 +384,16 @@ export class ExecutionPolicyService {
               breadthStrength: prediction.crossAssetRegime.breadthStrength,
               hasStrongBreadth: prediction.crossAssetRegime.hasStrongBreadth,
               hasBreadthAlignment: true,
-              hasComboGatePassed: true,
-              selectedComboKey: prediction.comboGate.selectedComboKey,
-              selectedComboSize: prediction.comboGate.selectedComboSize,
-              selectedComboSource: prediction.comboGate.selectedComboSource,
-              winningSetupType: prediction.winningSetupType,
-              winningEngineIds: [...prediction.winningEngineIds],
-              winningEngineComboKey: prediction.winningEngineComboKey,
-              winningEngineComboScore: prediction.winningEngineComboScore,
+              selectedComboKey: prediction.selectedCombo.comboKey,
+              selectedComboSize: prediction.selectedCombo.size,
+              selectedComboSource: prediction.selectedCombo.selectionSource,
+              selectedComboDirection: prediction.selectedCombo.direction,
+              selectedComboScore: prediction.selectedCombo.comboScore,
+              selectedComboConfidence: prediction.selectedCombo.comboConfidence,
+              selectedComboStrategyIds: [...prediction.selectedCombo.memberStrategyIds],
               regimeId: prediction.crossAssetRegime.regimeId,
-              executionProfile: prediction.winningSetupType,
-              gateFailures: [],
+              readinessScore,
+              blockingReasons: [],
               generatedAt: marketSlice.generatedAt,
             };
           }

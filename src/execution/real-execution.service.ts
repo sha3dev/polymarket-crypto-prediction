@@ -366,7 +366,7 @@ export class RealExecutionService {
     const hasSufficientHistory = tradeCount >= config.MIN_MARKET_TRADES_FOR_SCORING;
     const hasWarmupComplete =
       predictionCount >= config.MIN_MARKET_PREDICTIONS_BEFORE_ENTRY && windowedResearchPredictions.length >= config.MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP;
-    const hasComboReadiness = latestPrediction?.comboGate.hasComboGatePassed ?? false;
+    const hasComboReadiness = latestPrediction?.selectedCombo.isExecutionEligible ?? false;
     let status: MarketPerformanceSummary["status"] = "warming_up";
     if (hasWarmupComplete) {
       status = "research_only";
@@ -400,7 +400,7 @@ export class RealExecutionService {
     };
   }
 
-  private buildFallbackDecision(asset: AssetSymbol, window: MarketWindow, gateFailures: string[]): ExecutionDecision {
+  private buildFallbackDecision(asset: AssetSymbol, window: MarketWindow, blockingReasons: string[]): ExecutionDecision {
     return {
       marketKey: this.buildMarketKey(asset, window),
       asset,
@@ -429,24 +429,23 @@ export class RealExecutionService {
       breadthStrength: null,
       hasStrongBreadth: false,
       hasBreadthAlignment: true,
-      hasComboGatePassed: false,
       selectedComboKey: null,
       selectedComboSize: null,
       selectedComboSource: null,
-      winningSetupType: null,
-      winningEngineIds: [],
-      winningEngineComboKey: null,
-      winningEngineComboScore: null,
+      selectedComboDirection: null,
+      selectedComboScore: null,
+      selectedComboConfidence: null,
+      selectedComboStrategyIds: [],
       regimeId: null,
-      executionProfile: null,
-      gateFailures,
+      readinessScore: 0,
+      blockingReasons,
       generatedAt: this.latestObservedAt,
     };
   }
 
   private applyDecisionGateFailure(executionDecision: ExecutionDecision, gateFailure: string): void {
-    if (!executionDecision.gateFailures.includes(gateFailure)) {
-      executionDecision.gateFailures.push(gateFailure);
+    if (!executionDecision.blockingReasons.includes(gateFailure)) {
+      executionDecision.blockingReasons.push(gateFailure);
     }
     executionDecision.isEntryAllowed = false;
     executionDecision.positionSizeSuggestion = 0;
@@ -808,7 +807,7 @@ export class RealExecutionService {
               const shouldConsumeSignal = latestPrediction.timestamp > lastConsumedSignalTimestamp;
               if (shouldConsumeSignal) {
                 const hasOpenedPosition = await this.maybeOpenPosition(marketSlice, executionDecision, latestPrediction.timestamp, polymarketMarket);
-                if (!hasOpenedPosition && executionDecision.gateFailures.length === 0) {
+                if (!hasOpenedPosition && executionDecision.blockingReasons.length === 0) {
                   this.applyDecisionGateFailure(executionDecision, "live_order_post_failed");
                 }
               }
@@ -821,7 +820,7 @@ export class RealExecutionService {
             marketKey,
             latestPrediction.timestamp,
             executionDecision.isEntryAllowed,
-            executionDecision.gateFailures,
+            executionDecision.blockingReasons,
             executionDecision.selectedComboSource,
           );
         }

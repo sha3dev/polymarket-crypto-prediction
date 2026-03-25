@@ -221,6 +221,22 @@ export class PredictionEngineService {
     return shouldDropPendingTrigger;
   }
 
+  private resolveMarketExecutionScore(marketKey: MarketKey): number | null {
+    const strategySummaries = this.strategyMetricsService.getSummaries(marketKey);
+    const resolvedStrategies = strategySummaries.filter((strategySummary) => strategySummary.executionTotalResolved > 0);
+    const totalWeight = resolvedStrategies.reduce((aggregatedWeight, strategySummary) => aggregatedWeight + strategySummary.weight, 0);
+    const marketExecutionScore =
+      totalWeight === 0
+        ? null
+        : resolvedStrategies.reduce(
+            (aggregatedScore, strategySummary) => aggregatedScore + strategySummary.executionAveragePnlProxy * strategySummary.weight,
+            0,
+          ) /
+            totalWeight +
+          0.5;
+    return marketExecutionScore === null ? null : Math.max(0, Math.min(1, marketExecutionScore));
+  }
+
   private maybeCreatePrediction(marketTrigger: MarketTrigger, createdAt: number): void {
     const lastPredictionTimestamp = this.marketStateService.getLastPredictionTimestamp(marketTrigger.marketKey);
     const isCoolingDown = lastPredictionTimestamp !== null && createdAt - lastPredictionTimestamp < config.MARKET_COOLDOWN_MS;
@@ -235,8 +251,15 @@ export class PredictionEngineService {
           strategySummaries,
           evaluationResult.weightedScore,
           evaluationResult.finalConfidence,
+          predictionContext.crossAssetRegime,
+          predictionContext.current.quality.score,
+          this.resolveMarketExecutionScore(predictionContext.marketKey),
         );
-        const winningDirection = evaluationResult.finalDirection;
+        const selectedCombo = comboApplicationResult.selectedCombo;
+        if (selectedCombo === null) {
+          return;
+        }
+        const winningDirection = selectedCombo.direction;
         const positionSide = this.resolvePositionSide(winningDirection);
         const baselineSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
         const entryReferencePrice = this.resolveEntryReferencePrice(baselineSlice, positionSide);
@@ -245,18 +268,13 @@ export class PredictionEngineService {
         const predictionRecord = this.buildPredictionRecord(
           marketTrigger.marketKey,
           winningDirection,
-          evaluationResult.finalConfidence,
-          evaluationResult.weightedScore,
+          selectedCombo.comboConfidence,
+          selectedCombo.direction === "UP" ? selectedCombo.comboScore : selectedCombo.comboScore * -1,
           evaluationResult.baseWeightedScore,
           evaluationResult.baseConfidence,
           marketTrigger,
           evaluationResult.strategyBreakdown,
-          evaluationResult.engineBreakdown,
-          evaluationResult.winningSetupType,
-          evaluationResult.winningEngineIds,
-          evaluationResult.winningEngineComboKey,
-          evaluationResult.winningEngineComboScore,
-          evaluationResult.combinationReason,
+          selectedCombo,
           comboApplicationResult.comboBreakdown,
           comboApplicationResult.comboGate,
           predictionContext.crossAssetRegime,
@@ -284,12 +302,7 @@ export class PredictionEngineService {
     baseConfidence: number,
     marketTrigger: MarketTrigger,
     strategyBreakdown: PredictionRecord["strategyBreakdown"],
-    engineBreakdown: PredictionRecord["engineBreakdown"],
-    winningSetupType: PredictionRecord["winningSetupType"],
-    winningEngineIds: PredictionRecord["winningEngineIds"],
-    winningEngineComboKey: PredictionRecord["winningEngineComboKey"],
-    winningEngineComboScore: PredictionRecord["winningEngineComboScore"],
-    combinationReason: PredictionRecord["combinationReason"],
+    selectedCombo: PredictionRecord["selectedCombo"],
     comboBreakdown: PredictionRecord["comboBreakdown"],
     comboGate: PredictionRecord["comboGate"],
     crossAssetRegime: PredictionRecord["crossAssetRegime"],
@@ -323,19 +336,14 @@ export class PredictionEngineService {
       baselineUpPrice,
       baselineUpMidpoint,
       strategyBreakdown,
-      engineBreakdown,
-      winningSetupType,
-      winningEngineIds,
-      winningEngineComboKey,
-      winningEngineComboScore,
-      combinationReason,
+      selectedCombo,
       comboBreakdown,
       comboGate,
       crossAssetRegime,
       isExecutionEligible: false,
-      executionGateFailures: [],
+      executionBlockingReasons: [],
       wasExecuted: false,
-      executionComboSource: comboGate.selectedComboSource,
+      executionComboSource: selectedCombo.selectionSource,
       isResolved: false,
       outcome: {
         status: "pending",
@@ -392,17 +400,12 @@ export class PredictionEngineService {
       comboGate: predictionRecord.comboGate,
       crossAssetRegime: predictionRecord.crossAssetRegime,
       isExecutionEligible: predictionRecord.isExecutionEligible,
-      executionGateFailures: predictionRecord.executionGateFailures,
+      executionBlockingReasons: predictionRecord.executionBlockingReasons,
       wasExecuted: predictionRecord.wasExecuted,
       executionComboSource: predictionRecord.executionComboSource,
       result: predictionRecord.outcome,
       strategyBreakdown: predictionRecord.strategyBreakdown,
-      engineBreakdown: predictionRecord.engineBreakdown,
-      winningSetupType: predictionRecord.winningSetupType,
-      winningEngineIds: predictionRecord.winningEngineIds,
-      winningEngineComboKey: predictionRecord.winningEngineComboKey,
-      winningEngineComboScore: predictionRecord.winningEngineComboScore,
-      combinationReason: predictionRecord.combinationReason,
+      selectedCombo: predictionRecord.selectedCombo,
       comboBreakdown: predictionRecord.comboBreakdown,
     };
   }
@@ -438,13 +441,13 @@ export class PredictionEngineService {
     marketKey: MarketKey,
     predictionTimestamp: number,
     isExecutionEligible: boolean,
-    gateFailures: string[],
+    blockingReasons: string[],
     executionComboSource: ComboSource | null,
   ): void {
     const predictionRecord = this.predictionStoreService.getPrediction(marketKey, predictionTimestamp);
     if (predictionRecord !== null) {
       predictionRecord.isExecutionEligible = isExecutionEligible;
-      predictionRecord.executionGateFailures = [...gateFailures];
+      predictionRecord.executionBlockingReasons = [...blockingReasons];
       predictionRecord.executionComboSource = executionComboSource;
     }
   }

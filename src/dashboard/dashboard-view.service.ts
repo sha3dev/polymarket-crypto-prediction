@@ -133,6 +133,11 @@ export class DashboardViewService {
         letter-spacing: 0.06em;
         text-transform: uppercase;
       }
+      .panel-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
       .label-with-hint {
         display: inline-flex;
         align-items: center;
@@ -141,6 +146,23 @@ export class DashboardViewService {
         color: inherit;
         border-bottom: 1px dashed rgba(107, 114, 128, 0.65);
         cursor: pointer;
+      }
+      .panel-info-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border: 1px solid rgba(13, 27, 42, 0.18);
+        border-radius: 999px;
+        background: rgba(13, 27, 42, 0.04);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .panel-info-button:hover {
+        background: rgba(13, 27, 42, 0.08);
       }
       .panel-intro {
         margin: -2px 0 12px;
@@ -238,6 +260,46 @@ export class DashboardViewService {
         height: 100%;
         background: linear-gradient(90deg, var(--accent), var(--accent-2));
       }
+      .global-regime-stack {
+        display: grid;
+        gap: 12px;
+      }
+      .global-regime-card {
+        padding: 14px;
+        border: 1px solid rgba(13, 27, 42, 0.08);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.94), rgba(13,27,42,0.03));
+      }
+      .global-regime-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      .global-regime-kpis {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .global-regime-kpi {
+        min-width: 0;
+      }
+      .global-regime-kpi strong {
+        display: block;
+        font-size: 18px;
+      }
+      .global-regime-token-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .global-regime-chart {
+        position: relative;
+        height: 90px;
+      }
       .engine-matrix {
         overflow: auto;
       }
@@ -286,24 +348,63 @@ export class DashboardViewService {
       }
       .proximity-list {
         display: grid;
-        gap: 12px;
+        gap: 10px;
       }
       .proximity-row {
         display: grid;
-        grid-template-columns: 78px minmax(0, 1fr) 84px;
+        grid-template-columns: 84px minmax(0, 1fr) 72px;
         gap: 12px;
         align-items: center;
       }
-      .proximity-chart-card {
-        min-height: 92px;
-        padding: 8px 10px;
-        border: 1px solid rgba(13, 27, 42, 0.1);
+      .proximity-main {
+        padding: 12px 14px;
+        border: 1px solid rgba(13, 27, 42, 0.08);
         border-radius: 16px;
-        background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(13,27,42,0.03));
+        background: linear-gradient(180deg, rgba(255,255,255,0.94), rgba(13,27,42,0.03));
       }
-      .proximity-chart-wrap {
+      .proximity-meter {
         position: relative;
-        height: 74px;
+        height: 12px;
+        border-radius: 999px;
+        background: rgba(13, 27, 42, 0.08);
+        overflow: hidden;
+      }
+      .proximity-meter-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #1fa2ff 0%, #ff7a18 55%, #0f9d58 100%);
+      }
+      .proximity-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .proximity-factors {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .proximity-factor {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(13, 27, 42, 0.1);
+        background: rgba(13, 27, 42, 0.04);
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .proximity-sparkline {
+        position: relative;
+        width: 88px;
+        height: 24px;
       }
       .proximity-score {
         text-align: right;
@@ -312,14 +413,7 @@ export class DashboardViewService {
         display: block;
         font-size: 18px;
       }
-      .proximity-trend-card {
-        position: relative;
-        margin-top: 4px;
-        width: 66px;
-        height: 22px;
-      }
-      .proximity-trend-card canvas,
-      .proximity-chart-wrap canvas {
+      .proximity-sparkline canvas {
         width: 100% !important;
         height: 100% !important;
       }
@@ -358,6 +452,8 @@ export class DashboardViewService {
         .hero-head { grid-template-columns: 1fr; }
         .dashboard-layout { grid-template-columns: 1fr; }
         .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .global-regime-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .global-regime-token-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .panel-tall, .panel-medium, .panel-compact { min-height: 0; }
         .panel-scroll { max-height: none; }
       }
@@ -388,69 +484,59 @@ export class DashboardViewService {
       <section class="dashboard-layout">
         <div class="stack">
           <article class="panel panel-compact">
-            <h2><span class="hint-label" data-full-label="Global Regime" data-description="Dominant cross-asset context across the monitored markets." aria-label="Global Regime. Dominant cross-asset context across the monitored markets.">Global Regime</span></h2>
-            <p class="tiny panel-intro">This panel explains the current market-wide context: whether breadth is directional, which markets are leading, which ones are lagging, and whether continuation or reversal setups should dominate.</p>
+            <h2><span class="panel-title"><span>Global Regime</span><button type="button" class="panel-info-button" data-full-label="Global Regime" data-description="Dominant cross-asset context across the monitored markets. It summarizes the broad market regime for 5m and 15m windows, including breadth, participation, token momentum on BTC/ETH, acceleration, and reversal pressure." aria-label="Global Regime. Dominant cross-asset context across the monitored markets. It summarizes the broad market regime for 5m and 15m windows, including breadth, participation, token momentum on BTC/ETH, acceleration, and reversal pressure.">i</button></span></h2>
+            <p class="tiny panel-intro">This panel explains the current market-wide context: what BTC and ETH are doing, whether they align, whether followers are allowed to move with them, and how much reversal pressure is building.</p>
             <div id="global-regime" class="loading">Loading global regime…</div>
           </article>
           <article class="panel panel-compact">
-            <h2><span class="hint-label" data-full-label="Markets" data-description="Current state for all eight monitored markets, including token midpoints, cooldown, and data quality." aria-label="Markets. Current state for all eight monitored markets, including token midpoints, cooldown, and data quality.">Markets</span></h2>
-            <p class="tiny panel-intro">Snapshot of the monitored markets right now. It now highlights the active regime and the dominant setup per market, so you can see which markets look structurally interesting before looking at execution.</p>
+            <h2><span class="panel-title"><span>Markets</span><button type="button" class="panel-info-button" data-full-label="Markets" data-description="Current state for all eight monitored markets. This panel shows token midpoints, cooldown, local market score, current regime, best combo, and data quality so you can see which markets even deserve attention." aria-label="Markets. Current state for all eight monitored markets. This panel shows token midpoints, cooldown, local market score, current regime, best combo, and data quality so you can see which markets even deserve attention.">i</button></span></h2>
+            <p class="tiny panel-intro">Snapshot of the monitored markets right now. It highlights the active regime and the current best combo per market, so you can see which markets look structurally interesting before looking at execution.</p>
             <div id="markets" class="loading panel-scroll">Loading market state…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="hint-label" data-full-label="Execution Now" data-description="Current executable entry decision per market: side, TP, SL, and maker versus taker choice." aria-label="Execution Now. Current executable entry decision per market: side, TP, SL, and maker versus taker choice.">Execution Now</span></h2>
-            <p class="tiny panel-intro">This is the actual trading gate. It shows the winning setup, the winning engine combo, and which setup-specific rule is blocking entry when no trade should be taken.</p>
+            <h2><span class="panel-title"><span>Execution Now</span><button type="button" class="panel-info-button" data-full-label="Execution Now" data-description="Current entry decision per market. This is the real execution gate: it shows whether the system would buy UP, buy DOWN, or do nothing, plus the selected combo, scores, regime, readiness, and blocking reason." aria-label="Execution Now. Current entry decision per market. This is the real execution gate: it shows whether the system would buy UP, buy DOWN, or do nothing, plus the selected combo, scores, regime, readiness, and blocking reason.">i</button></span></h2>
+            <p class="tiny panel-intro">This is the actual trading gate. It shows the selected combo, how ready it is, and which structural rule is blocking entry when no trade should be taken.</p>
             <div id="execution" class="loading panel-scroll">Loading execution decisions…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="hint-label" data-full-label="Trade Proximity" data-description="How close each market is to becoming executable, shown as a compact equalizer of key execution ingredients." aria-label="Trade Proximity. How close each market is to becoming executable, shown as a compact equalizer of key execution ingredients.">Trade Proximity</span></h2>
-            <p class="tiny panel-intro">Equalizer view of how near each market is to a real trade. Each row compresses setup, combo, score, quality, and regime support so you can see what is almost ready and what is still structurally blocked.</p>
+            <h2><span class="panel-title"><span>Trade Candidates</span><button type="button" class="panel-info-button" data-full-label="Trade Candidates" data-description="How close each market is to becoming executable. It compresses the current combo strength, readiness, execution score, quality, and regime support into one proximity meter, then shows a short trend so you can see if a market is moving toward or away from tradeability." aria-label="Trade Candidates. How close each market is to becoming executable. It compresses the current combo strength, readiness, execution score, quality, and regime support into one proximity meter, then shows a short trend so you can see if a market is moving toward or away from tradeability.">i</button></span></h2>
+            <p class="tiny panel-intro">Readiness view of how near each market is to a real trade. Each row compresses combo quality, score, quality, and regime support so you can see what is almost ready and what is still structurally blocked.</p>
             <div id="trade-proximity" class="loading panel-scroll">Loading trade proximity…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="hint-label" data-full-label="Winning Combination" data-description="Winning setup and engine combination for the latest ideas." aria-label="Winning Combination. Winning setup and engine combination for the latest ideas.">Winning Combination</span></h2>
-            <p class="tiny panel-intro">The prediction layer now works by selecting a setup and a combo of engines. This panel shows that winning narrative directly instead of only the old raw strategy-level combo details.</p>
-            <div id="winning-combinations" class="loading panel-scroll">Loading winning combinations…</div>
-          </article>
-          <article class="panel panel-medium">
-            <h2><span class="hint-label" data-full-label="Engine Grid" data-description="Matrix view of all markets versus all engines, colored by current state and signed score." aria-label="Engine Grid. Matrix view of all markets versus all engines, colored by current state and signed score.">Engine Grid</span></h2>
-            <p class="tiny panel-intro">Market-by-engine snapshot. Each cell compresses direction, state, and strength so you can see where engines are waking up, fading out, or lining up across several markets at once.</p>
-            <div id="engine-grid" class="loading panel-scroll">Loading engine grid…</div>
+            <h2><span class="panel-title"><span>Combo Board</span><button type="button" class="panel-info-button" data-full-label="Combo Board" data-description="Latest winning strategy combinations from the prediction layer. Each row shows which combo won, how strong it was, and the short explanation for why that combination beat the alternatives." aria-label="Combo Board. Latest winning strategy combinations from the prediction layer. Each row shows which combo won, how strong it was, and the short explanation for why that combination beat the alternatives.">i</button></span></h2>
+            <p class="tiny panel-intro">The prediction layer now works by selecting a combo of strategies. This panel shows that winning combo directly instead of an artificial narrative layer.</p>
+            <div id="winning-combinations" class="loading panel-scroll">Loading combo board…</div>
           </article>
           <article class="panel panel-tall">
-            <h2><span class="hint-label" data-full-label="Resolved Predictions" data-description="Most recent predictions that completed through a paper-trade TP or SL exit." aria-label="Resolved Predictions. Most recent predictions that completed through a paper-trade TP or SL exit.">Resolved Predictions</span></h2>
-            <p class="tiny panel-intro">Recent predictions that already finished their lifecycle. It now shows which setup and which engine combo produced each idea, so you can judge the mechanism, not just the final direction.</p>
+            <h2><span class="panel-title"><span>Resolved Predictions</span><button type="button" class="panel-info-button" data-full-label="Resolved Predictions" data-description="Recent predictions that already finished. Use this panel to judge whether the system's ideas were right or wrong once they were forced to resolve through TP or SL outcomes, including which strategy combo created the idea." aria-label="Resolved Predictions. Recent predictions that already finished. Use this panel to judge whether the system's ideas were right or wrong once they were forced to resolve through TP or SL outcomes, including which strategy combo created the idea.">i</button></span></h2>
+            <p class="tiny panel-intro">Recent predictions that already finished their lifecycle. It shows which strategy combo produced each idea, so you can judge the mechanism, not just the final direction.</p>
             <div id="predictions" class="loading panel-scroll">Loading resolved predictions…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="hint-label" data-full-label="Recent Trades" data-description="Most recent closed paper trades, including maker/taker styles and exit reasons." aria-label="Recent Trades. Most recent closed paper trades, including maker/taker styles and exit reasons.">Recent Trades</span></h2>
+            <h2><span class="panel-title"><span>Recent Trades</span><button type="button" class="panel-info-button" data-full-label="Recent Trades" data-description="Most recent closed trades from the active execution backend. This is the panel that tells you what the system actually executed, not just what it predicted." aria-label="Recent Trades. Most recent closed trades from the active execution backend. This is the panel that tells you what the system actually executed, not just what it predicted.">i</button></span></h2>
             <p class="tiny panel-intro">Closed paper trades only. It shows what the system really executed, how those trades ended, and whether execution quality is matching what the research layer suggests.</p>
             <div id="trades" class="loading panel-scroll">Loading recent trades…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="hint-label" data-full-label="Open Positions" data-description="Simulated open positions with their TP/SL levels and current marked value." aria-label="Open Positions. Simulated open positions with their TP/SL levels and current marked value.">Open Positions</span></h2>
+            <h2><span class="panel-title"><span>Open Positions</span><button type="button" class="panel-info-button" data-full-label="Open Positions" data-description="Positions that are currently alive. Use it to see what the bot is holding right now, at what price it entered, where TP and SL sit, and what unrealized PnL looks like." aria-label="Open Positions. Positions that are currently alive. Use it to see what the bot is holding right now, at what price it entered, where TP and SL sit, and what unrealized PnL looks like.">i</button></span></h2>
             <p class="tiny panel-intro">Current paper positions that are still alive. Use this panel to understand active exposure, where TP and SL sit, and what risk is still on the table right now.</p>
             <div id="positions" class="loading panel-scroll">Loading open positions…</div>
           </article>
         </div>
         <div class="stack">
-          <article class="panel panel-tall">
-            <h2><span class="hint-label" data-full-label="Engine Board" data-description="Active engines for the selected market, including state, score, confidence, and regime fit." aria-label="Engine Board. Active engines for the selected market, including state, score, confidence, and regime fit.">Engine Board</span></h2>
-            <p class="tiny panel-intro">This is the new center of the model. Strategies now act as sensors inside engines, and this board shows which engines are active, why they are trusted, and which ones are being silenced by the current regime.</p>
-            <div id="engine-board" class="loading panel-scroll">Loading engine board…</div>
-          </article>
           <article class="panel panel-medium">
-            <h2><span class="hint-label" data-full-label="Market PnL" data-description="Per-market paper trading PnL, hit rate, and drawdown so you can see which markets are actually worth trading." aria-label="Market PnL. Per-market paper trading PnL, hit rate, and drawdown so you can see which markets are actually worth trading.">Market PnL</span></h2>
+            <h2><span class="panel-title"><span>Market PnL</span><button type="button" class="panel-info-button" data-full-label="Market PnL" data-description="Per-market performance table. It separates markets that merely look interesting from markets that are actually generating useful trading outcomes." aria-label="Market PnL. Per-market performance table. It separates markets that merely look interesting from markets that are actually generating useful trading outcomes.">i</button></span></h2>
             <p class="tiny panel-intro">Performance summary by market. It helps separate markets that look interesting for research from markets that are actually proving they deserve execution capital.</p>
             <div id="market-pnl" class="loading panel-scroll">Loading market pnl…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="hint-label" data-full-label="Discovery Board" data-description="What the system is learning about engine combos and setups from recent resolved predictions." aria-label="Discovery Board. What the system is learning about engine combos and setups from recent resolved predictions.">Discovery Board</span></h2>
-            <p class="tiny panel-intro">Compact learning board for the new mechanism. It summarizes which engine combos and setup narratives are resolving well, which helps you see whether the engine discovery layer is learning anything useful.</p>
+            <h2><span class="panel-title"><span>Discovery Board</span><button type="button" class="panel-info-button" data-full-label="Discovery Board" data-description="Learning board for recent combo behavior. It summarizes which strategy combinations are resolving well or badly, so you can see what the system is actually discovering." aria-label="Discovery Board. Learning board for recent combo behavior. It summarizes which strategy combinations are resolving well or badly, so you can see what the system is actually discovering.">i</button></span></h2>
+            <p class="tiny panel-intro">Compact learning board for the combo engine. It summarizes which strategy combinations are resolving well, which helps you see whether the discovery layer is learning anything useful.</p>
             <div id="discovery" class="loading panel-scroll">Loading discovery board…</div>
           </article>
           <article class="panel panel-compact">
-            <h2><span class="hint-label" data-full-label="Health" data-description="Ingestion freshness and service runtime health indicators." aria-label="Health. Ingestion freshness and service runtime health indicators.">Health</span></h2>
+            <h2><span class="panel-title"><span>Health</span><button type="button" class="panel-info-button" data-full-label="Health" data-description="Operational status of the service. Check it first if the rest of the dashboard looks suspicious, stale, or inconsistent." aria-label="Health. Operational status of the service. Check it first if the rest of the dashboard looks suspicious, stale, or inconsistent.">i</button></span></h2>
             <p class="tiny panel-intro">Operational status of the feed and the service itself. If another panel looks suspicious, check here first to confirm the data is fresh and the runtime is behaving normally.</p>
             <div id="health" class="loading">Loading service health…</div>
           </article>
@@ -461,34 +547,26 @@ export class DashboardViewService {
     <script>
       const pollIntervalMs = ${config.DASHBOARD_POLL_INTERVAL_MS};
       const maxTradeProximityHistory = 18;
+      const maxGlobalRegimeHistory = 24;
       let activeInfoPopover = null;
       const tradeProximityHistory = new Map();
-      const tradeProximityBarCharts = new Map();
       const tradeProximityTrendCharts = new Map();
+      const globalRegimeHistory = new Map();
+      const globalRegimeCharts = new Map();
 
       const typedCodeCatalog = {
-        setup: {
-          broad_continuation: { code: 'BRC', label: 'Broad Continuation', description: 'Directional market-wide continuation supported by breadth plus local follow-through.' },
-          leader_laggard_catchup: { code: 'LLC', label: 'Leader-Laggard Catch-Up', description: 'A lagging asset is expected to follow the leaders in the dominant market-wide move.' },
-          local_breakout_confirmed: { code: 'LBC', label: 'Local Breakout Confirmed', description: 'Continuation is driven mainly by local momentum and local microstructure confirmation.' },
-          mispricing_repricing: { code: 'MPR', label: 'Mispricing Repricing', description: 'The edge comes from basis, barrier, or stale-price dislocation rather than pure trend continuation.' },
-          fade_failed_cross: { code: 'FFC', label: 'Fade Failed Cross', description: 'The 0.5 cross looks exhausted or invalidated, so fade logic dominates continuation logic.' },
-          research_probe: { code: 'RSP', label: 'Research Probe', description: 'Fallback research-only narrative used when no stronger setup dominates clearly enough.' },
-        },
         regime: {
           neutral: { code: 'NEU', label: 'Neutral', description: 'No coherent cross-asset directional structure is dominant.' },
-          broad_up_weak: { code: 'BUW', label: 'Broad Up Weak', description: 'The monitored assets lean up together, but the move is not yet strong enough to be treated as fully confirmed breadth.' },
-          broad_up_strong: { code: 'BUS', label: 'Broad Up Strong', description: 'A strong market-wide upward move is in force across the monitored assets.' },
-          broad_down_weak: { code: 'BDW', label: 'Broad Down Weak', description: 'The monitored assets lean down together, but the move is still weak.' },
-          broad_down_strong: { code: 'BDS', label: 'Broad Down Strong', description: 'A strong market-wide downward move is in force across the monitored assets.' },
-          leader_laggard_up: { code: 'LLU', label: 'Leader/Laggard Up', description: 'Some assets are clearly leading an upward move while others are lagging behind.' },
-          leader_laggard_down: { code: 'LLD', label: 'Leader/Laggard Down', description: 'Some assets are clearly leading a downward move while others are lagging behind.' },
+          btc_up: { code: 'BTU', label: 'BTC Up', description: 'BTC is the active anchor and it is pushing upward.' },
+          btc_down: { code: 'BTD', label: 'BTC Down', description: 'BTC is the active anchor and it is pushing downward.' },
+          btc_eth_up: { code: 'BEU', label: 'BTC + ETH Up', description: 'BTC and ETH are aligned upward, so followers may only be traded upward.' },
+          btc_eth_down: { code: 'BED', label: 'BTC + ETH Down', description: 'BTC and ETH are aligned downward, so followers may only be traded downward.' },
           fragmented: { code: 'FRG', label: 'Fragmented', description: 'The monitored assets are not telling one coherent directional story.' },
           reversal_risk: { code: 'REV', label: 'Reversal Risk', description: 'Continuation is becoming stretched enough that reversal or fade logic deserves more trust.' },
         },
         engine: {
           breadth_engine: { code: 'BRD', label: 'Breadth Engine', description: 'Cross-asset direction and synchrony engine.' },
-          propagation_engine: { code: 'PRP', label: 'Propagation Engine', description: 'Leader-laggard and cross-asset catch-up engine.' },
+          propagation_engine: { code: 'PRP', label: 'Propagation Engine', description: 'Cross-asset follow-through engine used as one sensor family inside the wider combo search.' },
           local_momentum_engine: { code: 'MOM', label: 'Local Momentum Engine', description: 'Local continuation and breakout-confirmation engine.' },
           local_microstructure_engine: { code: 'MIC', label: 'Local Microstructure Engine', description: 'Order-book pressure and local token-structure engine.' },
           mispricing_engine: { code: 'MIS', label: 'Mispricing Engine', description: 'Basis, barrier mismatch, and repricing-dislocation engine.' },
@@ -499,7 +577,7 @@ export class DashboardViewService {
           inactive: { code: 'INA', label: 'Inactive', description: 'The engine is currently not contributing meaningful directional information.' },
           weak: { code: 'WEK', label: 'Weak', description: 'The engine is active but not strong enough to dominate the narrative.' },
           active: { code: 'ACT', label: 'Active', description: 'The engine is materially contributing to the market narrative.' },
-          dominant: { code: 'DOM', label: 'Dominant', description: 'The engine is one of the main drivers of the selected setup.' },
+          dominant: { code: 'DOM', label: 'Dominant', description: 'The engine is one of the main drivers of the current combo-friendly market read.' },
           avoid: { code: 'AVD', label: 'Avoid', description: 'The current regime says this engine should not be trusted right now.' },
         },
         executionStyle: {
@@ -518,19 +596,14 @@ export class DashboardViewService {
           REF: { code: 'REF', label: 'Reference Missing', description: 'The execution layer could not determine a valid reference token price.' },
           LIV: { code: 'LIV', label: 'Market Not Live', description: 'The market is not currently considered live enough for execution.' },
           QLT: { code: 'QLT', label: 'Quality Too Low', description: 'The market quality score is below the execution threshold.' },
-          CNF: { code: 'CNF', label: 'Confidence Too Low', description: 'The selected setup is not confident enough for execution.' },
-          CMB: { code: 'CMB', label: 'Combo Gate Failed', description: 'The legacy strategy combo gate is still blocking execution.' },
+          CNF: { code: 'CNF', label: 'Confidence Too Low', description: 'The selected combo is not confident enough for execution.' },
+          CMB: { code: 'CMB', label: 'Combo Weak', description: 'The selected combo is not strong enough yet.' },
           XRG: { code: 'XRG', label: 'Regime Conflict', description: 'The local prediction fights the active cross-asset regime.' },
           EXE: { code: 'EXE', label: 'Execution Score Low', description: 'The execution score is below the minimum threshold.' },
           HIS: { code: 'HIS', label: 'History Thin', description: 'There is not enough execution history yet.' },
           BST: { code: 'BST', label: 'Bootstrap Low', description: 'The bootstrap-discounted execution score is still too low.' },
-          SDR: { code: 'SDR', label: 'Setup Needs Regime', description: 'This setup requires a directional regime and does not have one.' },
-          SRV: { code: 'SRV', label: 'Reversal Risk', description: 'This setup is blocked because reversal risk is too high.' },
-          SLG: { code: 'SLG', label: 'Needs Laggard', description: 'The setup needs a leader-laggard structure and it is not present.' },
-          SLD: { code: 'SLD', label: 'Needs Leader', description: 'The setup needs a clear leader market and none is available.' },
-          SMO: { code: 'SMO', label: 'Needs Momentum', description: 'The setup needs stronger local momentum confirmation.' },
-          SBS: { code: 'SBS', label: 'Needs Basis', description: 'The setup needs basis or repricing divergence that is not present.' },
-          SFD: { code: 'SFD', label: 'Fade Conflict', description: 'Fade logic is blocked because strong breadth still dominates.' },
+          FIT: { code: 'FIT', label: 'Anchor Fit Low', description: 'BTC and ETH do not support this combo strongly enough.' },
+          RDN: { code: 'RDN', label: 'Readiness Low', description: 'The combined readiness score is still too low for execution.' },
           BND: { code: 'BND', label: 'Entry Band', description: 'The reference token price is too far from the preferred entry band.' },
           SPR: { code: 'SPR', label: 'Spread Wide', description: 'The spread is too wide for execution.' },
           MSC: { code: 'MSC', label: 'Market Score', description: 'The market score is too low for execution.' },
@@ -786,25 +859,25 @@ export class DashboardViewService {
         if (reasonCode === 'bootstrap_discount_too_low') {
           humanReason = 'bootstrap discount too low';
         }
-        if (reasonCode === 'setup_requires_directional_regime') {
-          humanReason = 'setup needs directional regime';
+        if (reasonCode === 'combo_requires_directional_regime') {
+          humanReason = 'combo needs directional regime';
         }
-        if (reasonCode === 'setup_reversal_risk') {
-          humanReason = 'setup blocked by reversal risk';
+        if (reasonCode === 'combo_reversal_risk') {
+          humanReason = 'combo blocked by reversal risk';
         }
-        if (reasonCode === 'setup_needs_laggard') {
-          humanReason = 'setup needs laggard structure';
+        if (reasonCode === 'combo_needs_follower') {
+          humanReason = 'combo needs follower structure';
         }
-        if (reasonCode === 'setup_needs_leader') {
-          humanReason = 'setup needs clear leader';
+        if (reasonCode === 'combo_needs_anchor') {
+          humanReason = 'combo needs clear anchor';
         }
-        if (reasonCode === 'setup_needs_momentum') {
-          humanReason = 'setup needs momentum';
+        if (reasonCode === 'combo_needs_momentum') {
+          humanReason = 'combo needs momentum';
         }
-        if (reasonCode === 'setup_needs_basis') {
-          humanReason = 'setup needs basis divergence';
+        if (reasonCode === 'combo_needs_basis') {
+          humanReason = 'combo needs basis divergence';
         }
-        if (reasonCode === 'setup_fade_conflicts_with_breadth') {
+        if (reasonCode === 'combo_fade_conflicts_with_breadth') {
           humanReason = 'fade conflicts with strong breadth';
         }
         if (reasonCode === 'outside_entry_band') {
@@ -850,8 +923,8 @@ export class DashboardViewService {
             whyNot = humanizeReason(decision.executionReason);
           }
         } else {
-          if (decision.gateFailures.length > 0) {
-            whyNot = decision.gateFailures.map((reasonCode) => humanizeReason(reasonCode)).join(', ');
+          if (decision.blockingReasons.length > 0) {
+            whyNot = decision.blockingReasons.map((reasonCode) => humanizeReason(reasonCode)).join(', ');
           }
         }
         return whyNot;
@@ -864,9 +937,9 @@ export class DashboardViewService {
             reasonCodes = renderReasonCodeGroup([renderReasonCode(humanizeReason(decision.executionReason))]);
           }
         } else {
-          if (decision.gateFailures.length > 0) {
+          if (decision.blockingReasons.length > 0) {
             reasonCodes = renderReasonCodeGroup(
-              decision.gateFailures.map((reasonCode) => renderReasonCode(humanizeReason(reasonCode))),
+              decision.blockingReasons.map((reasonCode) => renderReasonCode(humanizeReason(reasonCode))),
             );
           }
         }
@@ -971,22 +1044,22 @@ export class DashboardViewService {
         if (reasonCode === 'bootstrap discount too low') {
           reasonShortCode = 'BST';
         }
-        if (reasonCode === 'setup needs directional regime') {
+        if (reasonCode === 'combo needs directional regime') {
           reasonShortCode = 'SDR';
         }
-        if (reasonCode === 'setup blocked by reversal risk') {
+        if (reasonCode === 'combo blocked by reversal risk') {
           reasonShortCode = 'SRV';
         }
-        if (reasonCode === 'setup needs laggard structure') {
-          reasonShortCode = 'SLG';
+        if (reasonCode === 'combo needs follower structure') {
+          reasonShortCode = 'FLW';
         }
-        if (reasonCode === 'setup needs clear leader') {
-          reasonShortCode = 'SLD';
+        if (reasonCode === 'combo needs clear anchor') {
+          reasonShortCode = 'ANC';
         }
-        if (reasonCode === 'setup needs momentum') {
+        if (reasonCode === 'combo needs momentum') {
           reasonShortCode = 'SMO';
         }
-        if (reasonCode === 'setup needs basis divergence') {
+        if (reasonCode === 'combo needs basis divergence') {
           reasonShortCode = 'SBS';
         }
         if (reasonCode === 'fade conflicts with strong breadth') {
@@ -1101,8 +1174,10 @@ export class DashboardViewService {
             formatNumber(crossAssetRegime.breadthStrength, 2) +
             ', participation ' +
             formatNumber(crossAssetRegime.breadthParticipation, 2) +
-            ', leader ' +
-            (crossAssetRegime.leaderMarketKey ?? 'unknown');
+            ', btc ' +
+            crossAssetRegime.btcDirection.toLowerCase() +
+            ', eth ' +
+            crossAssetRegime.ethDirection.toLowerCase();
         }
         return crossAssetHover;
       }
@@ -1110,23 +1185,17 @@ export class DashboardViewService {
       function renderRegimeName(crossAssetRegime) {
         let regimeName = 'Neutral';
         if (crossAssetRegime) {
-          if (crossAssetRegime.regimeId === 'broad_up_weak') {
-            regimeName = 'Broad Up';
+          if (crossAssetRegime.regimeId === 'btc_up') {
+            regimeName = 'BTC Up';
           }
-          if (crossAssetRegime.regimeId === 'broad_up_strong') {
-            regimeName = 'Broad Up Strong';
+          if (crossAssetRegime.regimeId === 'btc_eth_up') {
+            regimeName = 'BTC + ETH Up';
           }
-          if (crossAssetRegime.regimeId === 'broad_down_weak') {
-            regimeName = 'Broad Down';
+          if (crossAssetRegime.regimeId === 'btc_down') {
+            regimeName = 'BTC Down';
           }
-          if (crossAssetRegime.regimeId === 'broad_down_strong') {
-            regimeName = 'Broad Down Strong';
-          }
-          if (crossAssetRegime.regimeId === 'leader_laggard_up') {
-            regimeName = 'Leader/Laggard Up';
-          }
-          if (crossAssetRegime.regimeId === 'leader_laggard_down') {
-            regimeName = 'Leader/Laggard Down';
+          if (crossAssetRegime.regimeId === 'btc_eth_down') {
+            regimeName = 'BTC + ETH Down';
           }
           if (crossAssetRegime.regimeId === 'fragmented') {
             regimeName = 'Fragmented';
@@ -1187,30 +1256,127 @@ export class DashboardViewService {
         replaceStaticContent("kpis", entries.map(([label, hint, value]) => '<div class="kpi"><div class="tiny">' + renderHintLabel(label, hint) + '</div><strong>' + value + '</strong></div>').join(""));
       }
 
+      function pushGlobalRegimeHistory(windowLabel, globalRegime) {
+        const historyPoint = globalRegime === null
+          ? {
+              breadthStrength: 0,
+              accelerationScore: 0,
+              reversalRiskScore: 0,
+            }
+          : {
+              breadthStrength: globalRegime.breadthStrength,
+              accelerationScore: globalRegime.accelerationScore,
+              reversalRiskScore: globalRegime.reversalRiskScore,
+            };
+        const previousHistory = globalRegimeHistory.get(windowLabel) ?? [];
+        const nextHistory = [...previousHistory, historyPoint].slice(-maxGlobalRegimeHistory);
+        globalRegimeHistory.set(windowLabel, nextHistory);
+        return nextHistory;
+      }
+
+      function destroyGlobalRegimeCharts() {
+        for (const chart of globalRegimeCharts.values()) {
+          chart.destroy();
+        }
+        globalRegimeCharts.clear();
+      }
+
+      function hydrateGlobalRegimeCharts(chartConfigs) {
+        if (typeof Chart === 'undefined') {
+          return;
+        }
+        destroyGlobalRegimeCharts();
+        for (const chartConfig of chartConfigs) {
+          const chartCanvas = document.getElementById(chartConfig.canvasId);
+          if (!(chartCanvas instanceof HTMLCanvasElement)) {
+            continue;
+          }
+          const regimeChart = new Chart(chartCanvas, {
+            type: 'line',
+            data: {
+              labels: chartConfig.history.map((_, index) => index + 1),
+              datasets: [
+                {
+                  data: chartConfig.history.map((entry) => entry.breadthStrength),
+                  borderColor: 'rgba(31, 162, 255, 0.95)',
+                  pointRadius: 0,
+                  pointHoverRadius: 0,
+                  tension: 0.34,
+                  borderWidth: 2,
+                },
+                {
+                  data: chartConfig.history.map((entry) => entry.accelerationScore),
+                  borderColor: 'rgba(255, 122, 24, 0.95)',
+                  pointRadius: 0,
+                  pointHoverRadius: 0,
+                  tension: 0.34,
+                  borderWidth: 2,
+                },
+                {
+                  data: chartConfig.history.map((entry) => entry.reversalRiskScore),
+                  borderColor: 'rgba(192, 57, 43, 0.88)',
+                  pointRadius: 0,
+                  pointHoverRadius: 0,
+                  tension: 0.34,
+                  borderWidth: 2,
+                },
+              ],
+            },
+            options: {
+              animation: false,
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false },
+              },
+              scales: {
+                x: { display: false },
+                y: {
+                  min: 0,
+                  max: 1,
+                  display: false,
+                },
+              },
+            },
+          });
+          globalRegimeCharts.set(chartConfig.canvasId, regimeChart);
+        }
+      }
+
       function renderGlobalRegime(summary) {
         const globalRegimes = summary.globalRegimes ?? { '5m': summary.globalRegime, '15m': null };
         const windows = ['5m', '15m'];
+        const chartConfigs = [];
         const cardsMarkup = windows.map((windowLabel) => {
           const globalRegime = globalRegimes[windowLabel];
-          const cardMarkup = globalRegime === null
-            ? '<div class="panel" style="padding:12px;background:rgba(13,27,42,0.03)"><strong>' + windowLabel + '</strong><div class="tiny" style="margin-top:6px">No regime detected yet.</div></div>'
-            : '<div class="panel" style="padding:12px;background:rgba(13,27,42,0.03)">' +
-                '<div class="tiny" style="margin-bottom:8px"><strong>' + windowLabel + '</strong></div>' +
-                '<div class="health-grid">' +
-                  '<div class="health-item"><strong>' + renderInfoCode('regime', globalRegime.regimeId, renderRegimeName(globalRegime)) + '</strong><div class="tiny">' + renderHintLabel('Class', 'Regime class derived from breadth, leader/laggard structure, fragmentation, and reversal risk.') + '</div></div>' +
-                  '<div class="health-item"><strong>' + renderCrossAssetLabel(globalRegime) + '</strong><div class="tiny">' + renderHintLabel('Breadth', 'Compact breadth label with weak or strong strength marker.') + '</div></div>' +
-                  '<div class="health-item"><strong>' + formatNumber(globalRegime.breadthParticipation, 2) + '</strong><div class="tiny">' + renderHintLabel('Participation', 'Share of qualifying markets moving in the dominant direction.') + '</div></div>' +
-                  '<div class="health-item"><strong>' + formatNumber(globalRegime.synchronyScore, 2) + '</strong><div class="tiny">' + renderHintLabel('Synchrony', 'How tightly the monitored assets are moving together right now.') + '</div></div>' +
-                  '<div class="health-item"><strong>' + escapeHtml(globalRegime.leaderGroup.join(', ') || '—') + '</strong><div class="tiny">' + renderHintLabel('Leaders', 'Markets currently leading the global move.') + '</div></div>' +
-                  '<div class="health-item"><strong>' + (globalRegime.laggardGroup.join(', ') || '—') + '</strong><div class="tiny">' + renderHintLabel('Laggards', 'Markets lagging behind the dominant move and therefore candidates for propagation setups.') + '</div></div>' +
-                  '<div class="health-item"><strong>' + formatNumber(globalRegime.accelerationScore, 2) + '</strong><div class="tiny">' + renderHintLabel('Accel', 'Speed at which the cross-asset move is broadening or strengthening.') + '</div></div>' +
-                  '<div class="health-item"><strong>' + formatNumber(globalRegime.reversalRiskScore, 2) + '</strong><div class="tiny">' + renderHintLabel('Rev risk', 'Estimated risk that continuation setups are already too stretched.') + '</div></div>' +
-                '</div>' +
-              '</div>';
+          const history = pushGlobalRegimeHistory(windowLabel, globalRegime);
+          const chartCanvasId = 'global-regime-chart-' + windowLabel;
+          chartConfigs.push({ canvasId: chartCanvasId, history });
+          const cardMarkup = '<div class="global-regime-card">' +
+              '<div class="global-regime-card-head">' +
+                '<div><strong>' + windowLabel + '</strong></div>' +
+                '<div>' + (globalRegime === null ? renderInfoCode('regime', 'neutral', 'NEU') : renderInfoCode('regime', globalRegime.regimeId, renderRegimeName(globalRegime))) + '</div>' +
+              '</div>' +
+              '<div class="global-regime-kpis">' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.breadthStrength ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Breadth', 'Raw breadth strength. This still moves even when the regime id remains neutral.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.breadthParticipation ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Part', 'Share of qualifying markets moving in the same direction.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.accelerationScore ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Accel', 'How quickly the breadth picture is changing.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.reversalRiskScore ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('Rev', 'Reversal pressure against anchor-led continuation.') + '</div></div>' +
+              '</div>' +
+              '<div class="global-regime-token-grid">' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.btcUpTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('BTC U', 'Momentum of the BTC UP token.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.btcDownTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('BTC D', 'Momentum of the BTC DOWN token.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.ethUpTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('ETH U', 'Momentum of the ETH UP token.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.ethDownTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('ETH D', 'Momentum of the ETH DOWN token.') + '</div></div>' +
+              '</div>' +
+              '<div class="global-regime-chart"><canvas id="' + chartCanvasId + '"></canvas></div>' +
+            '</div>';
           return cardMarkup;
-        }).join('<div style="height:8px"></div>');
-        const markup = cardsMarkup;
+        }).join('');
+        const markup = '<div class="global-regime-stack">' + cardsMarkup + '</div>';
         replaceStaticContent("global-regime", markup);
+        hydrateGlobalRegimeCharts(chartConfigs);
       }
 
       function renderMarkets(summary) {
@@ -1233,7 +1399,7 @@ export class DashboardViewService {
             latestPrediction === undefined
               ? 'no execution decision yet'
               : renderCrossAssetHover(latestPrediction.crossAssetRegime);
-          const setupLabel = latestPrediction ? renderInfoCode('setup', latestPrediction.winningSetupType) : '—';
+          const comboLabel = latestPrediction ? renderCodeListGroup('strategy', latestPrediction.selectedCombo.memberStrategyIds, 3) : '—';
           return '<tr>' +
             '<td><strong>' + market.asset.toUpperCase() + '</strong> <span class="tiny">' + market.window + '</span></td>' +
             '<td>' + formatNumber(market.latestUpMidpoint) + '</td>' +
@@ -1241,11 +1407,11 @@ export class DashboardViewService {
             '<td>' + formatNumber(market.cooldownRemainingMs, 0) + '</td>' +
             '<td><span title="' + marketStatus + '">' + marketScore + '</span></td>' +
             '<td><span title="' + regimeHover + '">' + regimeLabel + '</span></td>' +
-            '<td>' + setupLabel + '</td>' +
+            '<td>' + comboLabel + '</td>' +
             '<td><span class="quality-cell" title="' + qualityDetails + '"><span>' + formatNumber(market.quality.score, 2) + '</span><div class="quality-bar"><span style="width:' + qualityWidth + '%"></span></div></span></td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("markets", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP', 'Current midpoint for the UP token. This panel shows the midpoint directly, without the longer mid suffix.') + '</th><th>' + renderHintLabel('DOWN', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent trading score for this market only. It reflects local hit rate, PnL, drawdown, and sample size over the rolling market-score window.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset regime for this market or its latest resolved idea.') + '</th><th>' + renderHintLabel('Setup', 'Dominant setup attached to the latest resolved prediction for this market.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("markets", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP', 'Current midpoint for the UP token. This panel shows the midpoint directly, without the longer mid suffix.') + '</th><th>' + renderHintLabel('DOWN', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent trading score for this market only. It reflects local hit rate, PnL, drawdown, and sample size over the rolling market-score window.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset regime for this market or its latest resolved idea.') + '</th><th>' + renderHintLabel('Combo', 'Current best strategy combo for this market.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderPredictions(summary) {
@@ -1258,92 +1424,20 @@ export class DashboardViewService {
             '<td>' + renderDirectionPill(prediction.direction) + '</td>' +
             '<td>' + formatNumber(prediction.confidence) + '</td>' +
             '<td><span title="' + triggerLabel + '">' + renderTriggerCode(prediction.trigger.triggerType) + '</span></td>' +
-            '<td>' + renderInfoCode('setup', prediction.winningSetupType) + '</td>' +
-            '<td><span title="' + prediction.winningEngineIds.join(', ') + '">' + renderEngineComboCodes(prediction.winningEngineIds) + '</span></td>' +
+            '<td>' + renderCodeListGroup('strategy', prediction.selectedCombo.memberStrategyIds, 3) + '</td>' +
+            '<td>' + formatNumber(prediction.selectedCombo.comboScore, 2) + '</td>' +
             '<td>' + renderResultBadge(prediction.result) + '</td>' +
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the winning engine combination.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the winning setup.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half.') + '</th><th>' + renderHintLabel('Setup', 'Winning setup type selected by the new combination engine.') + '</th><th>' + renderHintLabel('Eng combo', 'Winning engine combo key for this prediction.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
-      }
-
-      function renderEngineBoard(summary) {
-        const selectedBoard = summary.engineBoards.find((engineBoard) => engineBoard.marketKey === summary.selectedStrategyMarketKey) ?? summary.engineBoards[0];
-        const latestPredictionMap = buildLatestPredictionMap(summary);
-        const selectedPrediction = selectedBoard ? latestPredictionMap[selectedBoard.marketKey] : null;
-        const rows = (selectedBoard?.engines ?? []).map((engine) => {
-          return '<tr>' +
-            '<td><strong>' + renderInfoCode('engine', engine.engineId, engine.name) + '</strong></td>' +
-            '<td>' + renderInfoCode('engineState', engine.state, engine.state.toUpperCase()) + '</td>' +
-            '<td>' + renderDirectionPill(engine.direction) + '</td>' +
-            '<td>' + formatNumber(engine.score, 2) + '</td>' +
-            '<td>' + formatNumber(engine.confidence, 2) + '</td>' +
-            '<td>' + formatNumber(engine.regimeFit, 2) + '</td>' +
-            '<td><span title="' + (engine.activationReason ?? engine.blockingReason ?? 'no reason') + '">' + renderInfoCode('setup', engine.setupType) + '</span></td>' +
-            '</tr>';
-        }).join("");
-        replacePanelContent("engine-board",
-          '<div class="tiny" style="margin-bottom:8px">' +
-            renderHintLabel('Sel mkt', 'The engine board is shown for one market at a time.') +
-            ': ' +
-            (selectedBoard?.marketKey ?? '—') +
-            '</div>' +
-          '<div class="tiny" style="margin-bottom:10px">' +
-            renderHintLabel('Win cmb', 'Latest winning engine combo for the selected market if one exists.') +
-            ': ' +
-            (selectedPrediction?.winningEngineIds ? renderEngineComboCodes(selectedPrediction.winningEngineIds) : '—') +
-            ' · setup ' +
-            (selectedPrediction?.winningSetupType ? renderInfoCode('setup', selectedPrediction.winningSetupType) : '—') +
-            '</div>' +
-          renderTableShell('<table><thead><tr><th>' + renderHintLabel('Engine', 'Engine name plus compact id and source scope.') + '</th><th>' + renderHintLabel('State', 'Inactive, weak, active, dominant, or avoid.') + '</th><th>' + renderHintLabel('Dir', 'Direction currently implied by the engine.') + '</th><th>' + renderHintLabel('Score', 'Signed engine score after regime fit.') + '</th><th>' + renderHintLabel('Conf', 'Engine confidence.') + '</th><th>' + renderHintLabel('Fit', 'Regime fit score for this engine.') + '</th><th>' + renderHintLabel('Role', 'Default setup/narrative attached to the engine.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
-      }
-
-      function renderEngineGrid(summary) {
-        const engineOrder = ['breadth_engine', 'propagation_engine', 'local_momentum_engine', 'local_microstructure_engine', 'mispricing_engine', 'reversion_engine', 'meta_engine'];
-        const engineHeaderMarkup = engineOrder.map((engineId) => {
-          return '<th>' + renderInfoCode('engine', engineId, engineId) + '</th>';
-        }).join('');
-        const rows = summary.engineBoards.map((engineBoard) => {
-          const engineMap = {};
-          for (const engine of engineBoard.engines) {
-            engineMap[engine.engineId] = engine;
-          }
-          const cellMarkup = engineOrder.map((engineId) => {
-            const engine = engineMap[engineId] ?? null;
-            const engineStateCode = engine === null ? '—' : (lookupTypedCode('engineState', engine.state)?.code ?? engine.state.toUpperCase());
-            const directionClass = engine === null ? 'muted' : engine.direction === 'UP' ? 'up' : 'down';
-            const intensity = engine === null ? 0.08 : Math.max(0.12, Math.min(0.92, Math.abs(engine.score) * 0.55 + engine.confidence * 0.25));
-            const borderOpacity = engine === null ? 0.12 : engine.isActive ? 0.32 : 0.16;
-            const backgroundColor =
-              engine === null
-                ? 'rgba(13, 27, 42, 0.04)'
-                : engine.direction === 'UP'
-                  ? 'rgba(15, 157, 88, ' + intensity + ')'
-                  : 'rgba(192, 57, 43, ' + intensity + ')';
-            const engineDescription =
-              engine === null
-                ? 'No engine data available for this market.'
-                : 'State: ' + engine.state + '. Direction: ' + engine.direction + '. Score: ' + formatNumber(engine.score, 2) + '. Confidence: ' + formatNumber(engine.confidence, 2) + '. Regime fit: ' + formatNumber(engine.regimeFit, 2) + '. ' + (engine.activationReason ?? engine.blockingReason ?? 'No extra reason available.');
-            return '<td><button type="button" class="engine-matrix-cell ' + directionClass + '" style="background:' + backgroundColor + ';border-color:rgba(13, 27, 42, ' + borderOpacity + ')" data-full-label="' + escapeHtml((engineBoard.marketKey + ' · ' + (lookupTypedCode('engine', engineId)?.label ?? engineId))) + '" data-description="' + escapeHtml(engineDescription) + '" aria-label="' + escapeHtml((engineBoard.marketKey + '. ' + engineDescription)) + '">' + engineStateCode + '</button></td>';
-          }).join('');
-          return '<tr><td class="engine-matrix-market"><strong>' + engineBoard.marketKey.replace(':', ' ') + '</strong></td>' + cellMarkup + '</tr>';
-        }).join('');
-        const tableMarkup =
-          '<div class="engine-matrix"><table class="engine-matrix-table"><thead><tr><th class="engine-matrix-market">' +
-          renderHintLabel('Mkt', 'Market key for the row.') +
-          '</th>' +
-          engineHeaderMarkup +
-          '</tr></thead><tbody>' +
-          rows +
-          '</tbody></table></div>';
-        replacePanelContent('engine-grid', tableMarkup);
+        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Selected combo score for this prediction.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderExecution(summary) {
         const rows = summary.executionNow.map((marketExecution) => {
           const whyNot = renderWhyNot(marketExecution.decision);
           const reasonCodes = renderReasonCodes(marketExecution.decision);
-          const comboHover = marketExecution.decision.winningEngineIds.length === 0 ? 'no winning engine combo selected' : marketExecution.decision.winningEngineIds.join(', ');
+          const comboHover = marketExecution.decision.selectedComboStrategyIds.length === 0 ? 'no strategy combo selected' : marketExecution.decision.selectedComboStrategyIds.join(', ');
           const marketScoreLabel =
             marketExecution.decision.marketScore === null
               ? '—'
@@ -1352,7 +1446,6 @@ export class DashboardViewService {
             marketExecution.decision.researchScore === null
               ? '—'
               : formatNumber(marketExecution.decision.researchScore, 2) + ' / ' + formatNumber(marketExecution.decision.executionScore) + ' / ' + formatNumber(marketExecution.decision.effectiveExecutionScore, 2);
-          const comboGateLabel = marketExecution.decision.hasComboGatePassed ? '<span class="pill up">OPN</span>' : '<span class="pill down">BLK</span>';
           const breadthLabel = marketExecution.decision.regimeId === null
             ? '—'
             : renderRegimeCompactCode(marketExecution.decision.regimeId, marketExecution.decision.breadthStrength);
@@ -1363,17 +1456,17 @@ export class DashboardViewService {
           return '<tr>' +
             '<td><strong>' + marketExecution.asset.toUpperCase() + '</strong> <span class="tiny">' + marketExecution.window + '</span></td>' +
             '<td>' + renderActionLabel(marketExecution.decision) + '</td>' +
-            '<td>' + (marketExecution.decision.winningSetupType === null ? '—' : renderInfoCode('setup', marketExecution.decision.winningSetupType)) + '</td>' +
-            '<td><span title="' + comboHover + '">' + renderEngineComboCodes(marketExecution.decision.winningEngineIds) + '</span></td>' +
+            '<td><span title="' + comboHover + '">' + renderCodeListGroup('strategy', marketExecution.decision.selectedComboStrategyIds, 3) + '</span></td>' +
+            '<td>' + formatNumber(marketExecution.decision.selectedComboScore, 2) + '</td>' +
             '<td>' + scoreLabel + '</td>' +
             '<td><span title="' + breadthHover + '">' + breadthLabel + '</span></td>' +
             '<td>' + marketScoreLabel + '</td>' +
-            '<td>' + comboGateLabel + '</td>' +
+            '<td>' + formatNumber(marketExecution.decision.readinessScore, 2) + '</td>' +
             '<td>' + renderConvictionLabel(marketExecution.decision.positionSizeSuggestion) + '</td>' +
             '<td><span class="truncate-cell" title="' + whyNot + '">' + reasonCodes + '</span></td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Act', 'BU = buy UP, BD = buy DOWN, NO = no trade.') + '</th><th>' + renderHintLabel('Setup', 'Winning setup type currently driving the decision.') + '</th><th>' + renderHintLabel('Eng combo', 'Winning engine combo key for the market.') + '</th><th>' + renderHintLabel('Scores', 'Research / execution / effective execution score for this market.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window.') + '</th><th>' + renderHintLabel('Mkt score', 'Effective execution score followed by recent trade count.') + '</th><th>' + renderHintLabel('Gate', 'OPN = open, BLK = blocked for the legacy combo gate.') + '</th><th>' + renderHintLabel('Cnv', 'HI/MD/LO conviction from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Act', 'BU = buy UP, BD = buy DOWN, NO = no trade.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for the market.') + '</th><th>' + renderHintLabel('Cmb scr', 'Selected combo score for the market.') + '</th><th>' + renderHintLabel('Scores', 'Research / execution / effective execution score for this market.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window.') + '</th><th>' + renderHintLabel('Mkt score', 'Effective execution score followed by recent trade count.') + '</th><th>' + renderHintLabel('Ready', 'Overall readiness score for entry.') + '</th><th>' + renderHintLabel('Cnv', 'HI/MD/LO conviction from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function clamp01(value) {
@@ -1381,8 +1474,8 @@ export class DashboardViewService {
       }
 
       function computeTradeProximity(decision, market) {
-        const setupStrength = decision.winningSetupType === null ? 0 : clamp01((decision.winningEngineComboScore ?? 0.35) * 1.1);
-        const comboStrength = decision.hasComboGatePassed ? 1 : 0;
+        const comboStrength = clamp01(decision.selectedComboScore ?? 0);
+        const readinessStrength = clamp01(decision.readinessScore ?? 0);
         const scoreStrength = decision.effectiveExecutionScore === null ? 0 : clamp01(decision.effectiveExecutionScore);
         const qualityStrength = clamp01(market?.quality?.score ?? 0);
         let regimeStrength = 0.45;
@@ -1390,51 +1483,38 @@ export class DashboardViewService {
           regimeStrength = decision.hasBreadthAlignment ? (decision.hasStrongBreadth ? 1 : 0.72) : 0.18;
         }
         const weightedBase =
-          setupStrength * 0.24 +
-          comboStrength * 0.18 +
+          comboStrength * 0.24 +
+          readinessStrength * 0.18 +
           scoreStrength * 0.22 +
           qualityStrength * 0.18 +
           regimeStrength * 0.18;
         let proximity = decision.isEntryAllowed ? 1 : weightedBase;
-        if (decision.gateFailures.includes('combo_gate_failed')) {
+        if (decision.blockingReasons.includes('combo_score_too_low')) {
           proximity *= 0.58;
         }
-        if (decision.gateFailures.includes('cross_asset_regime_conflict')) {
+        if (decision.blockingReasons.includes('cross_asset_regime_conflict')) {
           proximity *= 0.42;
         }
-        if (decision.gateFailures.includes('market_warming_up')) {
+        if (decision.blockingReasons.includes('market_warming_up')) {
           proximity *= 0.62;
         }
-        if (decision.gateFailures.includes('bootstrap_discount_too_low') || decision.gateFailures.includes('insufficient_execution_history')) {
+        if (decision.blockingReasons.includes('bootstrap_discount_too_low') || decision.blockingReasons.includes('insufficient_execution_history')) {
           proximity *= 0.74;
         }
-        if (decision.gateFailures.includes('quality_too_low')) {
+        if (decision.blockingReasons.includes('quality_too_low')) {
           proximity *= 0.68;
         }
-        if (decision.gateFailures.includes('outside_entry_band') || decision.gateFailures.includes('spread_too_wide')) {
+        if (decision.blockingReasons.includes('outside_entry_band') || decision.blockingReasons.includes('spread_too_wide')) {
           proximity *= 0.82;
         }
         return {
           proximity: clamp01(proximity),
-          setupStrength,
           comboStrength,
+          readinessStrength,
           scoreStrength,
           qualityStrength,
           regimeStrength,
         };
-      }
-
-      function renderProximityBand(label, value, description) {
-        return '<button type="button" class="proximity-band" data-full-label="' +
-          escapeHtml(label) +
-          '" data-description="' +
-          escapeHtml(description + ' Current value: ' + formatNumber(value, 2)) +
-          '" aria-label="' +
-          escapeHtml(label + '. ' + description) +
-          '">' +
-          '<span class="proximity-bar"><span class="proximity-bar-fill" style="height:' + Math.round(clamp01(value) * 100) + '%"></span></span>' +
-          '<span class="proximity-band-label">' + escapeHtml(label) + '</span>' +
-          '</button>';
       }
 
       function pushTradeProximityHistory(marketKey, proximityValue) {
@@ -1450,29 +1530,10 @@ export class DashboardViewService {
       }
 
       function destroyTradeProximityCharts() {
-        for (const chart of tradeProximityBarCharts.values()) {
-          chart.destroy();
-        }
         for (const chart of tradeProximityTrendCharts.values()) {
           chart.destroy();
         }
-        tradeProximityBarCharts.clear();
         tradeProximityTrendCharts.clear();
-      }
-
-      function buildTradeProximityBarColors(values) {
-        return values.map((value) => {
-          if (value >= 0.8) {
-            return 'rgba(15, 157, 88, 0.82)';
-          }
-          if (value >= 0.55) {
-            return 'rgba(31, 162, 255, 0.8)';
-          }
-          if (value >= 0.3) {
-            return 'rgba(255, 122, 24, 0.78)';
-          }
-          return 'rgba(107, 114, 128, 0.5)';
-        });
       }
 
       function hydrateTradeProximityCharts(chartRows) {
@@ -1481,50 +1542,7 @@ export class DashboardViewService {
         }
         destroyTradeProximityCharts();
         for (const chartRow of chartRows) {
-          const barCanvas = document.getElementById(chartRow.barCanvasId);
           const trendCanvas = document.getElementById(chartRow.trendCanvasId);
-          if (barCanvas instanceof HTMLCanvasElement) {
-            const barChart = new Chart(barCanvas, {
-              type: 'bar',
-              data: {
-                labels: chartRow.labels,
-                datasets: [{
-                  data: chartRow.values,
-                  backgroundColor: buildTradeProximityBarColors(chartRow.values),
-                  borderRadius: 8,
-                  borderSkipped: false,
-                  maxBarThickness: 20,
-                }],
-              },
-              options: {
-                animation: false,
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: { display: false },
-                  tooltip: { enabled: false },
-                },
-                scales: {
-                  x: {
-                    grid: { display: false },
-                    ticks: {
-                      color: '#6b7280',
-                      font: { size: 10, weight: '700' },
-                    },
-                    border: { display: false },
-                  },
-                  y: {
-                    min: 0,
-                    max: 1,
-                    display: false,
-                    grid: { display: false },
-                    border: { display: false },
-                  },
-                },
-              },
-            });
-            tradeProximityBarCharts.set(chartRow.barCanvasId, barChart);
-          }
           if (trendCanvas instanceof HTMLCanvasElement) {
             const trendChart = new Chart(trendCanvas, {
               type: 'line',
@@ -1571,31 +1589,48 @@ export class DashboardViewService {
         const executionDecisionMap = createExecutionDecisionMap(summary);
         const marketSummaryMap = createMarketSummaryMap(summary);
         const chartRows = [];
-        const rows = summary.executionNow.map((marketExecution) => {
-          const decision = executionDecisionMap[marketExecution.marketKey];
-          const market = marketSummaryMap[marketExecution.marketKey];
+        const rows = summary.tradeCandidates.map((tradeCandidate) => {
+          const decision = executionDecisionMap[tradeCandidate.marketKey];
+          const market = marketSummaryMap[tradeCandidate.marketKey];
           const proximity = computeTradeProximity(decision, market);
           const proximityLabel = decision.isEntryAllowed ? 'RDY' : proximity.proximity >= 0.75 ? 'HOT' : proximity.proximity >= 0.5 ? 'MID' : 'COLD';
-          const historyValues = pushTradeProximityHistory(marketExecution.marketKey, proximity.proximity);
-          const barCanvasId = buildTradeProximityDomId('trade-proximity-bars', marketExecution.marketKey);
-          const trendCanvasId = buildTradeProximityDomId('trade-proximity-trend', marketExecution.marketKey);
+          const historyValues = pushTradeProximityHistory(tradeCandidate.marketKey, proximity.proximity);
+          const trendCanvasId = buildTradeProximityDomId('trade-proximity-trend', tradeCandidate.marketKey);
+          const factorEntries = [
+            ['CMB', proximity.comboStrength, 'Strength of the selected strategy combo.'],
+            ['RDY', proximity.readinessStrength, 'Aggregate readiness after anchor checks, market quality, and execution score.'],
+            ['SCR', proximity.scoreStrength, 'Effective execution-score contribution.'],
+            ['QLT', proximity.qualityStrength, 'Current market-quality contribution.'],
+            ['REG', proximity.regimeStrength, 'Cross-asset regime support contribution.'],
+          ];
+          const factorMarkup = factorEntries.map(([label, value, description]) => {
+            return '<button type="button" class="proximity-factor" data-full-label="' +
+              escapeHtml(String(label)) +
+              '" data-description="' +
+              escapeHtml(description + ' Current value: ' + formatNumber(value, 2)) +
+              '" aria-label="' +
+              escapeHtml(String(label) + '. ' + description) +
+              '">' +
+              escapeHtml(String(label)) +
+              ' ' +
+              formatNumber(value, 2) +
+              '</button>';
+          }).join('');
           chartRows.push({
-            barCanvasId,
             trendCanvasId,
-            labels: ['STP', 'CMB', 'SCR', 'QLT', 'REG'],
-            values: [
-              proximity.setupStrength,
-              proximity.comboStrength,
-              proximity.scoreStrength,
-              proximity.qualityStrength,
-              proximity.regimeStrength,
-            ],
             history: historyValues,
           });
+          const meterWidth = Math.round(proximity.proximity * 100);
           return '<div class="proximity-row">' +
-            '<div><strong>' + marketExecution.marketKey.replace(':', ' ') + '</strong></div>' +
-            '<div class="proximity-chart-card"><div class="proximity-chart-wrap"><canvas id="' + barCanvasId + '"></canvas></div></div>' +
-            '<div class="proximity-score"><strong>' + Math.round(proximity.proximity * 100) + '%</strong><span class="tiny">' + proximityLabel + '</span><div class="proximity-trend-card"><canvas id="' + trendCanvasId + '"></canvas></div></div>' +
+            '<div><strong>' + tradeCandidate.marketKey.replace(':', ' ') + '</strong></div>' +
+            '<div class="proximity-main">' +
+              '<div class="proximity-meter"><span class="proximity-meter-fill" style="width:' + meterWidth + '%"></span></div>' +
+              '<div class="proximity-meta">' +
+                '<div class="proximity-factors">' + factorMarkup + '</div>' +
+                '<div class="proximity-sparkline"><canvas id="' + trendCanvasId + '"></canvas></div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="proximity-score"><strong>' + Math.round(proximity.proximity * 100) + '%</strong><span class="tiny">' + proximityLabel + '</span></div>' +
             '</div>';
         }).join('');
         replacePanelContent('trade-proximity', '<div class="proximity-list">' + rows + '</div>');
@@ -1622,33 +1657,32 @@ export class DashboardViewService {
         const rows = summary.winningCombinations.map((prediction) => {
           return '<tr>' +
             '<td><strong>' + prediction.marketKey.replace(':', ' ') + '</strong></td>' +
-            '<td>' + renderInfoCode('setup', prediction.winningSetupType) + '</td>' +
-            '<td><span title="' + prediction.winningEngineIds.join(', ') + '">' + renderEngineComboCodes(prediction.winningEngineIds) + '</span></td>' +
-            '<td>' + formatNumber(prediction.winningEngineComboScore, 2) + '</td>' +
+            '<td>' + renderCodeListGroup('strategy', prediction.selectedCombo.memberStrategyIds, 3) + '</td>' +
+            '<td>' + formatNumber(prediction.selectedCombo.comboScore, 2) + '</td>' +
             '<td>' + formatNumber(prediction.confidence, 2) + '</td>' +
             '<td>' + renderRegimeCode(prediction.crossAssetRegime) + '</td>' +
-            '<td><span class="truncate-cell" title="' + prediction.combinationReason + '">' + prediction.combinationReason + '</span></td>' +
+            '<td><span class="truncate-cell" title="' + prediction.selectedCombo.selectionReason + '">' + prediction.selectedCombo.selectionReason + '</span></td>' +
             '</tr>';
         }).join('');
         replacePanelContent('winning-combinations', summary.winningCombinations.length === 0
-          ? '<div class="tiny">No winning combinations yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Setup', 'Winning setup selected by the combination engine.') + '</th><th>' + renderHintLabel('Combo', 'Winning combo of engines for the setup.') + '</th><th>' + renderHintLabel('Score', 'Winning engine combo score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen setup.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Narrative', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+          ? '<div class="tiny">No combo selections yet.</div>'
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Combo', 'Winning strategy combo for the prediction.') + '</th><th>' + renderHintLabel('Score', 'Winning combo score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen combo.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Why', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderDiscoveryBoard(summary) {
         const rows = summary.discoveryBoard.map((discoveryEntry) => {
           return '<tr>' +
-            '<td><strong>' + renderInfoCode('setup', discoveryEntry.setupType) + '</strong></td>' +
-            '<td><span title="' + discoveryEntry.markets.join(', ') + '">' + renderEngineComboCodes(discoveryEntry.comboKey.split('+')) + '</span></td>' +
+            '<td><span title="' + discoveryEntry.markets.join(', ') + '">' + renderCodeListGroup('strategy', discoveryEntry.comboKey.split('+'), 3) + '</span></td>' +
             '<td>' + formatNumber(discoveryEntry.hitRate, 2) + '</td>' +
+            '<td>' + formatNumber(discoveryEntry.averageComboScore, 2) + '</td>' +
             '<td>' + formatNumber(discoveryEntry.averageConfidence, 2) + '</td>' +
             '<td>' + discoveryEntry.sampleCount + '</td>' +
             '<td><span title="' + discoveryEntry.markets.join(', ') + '">' + discoveryEntry.markets.join(', ') + '</span></td>' +
             '</tr>';
         }).join('');
         replacePanelContent('discovery', summary.discoveryBoard.length === 0
-          ? '<div class="tiny">No engine-combo learning history yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Setup', 'Setup narrative tracked by the prediction layer.') + '</th><th>' + renderHintLabel('Combo', 'Engine combo key being learned.') + '</th><th>' + renderHintLabel('Hit', 'Resolved hit rate for that combo/setup.') + '</th><th>' + renderHintLabel('Avg conf', 'Average confidence for that combo/setup.') + '</th><th>' + renderHintLabel('N', 'Number of resolved predictions inside the dashboard window.') + '</th><th>' + renderHintLabel('Markets', 'Markets where this combo/setup has recently appeared.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+          ? '<div class="tiny">No combo learning history yet.</div>'
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Strategy combo being learned.') + '</th><th>' + renderHintLabel('Hit', 'Resolved hit rate for that combo.') + '</th><th>' + renderHintLabel('Avg scr', 'Average combo score for that combo.') + '</th><th>' + renderHintLabel('Avg conf', 'Average confidence for that combo.') + '</th><th>' + renderHintLabel('N', 'Number of resolved predictions inside the dashboard window.') + '</th><th>' + renderHintLabel('Markets', 'Markets where this combo has recently appeared.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderPositions(summary) {
@@ -1714,8 +1748,6 @@ export class DashboardViewService {
         renderExecution(summary);
         renderTradeProximity(summary);
         renderWinningCombinations(summary);
-        renderEngineBoard(summary);
-        renderEngineGrid(summary);
         renderMarketPnl(summary);
         renderDiscoveryBoard(summary);
         renderPositions(summary);
@@ -1724,7 +1756,7 @@ export class DashboardViewService {
       }
 
       document.addEventListener('click', (event) => {
-        const targetElement = event.target instanceof HTMLElement ? event.target.closest('.code-chip, .hint-label') : null;
+        const targetElement = event.target instanceof HTMLElement ? event.target.closest('.code-chip, .hint-label, .panel-info-button') : null;
         if (targetElement instanceof HTMLElement) {
           event.preventDefault();
           event.stopPropagation();

@@ -564,34 +564,10 @@ export class MarketStateService {
     return reversalRiskScore;
   }
 
-  private buildLeaderGroup(dominantMoves: Array<{ marketKey: MarketKey; signedMove: number }>): MarketKey[] {
-    const leaderGroup = [...dominantMoves]
-      .sort((leftMove, rightMove) => Math.abs(rightMove.signedMove) - Math.abs(leftMove.signedMove))
-      .slice(0, 2)
-      .map((dominantMove) => dominantMove.marketKey);
-    return leaderGroup;
-  }
-
-  private buildLaggardGroup(
-    qualifyingMoves: Array<{ marketKey: MarketKey; signedMove: number }>,
-    breadthDirection: CrossAssetRegime["breadthDirection"],
-    peerAverageSignedMove: number,
-  ): MarketKey[] {
-    const laggardGroup =
-      breadthDirection === "NEUTRAL"
-        ? []
-        : [...qualifyingMoves]
-            .filter((qualifyingMove) => Math.abs(qualifyingMove.signedMove) < Math.abs(peerAverageSignedMove))
-            .sort((leftMove, rightMove) => Math.abs(leftMove.signedMove) - Math.abs(rightMove.signedMove))
-            .slice(0, 2)
-            .map((qualifyingMove) => qualifyingMove.marketKey);
-    return laggardGroup;
-  }
-
   private resolveRegimeId(
     breadthDirection: CrossAssetRegime["breadthDirection"],
     hasStrongBreadth: boolean,
-    hasLeaderLaggardOpportunity: boolean,
+    hasEthAlignment: boolean,
     qualifyingMarketCount: number,
     reversalRiskScore: number,
   ): CrossAssetRegime["regimeId"] {
@@ -599,17 +575,11 @@ export class MarketStateService {
     if (qualifyingMarketCount >= 2 && breadthDirection === "NEUTRAL") {
       regimeId = "fragmented";
     }
-    if (breadthDirection === "UP") {
-      regimeId = hasStrongBreadth ? "broad_up_strong" : "broad_up_weak";
+    if (breadthDirection === "UP" && hasStrongBreadth) {
+      regimeId = hasEthAlignment ? "btc_eth_up" : "btc_up";
     }
-    if (breadthDirection === "DOWN") {
-      regimeId = hasStrongBreadth ? "broad_down_strong" : "broad_down_weak";
-    }
-    if (hasLeaderLaggardOpportunity && breadthDirection === "UP") {
-      regimeId = "leader_laggard_up";
-    }
-    if (hasLeaderLaggardOpportunity && breadthDirection === "DOWN") {
-      regimeId = "leader_laggard_down";
+    if (breadthDirection === "DOWN" && hasStrongBreadth) {
+      regimeId = hasEthAlignment ? "btc_eth_down" : "btc_down";
     }
     if (reversalRiskScore >= 0.72 && breadthDirection !== "NEUTRAL") {
       regimeId = "reversal_risk";
@@ -619,11 +589,11 @@ export class MarketStateService {
 
   private resolveRegimeClass(regimeId: CrossAssetRegime["regimeId"]): CrossAssetRegime["regimeClass"] {
     let regimeClass: CrossAssetRegime["regimeClass"] = "neutral";
-    if (regimeId === "broad_up_weak" || regimeId === "broad_up_strong" || regimeId === "broad_down_weak" || regimeId === "broad_down_strong") {
-      regimeClass = "directional";
+    if (regimeId === "btc_up" || regimeId === "btc_down") {
+      regimeClass = "anchor";
     }
-    if (regimeId === "leader_laggard_up" || regimeId === "leader_laggard_down") {
-      regimeClass = "leader_laggard";
+    if (regimeId === "btc_eth_up" || regimeId === "btc_eth_down") {
+      regimeClass = "aligned";
     }
     if (regimeId === "fragmented") {
       regimeClass = "fragmented";
@@ -632,25 +602,6 @@ export class MarketStateService {
       regimeClass = "reversal";
     }
     return regimeClass;
-  }
-
-  private resolveAnchorSignal(window: MarketWindow): { anchorAsset: AssetSymbol | null; anchorDirection: CrossAssetRegime["anchorDirection"] } {
-    const btcMarketRecord = this.requireMarketRecord(this.buildMarketKey("btc", window));
-    const ethMarketRecord = this.requireMarketRecord(this.buildMarketKey("eth", window));
-    const btcSignedMove = this.resolveSignedMove(btcMarketRecord.latest, btcMarketRecord.previous);
-    const ethSignedMove = this.resolveSignedMove(ethMarketRecord.latest, ethMarketRecord.previous);
-    let anchorAsset: AssetSymbol | null = null;
-    let anchorDirection: CrossAssetRegime["anchorDirection"] = "NEUTRAL";
-    if (btcMarketRecord.latest?.quality.hasLiveMarket && Math.abs(btcSignedMove) >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD) {
-      anchorAsset = "btc";
-      anchorDirection = btcSignedMove > 0 ? "UP" : "DOWN";
-    } else {
-      if (ethMarketRecord.latest?.quality.hasLiveMarket && Math.abs(ethSignedMove) >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD) {
-        anchorAsset = "eth";
-        anchorDirection = ethSignedMove > 0 ? "UP" : "DOWN";
-      }
-    }
-    return { anchorAsset, anchorDirection };
   }
 
   private resolveDirectionalMove(window: MarketWindow, asset: AssetSymbol): CrossAssetRegime["btcDirection"] {
@@ -703,7 +654,6 @@ export class MarketStateService {
     const dominantMoves = breadthDirection === "DOWN" ? negativeMoves : breadthDirection === "UP" ? positiveMoves : [];
     const alignedMarketCount = dominantMoves.length;
     const qualifyingMarketCount = qualifyingMoves.length;
-    const anchorSignal = this.resolveAnchorSignal(window);
     const btcDirection = this.resolveDirectionalMove(window, "btc");
     const ethDirection = this.resolveDirectionalMove(window, "eth");
     const btcUpTokenMomentum = this.resolveTokenMomentum(window, "btc", "up");
@@ -732,21 +682,16 @@ export class MarketStateService {
       alignedMarketCount >= 3 &&
       breadthParticipation >= config.CROSS_ASSET_BREADTH_MIN_PARTICIPATION &&
       breadthStrength >= config.CROSS_ASSET_BREADTH_MIN_STRENGTH;
-    const hasLeaderLaggardOpportunity =
-      breadthDirection !== "NEUTRAL" &&
-      alignedMarketCount >= 2 &&
-      Math.abs(targetSignedMove) < Math.abs(peerAverageSignedMove) &&
-      lagRatio >= config.CROSS_ASSET_LAGGARD_THRESHOLD;
-    const leaderMarketKey =
-      dominantMoves.length === 0
-        ? null
-        : ([...dominantMoves].sort((leftMove, rightMove) => Math.abs(rightMove.signedMove) - Math.abs(leftMove.signedMove))[0]?.marketKey ?? null);
-    const leaderGroup = this.buildLeaderGroup(dominantMoves);
-    const laggardGroup = this.buildLaggardGroup(qualifyingMoves, breadthDirection, peerAverageSignedMove);
+    const hasEthAlignment =
+      btcDirection !== "NEUTRAL" &&
+      ethDirection !== "NEUTRAL" &&
+      btcDirection === ethDirection &&
+      Math.abs(btcUpTokenMomentum) + Math.abs(btcDownTokenMomentum) > 0 &&
+      Math.abs(ethUpTokenMomentum) + Math.abs(ethDownTokenMomentum) > 0;
     const accelerationScore = this.computeAccelerationScore(qualifyingMoves, averageSignedMove);
     const exhaustionScore = this.computeExhaustionScore(breadthStrength, lagRatio, targetSignedMove, peerAverageSignedMove);
     const reversalRiskScore = this.computeReversalRiskScore(breadthDirection, targetSignedMove, peerAverageSignedMove, breadthStrength, exhaustionScore);
-    const regimeId = this.resolveRegimeId(breadthDirection, hasStrongBreadth, hasLeaderLaggardOpportunity, qualifyingMarketCount, reversalRiskScore);
+    const regimeId = this.resolveRegimeId(breadthDirection, hasStrongBreadth, hasEthAlignment, qualifyingMarketCount, reversalRiskScore);
     const regimeClass = this.resolveRegimeClass(regimeId);
     return {
       regimeId,
@@ -758,8 +703,8 @@ export class MarketStateService {
       btcDownTokenMomentum,
       ethUpTokenMomentum,
       ethDownTokenMomentum,
-      anchorAsset: anchorSignal.anchorAsset,
-      anchorDirection: anchorSignal.anchorDirection,
+      hasBtcAnchor: btcDirection !== "NEUTRAL",
+      hasEthAlignment,
       breadthStrength,
       breadthParticipation,
       averageSignedMove,
@@ -768,9 +713,6 @@ export class MarketStateService {
       lagRatio,
       alignedMarketCount,
       qualifyingMarketCount,
-      leaderMarketKey,
-      leaderGroup,
-      laggardGroup,
       synchronyScore,
       accelerationScore,
       exhaustionScore,
@@ -778,7 +720,6 @@ export class MarketStateService {
       isDirectional: breadthDirection !== "NEUTRAL",
       isTradableGlobalContext: regimeId !== "neutral" && regimeId !== "fragmented",
       hasStrongBreadth,
-      hasLeaderLaggardOpportunity,
     };
   }
 

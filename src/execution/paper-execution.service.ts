@@ -505,7 +505,7 @@ export class PaperExecutionService {
     const hasSufficientHistory = tradeCount >= config.MIN_MARKET_TRADES_FOR_SCORING;
     const hasWarmupComplete =
       predictionCount >= config.MIN_MARKET_PREDICTIONS_BEFORE_ENTRY && windowedResearchPredictions.length >= config.MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP;
-    const hasComboReadiness = latestPrediction?.comboGate.hasComboGatePassed ?? false;
+    const hasComboReadiness = latestPrediction?.selectedCombo.isExecutionEligible ?? false;
     let status: MarketPerformanceSummary["status"] = "warming_up";
     if (hasWarmupComplete) {
       status = "research_only";
@@ -562,7 +562,7 @@ export class PaperExecutionService {
               marketKey,
               latestPrediction.timestamp,
               executionDecision.isEntryAllowed,
-              executionDecision.gateFailures,
+              executionDecision.blockingReasons,
               executionDecision.selectedComboSource,
             );
           }
@@ -624,17 +624,16 @@ export class PaperExecutionService {
           breadthStrength: null,
           hasStrongBreadth: false,
           hasBreadthAlignment: true,
-          hasComboGatePassed: false,
           selectedComboKey: null,
           selectedComboSize: null,
           selectedComboSource: null,
-          winningSetupType: null,
-          winningEngineIds: [],
-          winningEngineComboKey: null,
-          winningEngineComboScore: null,
+          selectedComboDirection: null,
+          selectedComboScore: null,
+          selectedComboConfidence: null,
+          selectedComboStrategyIds: [],
           regimeId: null,
-          executionProfile: null,
-          gateFailures: ["no_market_data"],
+          readinessScore: 0,
+          blockingReasons: ["no_market_data"],
           generatedAt: null,
         };
         const openPosition = this.openPositions.get(marketKey) ?? null;
