@@ -15,10 +15,21 @@ export type MarketWindow = (typeof SUPPORTED_WINDOWS)[number];
 export type SpotVenue = (typeof SPOT_VENUES)[number];
 export type MarketKey = `${AssetSymbol}:${MarketWindow}`;
 export type TriggeredToken = "up" | "down";
-export type TriggerType = "crossed_half";
+export type TriggerType = "crossed_half" | "anchor_follow_breakout" | "pullback_resume" | "laggard_release";
 export type PredictionDirection = "UP" | "DOWN";
 export type CrossAssetBreadthDirection = PredictionDirection | "NEUTRAL";
-export type CrossAssetRegimeId = "neutral" | "btc_up" | "btc_down" | "btc_eth_up" | "btc_eth_down" | "fragmented" | "reversal_risk";
+export type CrossAssetRegimeId =
+  | "neutral"
+  | "btc_bias_up"
+  | "btc_bias_down"
+  | "btc_eth_bias_up"
+  | "btc_eth_bias_down"
+  | "btc_up"
+  | "btc_down"
+  | "btc_eth_up"
+  | "btc_eth_down"
+  | "fragmented"
+  | "reversal_risk";
 export type SnapshotValue = number | string | null;
 export type InputSnapshot = { generated_at: number } & Record<string, SnapshotValue>;
 export type OrderBookLevel = { price: number; size: number };

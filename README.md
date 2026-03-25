@@ -182,6 +182,10 @@ The hierarchy is:
 Current regime ids are:
 
 - `neutral`
+- `btc_bias_up`
+- `btc_bias_down`
+- `btc_eth_bias_up`
+- `btc_eth_bias_down`
 - `btc_up`
 - `btc_down`
 - `btc_eth_up`

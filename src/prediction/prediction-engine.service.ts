@@ -242,6 +242,14 @@ export class PredictionEngineService {
     return shouldDropPendingTrigger;
   }
 
+  private shouldReplacePendingTrigger(existingTrigger: MarketTrigger | null, nextTrigger: MarketTrigger): boolean {
+    let shouldReplacePendingTrigger = existingTrigger === null;
+    if (existingTrigger !== null && existingTrigger.triggeredToken !== nextTrigger.triggeredToken) {
+      shouldReplacePendingTrigger = true;
+    }
+    return shouldReplacePendingTrigger;
+  }
+
   private resolveMarketExecutionScore(marketKey: MarketKey): number | null {
     const strategySummaries = this.strategyMetricsService.getSummaries(marketKey);
     const resolvedStrategies = strategySummaries.filter((strategySummary) => strategySummary.executionTotalResolved > 0);
@@ -438,7 +446,10 @@ export class PredictionEngineService {
   public handleSnapshot(_generatedAt: number, triggeredMarkets: MarketTrigger[]): void {
     this.maybeResolveResearchPredictions();
     for (const marketTrigger of triggeredMarkets) {
-      this.pendingTriggers.set(marketTrigger.marketKey, marketTrigger);
+      const existingTrigger = this.pendingTriggers.get(marketTrigger.marketKey) ?? null;
+      if (this.shouldReplacePendingTrigger(existingTrigger, marketTrigger)) {
+        this.pendingTriggers.set(marketTrigger.marketKey, marketTrigger);
+      }
     }
     for (const asset of SUPPORTED_ASSETS) {
       for (const window of SUPPORTED_WINDOWS) {

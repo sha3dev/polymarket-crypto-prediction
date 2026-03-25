@@ -698,6 +698,10 @@ export class DashboardViewService {
       const typedCodeCatalog = {
         regime: {
           neutral: { code: 'NEU', label: 'Neutral', description: 'No coherent cross-asset directional structure is dominant.' },
+          btc_bias_up: { code: 'BBU', label: 'BTC Bias Up', description: 'BTC is leaning upward, but the move is not yet strong enough to count as a confirmed anchor regime.' },
+          btc_bias_down: { code: 'BBD', label: 'BTC Bias Down', description: 'BTC is leaning downward, but the move is not yet strong enough to count as a confirmed anchor regime.' },
+          btc_eth_bias_up: { code: 'EBU', label: 'BTC + ETH Bias Up', description: 'BTC and ETH are leaning upward together, but the move is still below strong confirmation.' },
+          btc_eth_bias_down: { code: 'EBD', label: 'BTC + ETH Bias Down', description: 'BTC and ETH are leaning downward together, but the move is still below strong confirmation.' },
           btc_up: { code: 'BTU', label: 'BTC Up', description: 'BTC is the active anchor and it is pushing upward.' },
           btc_down: { code: 'BTD', label: 'BTC Down', description: 'BTC is the active anchor and it is pushing downward.' },
           btc_eth_up: { code: 'BEU', label: 'BTC + ETH Up', description: 'BTC and ETH are aligned upward, so followers may only be traded upward.' },
@@ -1119,6 +1123,18 @@ export class DashboardViewService {
         if (reasonCode === 'book_drift_take_liquidity') {
           humanReason = 'book moving away';
         }
+        if (reasonCode === 'crossed_half') {
+          humanReason = 'crossed half';
+        }
+        if (reasonCode === 'anchor_follow_breakout') {
+          humanReason = 'anchor-follow breakout';
+        }
+        if (reasonCode === 'pullback_resume') {
+          humanReason = 'pullback resume';
+        }
+        if (reasonCode === 'laggard_release') {
+          humanReason = 'laggard release';
+        }
         return humanReason;
       }
 
@@ -1156,6 +1172,15 @@ export class DashboardViewService {
         let triggerCode = triggerType;
         if (triggerType === 'crossed_half') {
           triggerCode = 'XH';
+        }
+        if (triggerType === 'anchor_follow_breakout') {
+          triggerCode = 'AFB';
+        }
+        if (triggerType === 'pullback_resume') {
+          triggerCode = 'PBR';
+        }
+        if (triggerType === 'laggard_release') {
+          triggerCode = 'LGR';
         }
         return triggerCode;
       }
@@ -1400,11 +1425,23 @@ export class DashboardViewService {
       function renderRegimeName(crossAssetRegime) {
         let regimeName = 'Neutral';
         if (crossAssetRegime) {
+          if (crossAssetRegime.regimeId === 'btc_bias_up') {
+            regimeName = 'BTC Bias Up';
+          }
+          if (crossAssetRegime.regimeId === 'btc_eth_bias_up') {
+            regimeName = 'BTC + ETH Bias Up';
+          }
           if (crossAssetRegime.regimeId === 'btc_up') {
             regimeName = 'BTC Up';
           }
           if (crossAssetRegime.regimeId === 'btc_eth_up') {
             regimeName = 'BTC + ETH Up';
+          }
+          if (crossAssetRegime.regimeId === 'btc_bias_down') {
+            regimeName = 'BTC Bias Down';
+          }
+          if (crossAssetRegime.regimeId === 'btc_eth_bias_down') {
+            regimeName = 'BTC + ETH Bias Down';
           }
           if (crossAssetRegime.regimeId === 'btc_down') {
             regimeName = 'BTC Down';
@@ -1702,7 +1739,7 @@ export class DashboardViewService {
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Selected combo score for this prediction.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half, AFB = anchor-follow breakout, PBR = pullback resume, LGR = laggard release.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Selected combo score for this prediction.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderExecution(summary) {
