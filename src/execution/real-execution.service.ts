@@ -337,6 +337,13 @@ export class RealExecutionService {
     return bootstrapDiscount;
   }
 
+  private applyBootstrapDiscountToResearchScore(researchScore: number, bootstrapDiscount: number): number {
+    const neutralScore = 0.5;
+    const discountedResearchScore = neutralScore + (researchScore - neutralScore) * bootstrapDiscount;
+    const normalizedDiscountedResearchScore = Math.max(0, Math.min(1, discountedResearchScore));
+    return normalizedDiscountedResearchScore;
+  }
+
   private buildMarketPerformanceSummary(asset: AssetSymbol, window: MarketWindow): MarketPerformanceSummary {
     const marketKey = this.buildMarketKey(asset, window);
     const latestPrediction = this.resolvePrediction(asset, window);
@@ -361,7 +368,7 @@ export class RealExecutionService {
     const executionScore = this.computeExecutionScore(windowedTrades);
     const marketSlice = this.marketStateService.getLatestSlice(marketKey);
     const bootstrapDiscount = this.computeBootstrapDiscount(windowedResearchPredictions.length, tradeCount, marketSlice?.quality.score ?? 0);
-    const discountedResearchScore = researchScore * bootstrapDiscount;
+    const discountedResearchScore = this.applyBootstrapDiscountToResearchScore(researchScore, bootstrapDiscount);
     const effectiveExecutionScore = executionScore === null ? discountedResearchScore : Math.min(executionScore, discountedResearchScore);
     const hasSufficientHistory = tradeCount >= config.MIN_MARKET_TRADES_FOR_SCORING;
     const hasWarmupComplete =

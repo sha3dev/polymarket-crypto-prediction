@@ -597,6 +597,11 @@ export class MarketStateService {
     return synchronyScore;
   }
 
+  private computeSoftMoveStrength(signedMove: number): number {
+    const softMoveStrength = Math.max(0, Math.min(1, Math.abs(signedMove) / Math.max(config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD, 0.0001)));
+    return softMoveStrength;
+  }
+
   private computeAccelerationScore(qualifyingMoves: Array<{ marketKey: MarketKey; signedMove: number }>, averageSignedMove: number): number {
     const absoluteMoves = qualifyingMoves.map((qualifyingMove) => Math.abs(qualifyingMove.signedMove));
     const latestMoveMagnitude = Math.abs(averageSignedMove);
@@ -608,8 +613,10 @@ export class MarketStateService {
   }
 
   private computeExhaustionScore(breadthStrength: number, lagRatio: number, targetSignedMove: number, peerAverageSignedMove: number): number {
-    const leaderOvershoot = Math.max(0, Math.abs(targetSignedMove) - Math.abs(peerAverageSignedMove));
-    const exhaustionScore = Math.max(0, Math.min(1, breadthStrength * 0.6 + leaderOvershoot * 12 + Math.max(0, 0.35 - lagRatio)));
+    const hasTinyBreadthContext = breadthStrength < 0.05 && Math.abs(peerAverageSignedMove) < config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD * 0.5;
+    const leaderOvershoot = hasTinyBreadthContext ? 0 : Math.max(0, Math.abs(targetSignedMove) - Math.abs(peerAverageSignedMove));
+    const followerGapPressure = hasTinyBreadthContext ? 0 : breadthStrength >= 0.4 ? Math.max(0, 0.35 - lagRatio) : 0;
+    const exhaustionScore = hasTinyBreadthContext ? 0 : Math.max(0, Math.min(1, breadthStrength * 0.6 + leaderOvershoot * 12 + followerGapPressure));
     return exhaustionScore;
   }
 
@@ -685,35 +692,41 @@ export class MarketStateService {
   }
 
   private buildCrossAssetRegime(marketKey: MarketKey, window: MarketWindow): CrossAssetRegime {
+    const liveMoves: Array<{ marketKey: MarketKey; signedMove: number; softStrength: number }> = [];
     const qualifyingMoves: Array<{ marketKey: MarketKey; signedMove: number }> = [];
     const targetMarketRecord = this.requireMarketRecord(marketKey);
     const targetSignedMove = this.resolveSignedMoveFromLookback(targetMarketRecord);
     for (const peerMarketKey of this.buildWindowMarketKeys(window)) {
       const peerMarketRecord = this.requireMarketRecord(peerMarketKey);
       const signedMove = this.resolveSignedMoveFromLookback(peerMarketRecord);
-      if (peerMarketRecord.latest?.quality.hasLiveMarket && Math.abs(signedMove) >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD) {
-        qualifyingMoves.push({ marketKey: peerMarketKey, signedMove });
+      if (peerMarketRecord.latest?.quality.hasLiveMarket) {
+        const softStrength = this.computeSoftMoveStrength(signedMove);
+        liveMoves.push({ marketKey: peerMarketKey, signedMove, softStrength });
+        if (Math.abs(signedMove) >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD) {
+          qualifyingMoves.push({ marketKey: peerMarketKey, signedMove });
+        }
       }
     }
+    const positiveLiveMoves = liveMoves.filter((liveMove) => liveMove.signedMove > 0);
+    const negativeLiveMoves = liveMoves.filter((liveMove) => liveMove.signedMove < 0);
+    const weightedSoftPositiveBias = positiveLiveMoves.reduce(
+      (aggregatedBias, positiveMove) => aggregatedBias + this.resolveCrossAssetWeight(positiveMove.marketKey) * positiveMove.softStrength,
+      0,
+    );
+    const weightedSoftNegativeBias = negativeLiveMoves.reduce(
+      (aggregatedBias, negativeMove) => aggregatedBias + this.resolveCrossAssetWeight(negativeMove.marketKey) * negativeMove.softStrength,
+      0,
+    );
     const positiveMoves = qualifyingMoves.filter((qualifyingMove) => qualifyingMove.signedMove > 0);
     const negativeMoves = qualifyingMoves.filter((qualifyingMove) => qualifyingMove.signedMove < 0);
-    const weightedPositiveBias = positiveMoves.reduce(
-      (aggregatedBias, positiveMove) => aggregatedBias + this.resolveCrossAssetWeight(positiveMove.marketKey),
-      0,
-    );
-    const weightedNegativeBias = negativeMoves.reduce(
-      (aggregatedBias, negativeMove) => aggregatedBias + this.resolveCrossAssetWeight(negativeMove.marketKey),
-      0,
-    );
     const breadthDirection =
-      qualifyingMoves.length === 0
+      liveMoves.length === 0 || weightedSoftPositiveBias === weightedSoftNegativeBias
         ? "NEUTRAL"
-        : weightedPositiveBias === weightedNegativeBias
-          ? "NEUTRAL"
-          : weightedPositiveBias > weightedNegativeBias
-            ? "UP"
-            : "DOWN";
+        : weightedSoftPositiveBias > weightedSoftNegativeBias
+          ? "UP"
+          : "DOWN";
     const dominantMoves = breadthDirection === "DOWN" ? negativeMoves : breadthDirection === "UP" ? positiveMoves : [];
+    const dominantLiveMoves = breadthDirection === "DOWN" ? negativeLiveMoves : breadthDirection === "UP" ? positiveLiveMoves : [];
     const alignedMarketCount = dominantMoves.length;
     const qualifyingMarketCount = qualifyingMoves.length;
     const btcDirection = this.resolveDirectionalMove(window, "btc");
@@ -722,12 +735,13 @@ export class MarketStateService {
     const btcDownTokenMomentum = this.resolveTokenMomentum(window, "btc", "down");
     const ethUpTokenMomentum = this.resolveTokenMomentum(window, "eth", "up");
     const ethDownTokenMomentum = this.resolveTokenMomentum(window, "eth", "down");
-    const breadthParticipation = qualifyingMarketCount === 0 ? 0 : alignedMarketCount / qualifyingMarketCount;
+    const totalSoftBias = weightedSoftPositiveBias + weightedSoftNegativeBias;
+    const breadthParticipation = totalSoftBias === 0 ? 0 : Math.max(weightedSoftPositiveBias, weightedSoftNegativeBias) / totalSoftBias;
     const averageSignedMove =
-      dominantMoves.length === 0
+      dominantLiveMoves.length === 0
         ? 0
-        : dominantMoves.reduce((aggregatedMove, dominantMove) => aggregatedMove + dominantMove.signedMove, 0) / dominantMoves.length;
-    const peerAlignedMoves = dominantMoves.filter((dominantMove) => dominantMove.marketKey !== marketKey).map((dominantMove) => dominantMove.signedMove);
+        : dominantLiveMoves.reduce((aggregatedMove, dominantMove) => aggregatedMove + dominantMove.signedMove, 0) / dominantLiveMoves.length;
+    const peerAlignedMoves = dominantLiveMoves.filter((dominantMove) => dominantMove.marketKey !== marketKey).map((dominantMove) => dominantMove.signedMove);
     const peerAverageSignedMove =
       peerAlignedMoves.length === 0
         ? averageSignedMove
@@ -736,8 +750,8 @@ export class MarketStateService {
       breadthDirection === "NEUTRAL" || peerAverageSignedMove === 0
         ? 0
         : Math.max(0, (Math.abs(peerAverageSignedMove) - Math.abs(targetSignedMove)) / Math.abs(peerAverageSignedMove));
-    const normalizedMoveStrength = Math.max(0, Math.min(1, Math.abs(averageSignedMove) / Math.max(config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD * 3, 0.0001)));
-    const synchronyScore = this.computeSynchronyScore(alignedMarketCount, qualifyingMarketCount);
+    const normalizedMoveStrength = Math.max(0, Math.min(1, Math.abs(averageSignedMove) / Math.max(config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD, 0.0001)));
+    const synchronyScore = this.computeSynchronyScore(dominantLiveMoves.length, liveMoves.length);
     const breadthStrength = breadthParticipation * normalizedMoveStrength;
     const hasStrongBreadth =
       breadthDirection !== "NEUTRAL" &&
@@ -750,7 +764,12 @@ export class MarketStateService {
       btcDirection === ethDirection &&
       Math.abs(btcUpTokenMomentum) + Math.abs(btcDownTokenMomentum) > 0 &&
       Math.abs(ethUpTokenMomentum) + Math.abs(ethDownTokenMomentum) > 0;
-    const accelerationScore = this.computeAccelerationScore(qualifyingMoves, averageSignedMove);
+    const accelerationScore = this.computeAccelerationScore(
+      liveMoves.map((liveMove) => {
+        return { marketKey: liveMove.marketKey, signedMove: liveMove.signedMove };
+      }),
+      averageSignedMove,
+    );
     const exhaustionScore = this.computeExhaustionScore(breadthStrength, lagRatio, targetSignedMove, peerAverageSignedMove);
     const reversalRiskScore = this.computeReversalRiskScore(breadthDirection, targetSignedMove, peerAverageSignedMove, breadthStrength, exhaustionScore);
     const regimeId = this.resolveRegimeId(breadthDirection, hasStrongBreadth, hasEthAlignment, qualifyingMarketCount, reversalRiskScore);

@@ -127,6 +127,24 @@ test("RealExecutionService opens and closes confirmed real trades", async () => 
   assert.equal(realExecutionService.getRecentTrades(10).length >= 4, true);
 });
 
+test("RealExecutionService keeps neutral market score at baseline during bootstrap", () => {
+  const realExecutionService = new RealExecutionService(
+    buildMarketStateServiceMock(buildMarketSnapshotSlice(2_000, 0.52)),
+    buildPredictionEngineMock(buildLivePredictionResponse(), []),
+    buildExecutionPolicyServiceMock(),
+    buildOrderServiceMock(),
+    buildMarketCatalogServiceMock(),
+  );
+
+  const marketPerformanceSummary = realExecutionService.getMarketPerformanceSummaries().find((summary) => summary.marketKey === "btc:5m");
+
+  assert.notEqual(marketPerformanceSummary, undefined);
+  assert.equal(marketPerformanceSummary?.researchPredictionCount, 0);
+  assert.equal(marketPerformanceSummary?.tradeCount, 0);
+  assert.equal(marketPerformanceSummary?.researchScore, 0.5);
+  assert.equal(marketPerformanceSummary?.effectiveExecutionScore, 0.5);
+});
+
 function buildMarketStateServiceMock(marketSliceOrFactory: MarketSnapshotSlice | (() => MarketSnapshotSlice)): MarketStateService {
   return {
     getLatestSlice(marketKey: string): MarketSnapshotSlice | null {
@@ -172,6 +190,32 @@ function buildMarketCatalogServiceMock(): { loadMarketBySlug(): Promise<Polymark
   return {
     async loadMarketBySlug(): Promise<PolymarketMarket> {
       return buildPolymarketMarket();
+    },
+  };
+}
+
+function buildOrderServiceMock(): {
+  init(): Promise<void>;
+  getMyBalance(): Promise<number>;
+  postOrder(): Promise<PostedOrder | null>;
+  waitForOrderConfirmation(): Promise<PostedOrderWithStatus>;
+  disconnect(): Promise<void>;
+} {
+  return {
+    async init(): Promise<void> {
+      return;
+    },
+    async getMyBalance(): Promise<number> {
+      return 500;
+    },
+    async postOrder(): Promise<PostedOrder | null> {
+      return null;
+    },
+    async waitForOrderConfirmation(): Promise<PostedOrderWithStatus> {
+      throw new Error("not expected");
+    },
+    async disconnect(): Promise<void> {
+      return;
     },
   };
 }

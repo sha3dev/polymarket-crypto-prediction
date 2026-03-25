@@ -1292,11 +1292,15 @@ export class DashboardViewService {
               breadthStrength: 0,
               accelerationScore: 0,
               reversalRiskScore: 0,
+              btcAnchorMomentum: 0,
+              ethAnchorMomentum: 0,
             }
           : {
               breadthStrength: globalRegime.breadthStrength,
               accelerationScore: globalRegime.accelerationScore,
               reversalRiskScore: globalRegime.reversalRiskScore,
+              btcAnchorMomentum: globalRegime.btcUpTokenMomentum - globalRegime.btcDownTokenMomentum,
+              ethAnchorMomentum: globalRegime.ethUpTokenMomentum - globalRegime.ethDownTokenMomentum,
             };
         const previousHistory = globalRegimeHistory.get(windowLabel) ?? [];
         const nextHistory = [...previousHistory, historyPoint].slice(-maxGlobalRegimeHistory);
@@ -1312,13 +1316,19 @@ export class DashboardViewService {
       }
 
       function computeGlobalRegimeScale(history) {
-        const values = history.flatMap((entry) => [entry.breadthStrength, entry.accelerationScore, entry.reversalRiskScore]);
-        const minimumValue = values.length === 0 ? 0 : Math.min(...values);
-        const maximumValue = values.length === 0 ? 1 : Math.max(...values);
+        const values = history.flatMap((entry) => [
+          entry.breadthStrength,
+          entry.accelerationScore,
+          entry.reversalRiskScore,
+          entry.btcAnchorMomentum,
+          entry.ethAnchorMomentum,
+        ]);
+        const minimumValue = values.length === 0 ? -0.1 : Math.min(...values);
+        const maximumValue = values.length === 0 ? 0.1 : Math.max(...values);
         const centerValue = (minimumValue + maximumValue) / 2;
         const spreadValue = Math.max(0.04, maximumValue - minimumValue);
         const paddingValue = Math.max(0.02, spreadValue * 0.35);
-        const minimumScale = Math.max(0, centerValue - spreadValue / 2 - paddingValue);
+        const minimumScale = Math.max(-1, centerValue - spreadValue / 2 - paddingValue);
         const maximumScale = Math.min(1, centerValue + spreadValue / 2 + paddingValue);
         return {
           min: minimumScale,
@@ -1345,7 +1355,7 @@ export class DashboardViewService {
                 {
                   data: chartConfig.history.map((entry) => entry.breadthStrength),
                   borderColor: 'rgba(31, 162, 255, 0.95)',
-                  pointRadius: 0,
+                  pointRadius: (context) => context.dataIndex === chartConfig.history.length - 1 ? 2.5 : 0,
                   pointHoverRadius: 0,
                   tension: 0.34,
                   borderWidth: 2,
@@ -1353,7 +1363,7 @@ export class DashboardViewService {
                 {
                   data: chartConfig.history.map((entry) => entry.accelerationScore),
                   borderColor: 'rgba(255, 122, 24, 0.95)',
-                  pointRadius: 0,
+                  pointRadius: (context) => context.dataIndex === chartConfig.history.length - 1 ? 2.5 : 0,
                   pointHoverRadius: 0,
                   tension: 0.34,
                   borderWidth: 2,
@@ -1361,10 +1371,26 @@ export class DashboardViewService {
                 {
                   data: chartConfig.history.map((entry) => entry.reversalRiskScore),
                   borderColor: 'rgba(192, 57, 43, 0.88)',
-                  pointRadius: 0,
+                  pointRadius: (context) => context.dataIndex === chartConfig.history.length - 1 ? 2.5 : 0,
                   pointHoverRadius: 0,
                   tension: 0.34,
                   borderWidth: 2,
+                },
+                {
+                  data: chartConfig.history.map((entry) => entry.btcAnchorMomentum),
+                  borderColor: 'rgba(46, 196, 182, 0.95)',
+                  pointRadius: (context) => context.dataIndex === chartConfig.history.length - 1 ? 2.5 : 0,
+                  pointHoverRadius: 0,
+                  tension: 0.28,
+                  borderWidth: 1.8,
+                },
+                {
+                  data: chartConfig.history.map((entry) => entry.ethAnchorMomentum),
+                  borderColor: 'rgba(123, 97, 255, 0.9)',
+                  pointRadius: (context) => context.dataIndex === chartConfig.history.length - 1 ? 2.5 : 0,
+                  pointHoverRadius: 0,
+                  tension: 0.28,
+                  borderWidth: 1.8,
                 },
               ],
             },
