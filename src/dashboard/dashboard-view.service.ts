@@ -300,6 +300,24 @@ export class DashboardViewService {
         position: relative;
         height: 90px;
       }
+      .global-regime-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 14px;
+        align-items: center;
+        margin-top: 10px;
+      }
+      .global-regime-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .global-regime-legend-swatch {
+        width: 18px;
+        height: 3px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+      }
       .engine-matrix {
         overflow: auto;
       }
@@ -636,6 +654,15 @@ export class DashboardViewService {
           escapeHtml(label) +
           '</span></span>';
         return labelMarkup;
+      }
+
+      function renderGlobalRegimeLegendItem(code, fullLabel, description, color) {
+        const legendMarkup =
+          '<span class="global-regime-legend-item">' +
+            '<span class="global-regime-legend-swatch" style="background:' + escapeHtml(color) + '"></span>' +
+            renderHintLabel(code, fullLabel + '. ' + description) +
+          '</span>';
+        return legendMarkup;
       }
 
       function escapeHtml(value) {
@@ -1420,6 +1447,14 @@ export class DashboardViewService {
         const globalRegimes = summary.globalRegimes ?? { '5m': summary.globalRegime, '15m': null };
         const windows = ['5m', '15m'];
         const chartConfigs = [];
+        const legendMarkup =
+          '<div class="global-regime-legend">' +
+            renderGlobalRegimeLegendItem('BRD', 'Breadth Strength', 'Blue line. How much cross-asset directional force exists across the monitored markets.', 'rgba(31, 162, 255, 0.95)') +
+            renderGlobalRegimeLegendItem('ACC', 'Acceleration', 'Orange line. How quickly that breadth picture is changing right now.', 'rgba(255, 122, 24, 0.95)') +
+            renderGlobalRegimeLegendItem('REV', 'Reversal Risk', 'Red line. Pressure against continuation, usually from overshoot or cross-asset disagreement.', 'rgba(192, 57, 43, 0.88)') +
+            renderGlobalRegimeLegendItem('BTC', 'BTC Anchor Momentum', 'Teal line. Net BTC token momentum, computed as BTC UP momentum minus BTC DOWN momentum.', 'rgba(46, 196, 182, 0.95)') +
+            renderGlobalRegimeLegendItem('ETH', 'ETH Anchor Momentum', 'Purple line. Net ETH token momentum, computed as ETH UP momentum minus ETH DOWN momentum.', 'rgba(123, 97, 255, 0.9)') +
+          '</div>';
         const cardsMarkup = windows.map((windowLabel) => {
           const globalRegime = globalRegimes[windowLabel];
           const history = pushGlobalRegimeHistory(windowLabel, globalRegime);
@@ -1438,11 +1473,12 @@ export class DashboardViewService {
               '</div>' +
               '<div class="global-regime-token-grid">' +
                 '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.btcUpTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('BTC U', 'Momentum of the BTC UP token.') + '</div></div>' +
-                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.btcDownTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('BTC D', 'Momentum of the BTC DOWN token.') + '</div></div>' +
-                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.ethUpTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('ETH U', 'Momentum of the ETH UP token.') + '</div></div>' +
-                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.ethDownTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('ETH D', 'Momentum of the ETH DOWN token.') + '</div></div>' +
+              '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.btcDownTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('BTC D', 'Momentum of the BTC DOWN token.') + '</div></div>' +
+              '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.ethUpTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('ETH U', 'Momentum of the ETH UP token.') + '</div></div>' +
+              '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.ethDownTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('ETH D', 'Momentum of the ETH DOWN token.') + '</div></div>' +
               '</div>' +
               '<div class="global-regime-chart"><canvas id="' + chartCanvasId + '"></canvas></div>' +
+              legendMarkup +
             '</div>';
           return cardMarkup;
         }).join('');
