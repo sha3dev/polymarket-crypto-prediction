@@ -169,22 +169,6 @@ export class PredictionEngineService {
     return researchOutcome;
   }
 
-  private shouldHoldResearchAfterTakeProfit(predictionRecord: PredictionRecord, marketSlice: MarketSnapshotSlice | null): boolean {
-    const modelEvaluationSnapshot = this.evaluateCurrentModel(predictionRecord.marketKey);
-    let shouldHoldResearchAfterTakeProfit = false;
-    if (marketSlice !== null && modelEvaluationSnapshot !== null) {
-      const selectedCombo = modelEvaluationSnapshot.comboApplicationResult.selectedCombo;
-      const expectedDirection = predictionRecord.direction;
-      const hasDirectionMatch = selectedCombo?.direction === expectedDirection;
-      const hasComboSupport = (selectedCombo?.comboScore ?? 0) >= config.MIN_COMBO_EXECUTION_SCORE;
-      const hasAnchorConfirmation = this.hasAnchorConfirmation(predictionRecord.marketKey, predictionRecord.positionSide === "up" ? "up" : "down");
-      const hasAffordabilitySupport = (selectedCombo?.affordabilityScore ?? 0) >= 0.2;
-      const hasQualitySupport = marketSlice.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
-      shouldHoldResearchAfterTakeProfit = hasDirectionMatch && hasComboSupport && hasAnchorConfirmation && hasAffordabilitySupport && hasQualitySupport;
-    }
-    return shouldHoldResearchAfterTakeProfit;
-  }
-
   private hasResearchQualityConfirmation(qualityScore: number): boolean {
     const hasResearchQualityConfirmation = qualityScore >= RESEARCH_TRIGGER_MIN_QUALITY;
     return hasResearchQualityConfirmation;
@@ -233,11 +217,6 @@ export class PredictionEngineService {
         }
       }
     }
-  }
-
-  private resolveSignedDirection(positionSide: PositionSide): number {
-    const signedDirection = positionSide === "up" ? 1 : -1;
-    return signedDirection;
   }
 
   private resolveConfirmationTokenPrice(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number | null {
