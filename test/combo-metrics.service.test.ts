@@ -53,7 +53,9 @@ test("ComboMetricsService uses affordability to weaken late-entry combos", () =>
   const buildCandidateFromMembers = Reflect.get(comboMetricsService, "buildCandidateFromMembers") as
     | ((marketKey: MarketKey, strategySignals: StrategySignal[]) => object)
     | undefined;
-  const computeAffordabilityScore = Reflect.get(comboMetricsService, "computeAffordabilityScore") as ((activeComboCandidate: object) => number) | undefined;
+  const computeAffordabilityScore = Reflect.get(comboMetricsService, "computeAffordabilityScore") as
+    | ((activeComboCandidate: object, strategySignals: StrategySignal[]) => number)
+    | undefined;
 
   if (!buildCandidateFromMembers || !computeAffordabilityScore) {
     throw new Error("expected affordability helpers");
@@ -63,7 +65,8 @@ test("ComboMetricsService uses affordability to weaken late-entry combos", () =>
     buildStrategySignal("s14", "pricing", 0.78, 0.9, 0.88, true),
     buildStrategySignal("s24", "risk", -0.9, 0.92, 0.93, true),
   ]);
-  const affordabilityScore = computeAffordabilityScore.call(comboMetricsService, activeComboCandidate);
+  const affordabilitySignals = [buildStrategySignal("s14", "pricing", 0.78, 0.9, 0.88, true), buildStrategySignal("s24", "risk", -0.9, 0.92, 0.93, true)];
+  const affordabilityScore = computeAffordabilityScore.call(comboMetricsService, activeComboCandidate, affordabilitySignals);
 
   assert.equal(affordabilityScore < 0.2, true);
 });

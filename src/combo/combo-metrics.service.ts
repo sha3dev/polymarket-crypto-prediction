@@ -292,8 +292,11 @@ export class ComboMetricsService {
     return normalizedMarketQualityScore;
   }
 
-  private computeAffordabilityScore(activeComboCandidate: ActiveComboCandidate): number {
-    const stretchSignal = activeComboCandidate.memberSignals.find((memberSignal) => memberSignal.strategyId === "s24") ?? null;
+  private computeAffordabilityScore(activeComboCandidate: ActiveComboCandidate, strategySignals: StrategySignal[]): number {
+    const stretchSignal =
+      strategySignals.find((strategySignal) => strategySignal.strategyId === "s24" && strategySignal.direction === activeComboCandidate.direction) ??
+      strategySignals.find((strategySignal) => strategySignal.strategyId === "s24") ??
+      null;
     let affordabilityScore = 1;
     if (stretchSignal !== null) {
       affordabilityScore = Math.max(0, Math.min(1, 1 + stretchSignal.score));
@@ -404,6 +407,7 @@ export class ComboMetricsService {
     crossAssetRegime: CrossAssetRegime,
     marketQualityScore: number,
     selectionSource: ComboSource,
+    strategySignals: StrategySignal[],
   ): SelectedStrategyCombo | null {
     const direction = activeComboCandidate.direction;
     const agreementScore = activeComboCandidate.agreementScore;
@@ -412,7 +416,7 @@ export class ComboMetricsService {
     const semanticOverlapPenalty = this.computeSemanticOverlapPenalty(activeComboCandidate);
     const anchorFitScore = this.computeAnchorFitScore(activeComboCandidate.comboDefinition.marketKey, crossAssetRegime, direction);
     const normalizedQualityScore = this.computeMarketQualityScore(marketQualityScore);
-    const affordabilityScore = this.computeAffordabilityScore(activeComboCandidate);
+    const affordabilityScore = this.computeAffordabilityScore(activeComboCandidate, strategySignals);
     const sampleFloor = activeComboCandidate.comboDefinition.size === 2 ? config.MIN_COMBO_SAMPLES_PAIR : config.MIN_COMBO_SAMPLES_TRIO;
     const sampleScore = Math.max(0, Math.min(1, comboSummary.sampleCount / Math.max(1, sampleFloor)));
     const historicalHitScore = Math.max(0, Math.min(1, comboSummary.hitRate));
@@ -503,6 +507,7 @@ export class ComboMetricsService {
     activeComboCandidates: ActiveComboCandidate[],
     crossAssetRegime: CrossAssetRegime,
     marketQualityScore: number,
+    strategySignals: StrategySignal[],
   ): SelectedStrategyCombo | null {
     const scoredCombos: SelectedStrategyCombo[] = [];
     for (const activeComboCandidate of activeComboCandidates) {
@@ -510,7 +515,14 @@ export class ComboMetricsService {
       const researchSummary = this.buildSummaryFromDefinition(activeComboCandidate.comboDefinition, "research");
       const source = executionSummary.sampleCount > 0 ? "execution" : "research";
       const comboSummary = source === "execution" ? executionSummary : researchSummary;
-      const selectedStrategyCombo = this.buildSelectedStrategyCombo(activeComboCandidate, comboSummary, crossAssetRegime, marketQualityScore, source);
+      const selectedStrategyCombo = this.buildSelectedStrategyCombo(
+        activeComboCandidate,
+        comboSummary,
+        crossAssetRegime,
+        marketQualityScore,
+        source,
+        strategySignals,
+      );
       if (selectedStrategyCombo?.isResearchEligible) {
         scoredCombos.push(selectedStrategyCombo);
       }
@@ -932,7 +944,7 @@ export class ComboMetricsService {
       }
     }
     const comboGate = this.chooseBestExecutionCombo(marketKey, activeComboCandidates);
-    const selectedCombo = this.selectBestComboForMarketInternal(marketKey, activeComboCandidates, crossAssetRegime, marketQualityScore);
+    const selectedCombo = this.selectBestComboForMarketInternal(marketKey, activeComboCandidates, crossAssetRegime, marketQualityScore, strategySignals);
     this.latestExecutionComboDecision.set(marketKey, comboGate);
     const adjustedWeightedScore = baseWeightedScore + totalBoostApplied;
     const adjustedConfidence = this.clampConfidence(baseConfidence + Math.min(Math.abs(totalBoostApplied) * 0.5, 0.08) - totalConfidencePenaltyApplied);
@@ -965,6 +977,7 @@ export class ComboMetricsService {
       activeComboCandidates,
       input.crossAssetRegime,
       input.marketQualityScore,
+      input.strategySignals,
     );
     return selectedStrategyCombo;
   }
