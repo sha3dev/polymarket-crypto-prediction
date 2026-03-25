@@ -553,6 +553,7 @@ export class DashboardViewService {
         .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .global-regime-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .global-regime-token-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .global-regime-equalizer { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .panel-tall, .panel-medium, .panel-compact { min-height: 0; }
         .panel-scroll { max-height: none; }
       }
@@ -560,6 +561,47 @@ export class DashboardViewService {
         .shell { width: min(100vw - 20px, 1600px); }
         .kpi-strip { grid-template-columns: 1fr; }
         .health-grid { grid-template-columns: 1fr; }
+        .global-regime-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .global-regime-token-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .global-regime-kpi strong { font-size: 16px; }
+        .global-regime-equalizer { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .global-regime-equalizer-card { padding-top: 6px; padding-bottom: 4px; }
+        .global-regime-equalizer-card + .global-regime-equalizer-card { padding-left: 10px; }
+        .proximity-row {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+        .proximity-main {
+          padding: 10px 12px;
+        }
+        .proximity-meta {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 10px;
+          align-items: start;
+        }
+        .proximity-factors {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 6px;
+        }
+        .proximity-factor {
+          justify-content: center;
+          width: 100%;
+        }
+        .proximity-sparkline {
+          width: 100%;
+          height: 40px;
+        }
+        .proximity-score {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          text-align: left;
+        }
+        .proximity-score strong {
+          font-size: 20px;
+        }
         table { font-size: 12px; }
       }
     </style>

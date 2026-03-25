@@ -187,6 +187,25 @@ export class PredictionEngineService {
     return hasBreadthConfirmation;
   }
 
+  private hasAnchorConfirmation(marketKey: MarketKey, positionSide: PositionSide): boolean {
+    const predictionContext = this.marketStateService.getPredictionContext(marketKey);
+    let hasAnchorConfirmation = true;
+    if (predictionContext !== null) {
+      const asset = predictionContext.current.asset;
+      const crossAssetRegime = predictionContext.crossAssetRegime;
+      const requiredBtcMomentum = positionSide === "up" ? crossAssetRegime.btcUpTokenMomentum : crossAssetRegime.btcDownTokenMomentum;
+      const requiredEthMomentum = positionSide === "up" ? crossAssetRegime.ethUpTokenMomentum : crossAssetRegime.ethDownTokenMomentum;
+      const anchorThreshold = config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD * 0.35;
+      if (asset === "eth") {
+        hasAnchorConfirmation = requiredBtcMomentum >= anchorThreshold;
+      }
+      if (asset === "sol" || asset === "xrp") {
+        hasAnchorConfirmation = requiredBtcMomentum >= anchorThreshold && requiredEthMomentum >= anchorThreshold;
+      }
+    }
+    return hasAnchorConfirmation;
+  }
+
   private hasPendingTriggerConfirmed(marketTrigger: MarketTrigger, nowTimestamp: number): boolean {
     const marketSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
     let hasPendingTriggerConfirmed = false;
@@ -201,7 +220,9 @@ export class PredictionEngineService {
       const hasMomentumConfirmation = this.hasMomentumConfirmation(marketTrigger.marketKey, marketSlice, positionSide);
       const hasQualityConfirmation = marketSlice.quality.score >= config.MIN_RESEARCH_MARKET_QUALITY;
       const hasBreadthConfirmation = this.hasBreadthConfirmation(marketTrigger.marketKey);
-      hasPendingTriggerConfirmed = isPastDelay && hasMovedAwayFromHalf && hasMomentumConfirmation && hasQualityConfirmation && hasBreadthConfirmation;
+      const hasAnchorConfirmation = this.hasAnchorConfirmation(marketTrigger.marketKey, positionSide);
+      hasPendingTriggerConfirmed =
+        isPastDelay && hasMovedAwayFromHalf && hasMomentumConfirmation && hasQualityConfirmation && (hasBreadthConfirmation || hasAnchorConfirmation);
     }
     return hasPendingTriggerConfirmed;
   }

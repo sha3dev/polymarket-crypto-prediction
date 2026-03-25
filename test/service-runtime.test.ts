@@ -302,6 +302,59 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   });
 });
 
+test("ServiceRuntime confirms ETH predictions from BTC anchor support before strong breadth exists", async () => {
+  const serviceRuntime = ServiceRuntime.createDefault();
+  const server = serviceRuntime.buildServer();
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, () => {
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("failed to bind test server");
+  }
+
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(1_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.48, downPrice: 0.52, upMidpoint: 0.48, downMidpoint: 0.52 },
+      eth5m: { slug: "eth-5m", upPrice: 0.48, downPrice: 0.52, upMidpoint: 0.48, downMidpoint: 0.52 },
+    }),
+  );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(2_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.52, downPrice: 0.48, upMidpoint: 0.52, downMidpoint: 0.48 },
+      eth5m: { slug: "eth-5m", upPrice: 0.505, downPrice: 0.495, upMidpoint: 0.505, downMidpoint: 0.495 },
+    }),
+  );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(4_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.57, downPrice: 0.43, upMidpoint: 0.57, downMidpoint: 0.43 },
+      eth5m: { slug: "eth-5m", upPrice: 0.52, downPrice: 0.48, upMidpoint: 0.52, downMidpoint: 0.48 },
+    }),
+  );
+
+  const ethPredictionResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predict?asset=eth&window=5m`);
+  const ethPredictionJson = await ethPredictionResponse.json();
+
+  assert.equal(ethPredictionResponse.status, 200);
+  assert.equal(ethPredictionJson.asset, "eth");
+  assert.equal(ethPredictionJson.window, "5m");
+  assert.equal(typeof ethPredictionJson.selectedCombo.comboKey, "string");
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+});
+
 function buildSnapshot(
   generatedAt: number,
   overrides: {
