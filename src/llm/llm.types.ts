@@ -26,7 +26,6 @@ export type LlmPredictionCreatedEvent = {
   weightedScore: number;
   selectedComboKey: string;
   selectedComboScore: number;
-  selectedComboConfidence: number;
   selectedStrategyIds: string[];
   marketQualityScore: number;
   regimeId: string;

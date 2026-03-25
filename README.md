@@ -105,7 +105,6 @@ The selected combo exposes:
 - `memberStrategyIds`
 - `direction`
 - `comboScore`
-- `comboConfidence`
 - `historicalHitRate`
 - `historicalPnlProxy`
 - `sampleCount`
@@ -314,7 +313,6 @@ Execution is no longer driven by `setup`.
 It is driven by:
 
 - selected combo strength
-- combo confidence
 - anchor fit
 - market quality
 - market score
@@ -719,7 +717,6 @@ Live snapshot for one active combo candidate.
 
 Important fields:
 
-- combo confidence
 - agreement score
 - effective combo score
 - sample count
@@ -771,8 +768,8 @@ Important fields:
 - `selectedComboKey`
 - `selectedComboStrategyIds`
 - `selectedComboScore`
+- `predictionConfidence`
 - `selectedComboAffordabilityScore`
-- `selectedComboConfidence`
 - `blockingReasons`
 
 ### `MarketExecutionSummary`

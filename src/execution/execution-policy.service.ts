@@ -58,7 +58,7 @@ export class ExecutionPolicyService {
       selectedComboSource: prediction?.selectedCombo.selectionSource ?? null,
       selectedComboDirection: prediction?.selectedCombo.direction ?? null,
       selectedComboScore: prediction?.selectedCombo.comboScore ?? null,
-      selectedComboConfidence: prediction?.selectedCombo.comboConfidence ?? null,
+      predictionConfidence: prediction?.confidence ?? null,
       selectedComboStrategyIds: prediction?.selectedCombo.memberStrategyIds ?? [],
       selectedComboAffordabilityScore: prediction?.selectedCombo.affordabilityScore ?? null,
       regimeId: prediction?.crossAssetRegime.regimeId ?? null,
@@ -302,7 +302,7 @@ export class ExecutionPolicyService {
           if (marketSlice.quality.score < config.MIN_MARKET_QUALITY_FOR_ENTRY) {
             blockingReasons.push("quality_too_low");
           }
-          if (prediction.selectedCombo.comboConfidence < config.MIN_ENTRY_CONFIDENCE) {
+          if (prediction.confidence < config.MIN_ENTRY_CONFIDENCE) {
             blockingReasons.push("confidence_too_low");
           }
           if (prediction.selectedCombo.comboScore < 0.58) {
@@ -376,7 +376,7 @@ export class ExecutionPolicyService {
               selectedComboSource: prediction.selectedCombo.selectionSource,
               selectedComboDirection: prediction.selectedCombo.direction,
               selectedComboScore: prediction.selectedCombo.comboScore,
-              selectedComboConfidence: prediction.selectedCombo.comboConfidence,
+              predictionConfidence: prediction.confidence,
               selectedComboStrategyIds: [...prediction.selectedCombo.memberStrategyIds],
               selectedComboAffordabilityScore: prediction.selectedCombo.affordabilityScore,
               regimeId: prediction.crossAssetRegime.regimeId,

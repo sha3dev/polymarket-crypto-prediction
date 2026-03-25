@@ -319,7 +319,6 @@ export class LlmLogService {
       weightedScore: predictionResponse.weightedScore,
       selectedComboKey: predictionResponse.selectedCombo.comboKey,
       selectedComboScore: predictionResponse.selectedCombo.comboScore,
-      selectedComboConfidence: predictionResponse.selectedCombo.comboConfidence,
       selectedStrategyIds: predictionResponse.selectedCombo.memberStrategyIds,
       marketQualityScore: predictionResponse.selectedCombo.marketQualityScore,
       regimeId: predictionResponse.crossAssetRegime.regimeId,

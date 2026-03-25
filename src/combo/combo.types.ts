@@ -25,7 +25,6 @@ export type ComboUsage = {
   direction: PredictionDirection | null;
   isAgreement: boolean;
   agreementScore: number;
-  comboConfidence: number;
   comboScore: number;
   effectiveComboScore: number;
   sampleCount: number;
@@ -55,7 +54,6 @@ export type SelectedStrategyCombo = {
   memberStrategyIds: string[];
   size: ComboSize;
   direction: PredictionDirection;
-  comboConfidence: number;
   comboScore: number;
   agreementScore: number;
   historicalHitRate: number;

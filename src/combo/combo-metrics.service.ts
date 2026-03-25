@@ -29,7 +29,6 @@ type ComboOutcomeEntry = {
   isAgreement: boolean;
   direction: PredictionDirection | null;
   wasCorrect: boolean | null;
-  comboConfidence: number;
   comboPnlProxy: number;
   calibrationError: number;
   bestMemberHitRate: number;
@@ -38,7 +37,6 @@ type ComboOutcomeEntry = {
 
 type ActiveComboCandidate = {
   comboDefinition: ComboDefinition;
-  comboConfidence: number;
   agreementScore: number;
   isAgreement: boolean;
   direction: PredictionDirection | null;
@@ -212,20 +210,11 @@ export class ComboMetricsService {
     const direction = dominantEntry?.[0] ?? null;
     const agreementScore = memberSignals.length === 0 || dominantEntry === null ? 0 : dominantEntry[1] / memberSignals.length;
     const isAgreement = agreementScore === 1;
-    const comboConfidence =
-      memberSignals.length === 0
-        ? 0.5
-        : memberSignals.reduce((aggregatedConfidence, strategySignal) => aggregatedConfidence + strategySignal.confidence * strategySignal.weight, 0) /
-          Math.max(
-            1,
-            memberSignals.reduce((aggregatedWeight, strategySignal) => aggregatedWeight + strategySignal.weight, 0),
-          );
     return {
       comboDefinition: this.createComboDefinition(
         marketKey,
         memberSignals.map((strategySignal) => strategySignal.strategyId),
       ),
-      comboConfidence,
       agreementScore,
       isAgreement,
       direction,
@@ -416,17 +405,6 @@ export class ComboMetricsService {
     return minimumAnchorFit;
   }
 
-  private resolveMinimumComboConfidence(marketKey: MarketKey, anchorFitScore: number): number {
-    let minimumComboConfidence = 0.58;
-    if (marketKey.startsWith("eth:")) {
-      minimumComboConfidence = anchorFitScore >= 0.7 ? 0.54 : anchorFitScore >= 0.6 ? 0.56 : 0.58;
-    }
-    if (marketKey.startsWith("sol:") || marketKey.startsWith("xrp:")) {
-      minimumComboConfidence = anchorFitScore >= 0.8 ? 0.53 : anchorFitScore >= 0.68 ? 0.55 : 0.58;
-    }
-    return minimumComboConfidence;
-  }
-
   private resolveMinimumResearchComboScore(marketKey: MarketKey, anchorFitScore: number): number {
     let minimumResearchComboScore = 0.52;
     if (marketKey.startsWith("eth:")) {
@@ -460,7 +438,6 @@ export class ComboMetricsService {
     const historicalPnlScore = Math.max(0, Math.min(1, 0.5 + comboSummary.averagePnlProxy));
     const drawdownPenalty = Math.max(0, Math.min(1, comboSummary.maxDrawdownProxy));
     const minimumAnchorFit = this.resolveMinimumAnchorFit(activeComboCandidate.comboDefinition.marketKey);
-    const minimumComboConfidence = this.resolveMinimumComboConfidence(activeComboCandidate.comboDefinition.marketKey, anchorFitScore);
     const minimumResearchComboScore = this.resolveMinimumResearchComboScore(activeComboCandidate.comboDefinition.marketKey, anchorFitScore);
     const hasSanityCheckMember = this.hasSanityCheckMember(activeComboCandidate);
     const comboScore =
@@ -475,12 +452,7 @@ export class ComboMetricsService {
       semanticOverlapPenalty * 0.14;
     const hasEnoughAgreement = activeComboCandidate.comboDefinition.size === 2 ? agreementScore >= 0.75 : agreementScore >= 0.67 && diversityScore >= 0.67;
     const isResearchEligible =
-      direction !== null &&
-      hasEnoughAgreement &&
-      hasSanityCheckMember &&
-      activeComboCandidate.comboConfidence >= minimumComboConfidence &&
-      comboScore >= minimumResearchComboScore &&
-      anchorFitScore >= minimumAnchorFit;
+      direction !== null && hasEnoughAgreement && hasSanityCheckMember && comboScore >= minimumResearchComboScore && anchorFitScore >= minimumAnchorFit;
     const isExecutionEligible = isResearchEligible && comboScore >= 0.58 && affordabilityScore >= 0.35;
     let selectedStrategyCombo: SelectedStrategyCombo | null = null;
     if (direction !== null) {
@@ -490,7 +462,6 @@ export class ComboMetricsService {
         memberStrategyIds: activeComboCandidate.comboDefinition.memberStrategyIds,
         size: activeComboCandidate.comboDefinition.size,
         direction,
-        comboConfidence: activeComboCandidate.comboConfidence,
         comboScore,
         agreementScore,
         historicalHitRate: comboSummary.hitRate,
@@ -675,17 +646,17 @@ export class ComboMetricsService {
         const replayCandidate = this.buildCandidateFromMembers(comboDefinition.marketKey, replayMemberSignals);
         const wasCorrect =
           replayCandidate.direction === null || replayMoment.resolvedDirection === null ? null : replayCandidate.direction === replayMoment.resolvedDirection;
-        const comboPnlProxy = wasCorrect === null ? 0 : wasCorrect ? replayCandidate.comboConfidence : replayCandidate.comboConfidence * -1;
-        const targetConfidence = wasCorrect === null ? replayCandidate.comboConfidence : wasCorrect ? 1 : 0;
+        const comboAgreementStrength = replayCandidate.agreementScore;
+        const comboPnlProxy = wasCorrect === null ? 0 : wasCorrect ? comboAgreementStrength : comboAgreementStrength * -1;
+        const targetAgreement = wasCorrect === null ? comboAgreementStrength : wasCorrect ? 1 : 0;
         replayOutcomeEntries.push({
           predictionId: replayMoment.predictionId,
           resolvedAt: replayMoment.resolvedAt,
           isAgreement: replayCandidate.isAgreement,
           direction: replayCandidate.direction,
           wasCorrect,
-          comboConfidence: replayCandidate.comboConfidence,
           comboPnlProxy,
-          calibrationError: Math.abs(replayCandidate.comboConfidence - targetConfidence),
+          calibrationError: Math.abs(comboAgreementStrength - targetAgreement),
           bestMemberHitRate: 0.5,
           bestMemberPnlProxy: 0,
         });
@@ -804,7 +775,6 @@ export class ComboMetricsService {
       direction: activeComboCandidate.direction,
       isAgreement: activeComboCandidate.isAgreement,
       agreementScore: activeComboCandidate.agreementScore,
-      comboConfidence: activeComboCandidate.comboConfidence,
       comboScore: comboSummary.comboScore,
       effectiveComboScore: comboSummary.effectiveComboScore,
       sampleCount: comboSummary.sampleCount,
@@ -1136,7 +1106,6 @@ export class ComboMetricsService {
     marketKey: MarketKey,
     predictionId: string,
     comboUsages: ComboUsage[],
-    strategySignals: StrategySignal[],
     strategySummaries: StrategySummary[],
     resolvedDirection: PredictionDirection | null,
     resolvedAt: number | null,
@@ -1148,26 +1117,21 @@ export class ComboMetricsService {
     }
     for (const comboUsage of comboUsages) {
       const comboOutcomeEntries = this.requireComboOutcomes(marketKey, comboUsage.comboKey, source);
-      const memberSignals = strategySignals.filter((strategySignal) => comboUsage.memberStrategyIds.includes(strategySignal.strategyId));
       const bestMemberSummary = [...comboUsage.memberStrategyIds]
         .map((strategyId) => strategySummaryMap.get(strategyId))
         .filter(Boolean)
         .sort((leftSummary, rightSummary) => (rightSummary?.averagePnlProxy ?? 0) - (leftSummary?.averagePnlProxy ?? 0))[0];
       const wasCorrect = comboUsage.direction === null || resolvedDirection === null ? null : comboUsage.direction === resolvedDirection;
-      const comboConfidence =
-        memberSignals.length === 0
-          ? 0.5
-          : memberSignals.reduce((aggregatedConfidence, strategySignal) => aggregatedConfidence + strategySignal.confidence, 0) / memberSignals.length;
-      const comboPnlProxy = wasCorrect === null ? 0 : wasCorrect ? comboConfidence : comboConfidence * -1;
-      const targetConfidence = wasCorrect === null ? comboConfidence : wasCorrect ? 1 : 0;
-      const calibrationError = Math.abs(comboConfidence - targetConfidence);
+      const comboAgreementStrength = comboUsage.agreementScore;
+      const comboPnlProxy = wasCorrect === null ? 0 : wasCorrect ? comboAgreementStrength : comboAgreementStrength * -1;
+      const targetAgreement = wasCorrect === null ? comboAgreementStrength : wasCorrect ? 1 : 0;
+      const calibrationError = Math.abs(comboAgreementStrength - targetAgreement);
       comboOutcomeEntries.push({
         predictionId,
         resolvedAt,
         isAgreement: comboUsage.isAgreement,
         direction: comboUsage.direction,
         wasCorrect,
-        comboConfidence,
         comboPnlProxy,
         calibrationError,
         bestMemberHitRate: bestMemberSummary?.hitRate ?? 0.5,

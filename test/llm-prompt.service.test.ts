@@ -277,7 +277,6 @@ function buildPredictionResponse(predictionResponseOptions: PredictionResponseOp
       size: 2,
       direction: "UP",
       comboScore: 0.66,
-      comboConfidence: 0.74,
       agreementScore: 0.7,
       historicalHitRate: 0.6,
       historicalPnlProxy: 0.2,

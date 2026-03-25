@@ -22,10 +22,8 @@ import type { PredictionOutcome, PredictionRecord, PredictionResponse } from "./
  */
 
 const MODEL_TRIGGER_MIN_SCORE = 0.58;
-const MODEL_TRIGGER_MIN_CONFIDENCE = 0.58;
 const MODEL_TRIGGER_MIN_SCORE_DELTA = 0.16;
 const RESEARCH_TRIGGER_MIN_SCORE = 0.46;
-const RESEARCH_TRIGGER_MIN_CONFIDENCE = 0.52;
 const RESEARCH_TRIGGER_MIN_QUALITY = 0.68;
 
 /**
@@ -36,7 +34,6 @@ type ModelStateSnapshot = {
   comboKey: string | null;
   direction: PredictionDirection | null;
   comboScore: number;
-  comboConfidence: number;
   regimeId: string;
 };
 
@@ -197,7 +194,6 @@ export class PredictionEngineService {
           predictionRecord.marketKey,
           predictionRecord.predictionId,
           predictionRecord.comboBreakdown.activeCombos,
-          predictionRecord.strategyBreakdown,
           this.strategyMetricsService.getSummaries(predictionRecord.marketKey),
           researchOutcome.resolvedDirection,
           researchOutcome.resolvedAt,
@@ -310,7 +306,6 @@ export class PredictionEngineService {
       comboKey: selectedCombo?.comboKey ?? null,
       direction: selectedCombo?.direction ?? null,
       comboScore: selectedCombo?.comboScore ?? 0,
-      comboConfidence: selectedCombo?.comboConfidence ?? 0,
       regimeId: modelEvaluationSnapshot.predictionContext.crossAssetRegime.regimeId,
     };
     return modelStateSnapshot;
@@ -343,8 +338,7 @@ export class PredictionEngineService {
       const hasRegimeShift = previousModelStateSnapshot.regimeId !== currentModelStateSnapshot.regimeId && currentModelStateSnapshot.regimeId !== "neutral";
       const hasScoreShift = Math.abs(previousModelStateSnapshot.comboScore - currentModelStateSnapshot.comboScore) >= MODEL_TRIGGER_MIN_SCORE_DELTA;
       const hasMeaningfulShift = hasDirectionShift || hasComboIdentityShift || hasRegimeShift || hasScoreShift;
-      const hasStrongEnoughModelState =
-        currentModelStateSnapshot.comboScore >= MODEL_TRIGGER_MIN_SCORE && currentModelStateSnapshot.comboConfidence >= MODEL_TRIGGER_MIN_CONFIDENCE;
+      const hasStrongEnoughModelState = currentModelStateSnapshot.comboScore >= MODEL_TRIGGER_MIN_SCORE;
       if (hasMeaningfulShift && hasStrongEnoughModelState) {
         const triggerType: TriggerType = hasRegimeShift && !hasDirectionShift && !hasComboIdentityShift ? "regime_state_shift" : "combo_state_shift";
         const triggeredToken = this.resolvePositionSide(currentModelStateSnapshot.direction);
@@ -379,11 +373,9 @@ export class PredictionEngineService {
       const isPastDelay = ageMs >= config.TRIGGER_CONFIRMATION_DELAY_MS;
       const hasDirectionMatch = selectedCombo?.direction === expectedDirection;
       const hasScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= RESEARCH_TRIGGER_MIN_SCORE;
-      const hasConfidenceConfirmation = (selectedCombo?.comboConfidence ?? 0) >= RESEARCH_TRIGGER_MIN_CONFIDENCE;
       const hasQualityConfirmation = this.hasResearchQualityConfirmation(modelEvaluationSnapshot.predictionContext.current.quality.score);
       const hasAnchorConfirmation = this.hasAnchorConfirmation(marketTrigger.marketKey, marketTrigger.triggeredToken);
-      hasModelTriggerConfirmed =
-        isPastDelay && hasDirectionMatch && hasScoreConfirmation && hasConfidenceConfirmation && hasQualityConfirmation && hasAnchorConfirmation;
+      hasModelTriggerConfirmed = isPastDelay && hasDirectionMatch && hasScoreConfirmation && hasQualityConfirmation && hasAnchorConfirmation;
     }
     return hasModelTriggerConfirmed;
   }
@@ -427,7 +419,6 @@ export class PredictionEngineService {
         const expectedDirection: PredictionDirection = positionSide === "up" ? "UP" : "DOWN";
         const hasComboDirectionMatch = selectedCombo?.direction === expectedDirection;
         const hasComboScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= RESEARCH_TRIGGER_MIN_SCORE;
-        const hasComboConfidenceConfirmation = (selectedCombo?.comboConfidence ?? 0) >= RESEARCH_TRIGGER_MIN_CONFIDENCE;
         hasPendingTriggerConfirmed =
           isPastDelay &&
           hasMovedAwayFromHalf &&
@@ -435,8 +426,7 @@ export class PredictionEngineService {
           hasQualityConfirmation &&
           (hasBreadthConfirmation || hasAnchorConfirmation) &&
           hasComboDirectionMatch &&
-          hasComboScoreConfirmation &&
-          hasComboConfidenceConfirmation;
+          hasComboScoreConfirmation;
       }
     }
     return hasPendingTriggerConfirmed;
@@ -502,7 +492,7 @@ export class PredictionEngineService {
           const predictionRecord = this.buildPredictionRecord(
             marketTrigger.marketKey,
             winningDirection,
-            selectedCombo.comboConfidence,
+            comboApplicationResult.adjustedConfidence,
             selectedCombo.direction === "UP" ? selectedCombo.comboScore : selectedCombo.comboScore * -1,
             evaluationResult.baseWeightedScore,
             evaluationResult.baseConfidence,
@@ -744,7 +734,6 @@ export class PredictionEngineService {
         predictionRecord.marketKey,
         predictionRecord.predictionId,
         predictionRecord.comboBreakdown.activeCombos,
-        predictionRecord.strategyBreakdown,
         this.strategyMetricsService.getSummaries(predictionRecord.marketKey),
         outcome.resolvedDirection,
         resolvedAt,

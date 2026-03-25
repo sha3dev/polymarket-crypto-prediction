@@ -393,7 +393,7 @@ export class RealExecutionService {
       selectedComboSource: null,
       selectedComboDirection: null,
       selectedComboScore: null,
-      selectedComboConfidence: null,
+      predictionConfidence: null,
       selectedComboStrategyIds: [],
       selectedComboAffordabilityScore: null,
       regimeId: null,

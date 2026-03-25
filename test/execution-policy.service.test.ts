@@ -326,7 +326,6 @@ function buildPredictionResponse(
       memberStrategyIds: ["s09", "s21"],
       size: 2,
       direction,
-      comboConfidence: 0.88,
       comboScore: 0.84,
       agreementScore: 1,
       historicalHitRate: 0.7,

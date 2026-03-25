@@ -2138,7 +2138,6 @@ export class DashboardViewService {
               '<td>' + comboUsage.size + '</td>' +
               '<td>' + (comboUsage.direction === null ? '—' : renderDirectionPill(comboUsage.direction, "combo-direction-pill")) + '</td>' +
               '<td>' + formatNumber(comboUsage.effectiveComboScore, 2) + '</td>' +
-              '<td>' + formatNumber(comboUsage.comboConfidence, 2) + '</td>' +
               '<td>' + formatNumber(comboUsage.agreementScore, 2) + '</td>' +
               '<td>' + comboUsage.sampleCount + '</td>' +
               '<td>' + renderComboStatusPill(comboUsage.status, comboUsage.isExecutionEligible) + '</td>' +
@@ -2172,7 +2171,7 @@ export class DashboardViewService {
           '</div>';
         const tableMarkup = candidateRows.length === 0
           ? '<div class="tiny">No active combo candidates for this market right now.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Candidate combo generated from the current active strategies for this market.') + '</th><th>' + renderHintLabel('Sz', 'Combo size: pair or trio.') + '</th><th>' + renderHintLabel('Dir', 'Dominant direction of the combo candidate.') + '</th><th>' + renderHintLabel('Eff scr', 'Effective combo score used for ranking candidates.') + '</th><th>' + renderHintLabel('Conf', 'Candidate combo confidence.') + '</th><th>' + renderHintLabel('Agr', 'Agreement share across member strategies.') + '</th><th>' + renderHintLabel('N', 'Rolling sample count already accumulated for this combo.') + '</th><th>' + renderHintLabel('St', 'Current combo status based on rolling performance.') + '</th><th>' + renderHintLabel('Role', 'Whether the combo is selected, execution-candidate, merely applied as an adjustment, or just a background candidate.') + '</th><th>' + renderHintLabel('Why', 'Current status or application reason attached to the combo.') + '</th></tr></thead><tbody>' + candidateRows + '</tbody></table>');
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Candidate combo generated from the current active strategies for this market.') + '</th><th>' + renderHintLabel('Sz', 'Combo size: pair or trio.') + '</th><th>' + renderHintLabel('Dir', 'Dominant direction of the combo candidate.') + '</th><th>' + renderHintLabel('Eff scr', 'Effective combo score used for ranking candidates.') + '</th><th>' + renderHintLabel('Agr', 'Agreement share across member strategies.') + '</th><th>' + renderHintLabel('N', 'Rolling sample count already accumulated for this combo.') + '</th><th>' + renderHintLabel('St', 'Current combo status based on rolling performance.') + '</th><th>' + renderHintLabel('Role', 'Whether the combo is selected, execution-candidate, merely applied as an adjustment, or just a background candidate.') + '</th><th>' + renderHintLabel('Why', 'Current status or application reason attached to the combo.') + '</th></tr></thead><tbody>' + candidateRows + '</tbody></table>');
         replacePanelContent('combo-search', '<div class="tab-strip">' + tabMarkup + '</div>' + summaryMarkup + inlineMarkup + tableMarkup);
         document.querySelectorAll('#combo-search .tab-button[data-market-key]').forEach((tabButton) => {
           tabButton.addEventListener('click', () => {
