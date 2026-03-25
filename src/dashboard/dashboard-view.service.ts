@@ -310,6 +310,64 @@ export class DashboardViewService {
         width: 100% !important;
         height: 100% !important;
       }
+      .global-regime-equalizer {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .global-regime-equalizer-card {
+        padding: 10px 10px 8px;
+        border: 1px solid rgba(13, 27, 42, 0.08);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.6);
+      }
+      .global-regime-equalizer-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .global-regime-equalizer-head strong {
+        font-size: 12px;
+      }
+      .global-regime-equalizer-track {
+        position: relative;
+        height: 40px;
+        border-radius: 999px;
+        background:
+          linear-gradient(90deg, rgba(192, 57, 43, 0.08) 0%, rgba(192, 57, 43, 0.03) 48%, rgba(13, 27, 42, 0.07) 50%, rgba(15, 157, 88, 0.03) 52%, rgba(15, 157, 88, 0.08) 100%);
+        overflow: hidden;
+      }
+      .global-regime-equalizer-zero {
+        position: absolute;
+        left: 50%;
+        top: 5px;
+        bottom: 5px;
+        width: 1px;
+        background: rgba(13, 27, 42, 0.22);
+      }
+      .global-regime-equalizer-fill {
+        position: absolute;
+        top: 9px;
+        bottom: 9px;
+        border-radius: 999px;
+      }
+      .global-regime-equalizer-fill.positive {
+        background: linear-gradient(90deg, rgba(31, 162, 255, 0.85), rgba(15, 157, 88, 0.85));
+      }
+      .global-regime-equalizer-fill.negative {
+        background: linear-gradient(90deg, rgba(192, 57, 43, 0.85), rgba(255, 122, 24, 0.85));
+      }
+      .global-regime-equalizer-scale {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 6px;
+      }
+      .global-regime-equalizer-scale .tiny {
+        font-size: 10px;
+      }
       .global-regime-legend {
         display: flex;
         flex-wrap: wrap;
@@ -673,6 +731,41 @@ export class DashboardViewService {
             renderHintLabel(code, fullLabel + '. ' + description) +
           '</span>';
         return legendMarkup;
+      }
+
+      function clampToSignedUnit(value, maxMagnitude) {
+        const normalizedValue = maxMagnitude <= 0 ? 0 : value / maxMagnitude;
+        const clampedValue = Math.max(-1, Math.min(1, normalizedValue));
+        return clampedValue;
+      }
+
+      function renderCenteredEqualizer(label, value, maxMagnitude, description) {
+        const normalizedValue = clampToSignedUnit(value, maxMagnitude);
+        const widthPercent = Math.abs(normalizedValue) * 50;
+        const fillMarkup = normalizedValue === 0
+          ? ''
+          : '<span class="global-regime-equalizer-fill ' +
+            (normalizedValue > 0 ? 'positive' : 'negative') +
+            '" style="' +
+            (normalizedValue > 0 ? 'left:50%;' : 'right:50%;') +
+            'width:' + widthPercent.toFixed(1) + '%"></span>';
+        const equalizerMarkup =
+          '<div class="global-regime-equalizer-card">' +
+            '<div class="global-regime-equalizer-head">' +
+              '<strong>' + renderHintLabel(label, description) + '</strong>' +
+              '<span>' + formatNumber(value, 2) + '</span>' +
+            '</div>' +
+            '<div class="global-regime-equalizer-track">' +
+              '<span class="global-regime-equalizer-zero"></span>' +
+              fillMarkup +
+            '</div>' +
+            '<div class="global-regime-equalizer-scale">' +
+              '<span class="tiny muted">-</span>' +
+              '<span class="tiny muted">0</span>' +
+              '<span class="tiny muted">+</span>' +
+            '</div>' +
+          '</div>';
+        return equalizerMarkup;
       }
 
       function escapeHtml(value) {
@@ -1456,20 +1549,28 @@ export class DashboardViewService {
       function renderGlobalRegime(summary) {
         const globalRegimes = summary.globalRegimes ?? { '5m': summary.globalRegime, '15m': null };
         const windows = ['5m', '15m'];
-        const chartConfigs = [];
-        const legendMarkup =
-          '<div class="global-regime-legend">' +
-            renderGlobalRegimeLegendItem('BRD', 'Breadth Strength', 'Blue line. How much cross-asset directional force exists across the monitored markets.', 'rgba(31, 162, 255, 0.95)') +
-            renderGlobalRegimeLegendItem('ACC', 'Acceleration', 'Orange line. How quickly that breadth picture is changing right now.', 'rgba(255, 122, 24, 0.95)') +
-            renderGlobalRegimeLegendItem('REV', 'Reversal Risk', 'Red line. Pressure against continuation, usually from overshoot or cross-asset disagreement.', 'rgba(192, 57, 43, 0.88)') +
-            renderGlobalRegimeLegendItem('BTC', 'BTC Anchor Momentum', 'Teal line. Net BTC token momentum, computed as BTC UP momentum minus BTC DOWN momentum.', 'rgba(46, 196, 182, 0.95)') +
-            renderGlobalRegimeLegendItem('ETH', 'ETH Anchor Momentum', 'Purple line. Net ETH token momentum, computed as ETH UP momentum minus ETH DOWN momentum.', 'rgba(123, 97, 255, 0.9)') +
-          '</div>';
         const cardsMarkup = windows.map((windowLabel) => {
           const globalRegime = globalRegimes[windowLabel];
-          const history = pushGlobalRegimeHistory(windowLabel, globalRegime);
-          const chartCanvasId = 'global-regime-chart-' + windowLabel;
-          chartConfigs.push({ canvasId: chartCanvasId, history });
+          const breadthSignedValue = globalRegime === null
+            ? 0
+            : (globalRegime.breadthDirection === 'UP' ? 1 : globalRegime.breadthDirection === 'DOWN' ? -1 : 0) * globalRegime.breadthStrength;
+          const participationSignedValue = globalRegime === null
+            ? 0
+            : (globalRegime.breadthDirection === 'UP' ? 1 : globalRegime.breadthDirection === 'DOWN' ? -1 : 0) * globalRegime.breadthParticipation;
+          const accelerationSignedValue = globalRegime === null
+            ? 0
+            : (globalRegime.breadthDirection === 'UP' ? 1 : globalRegime.breadthDirection === 'DOWN' ? -1 : 0) * globalRegime.accelerationScore;
+          const reversalSignedValue = globalRegime === null ? 0 : globalRegime.reversalRiskScore * -1;
+          const btcSignedValue = globalRegime === null ? 0 : globalRegime.btcUpTokenMomentum - globalRegime.btcDownTokenMomentum;
+          const ethSignedValue = globalRegime === null ? 0 : globalRegime.ethUpTokenMomentum - globalRegime.ethDownTokenMomentum;
+          const equalizerMarkup =
+            '<div class="global-regime-equalizer">' +
+              renderCenteredEqualizer('BRD', breadthSignedValue, 1, 'Signed breadth strength. Right means upward breadth, left means downward breadth.') +
+              renderCenteredEqualizer('PAR', participationSignedValue, 1, 'Signed breadth participation. Right means more markets align up, left means more align down.') +
+              renderCenteredEqualizer('ACC', accelerationSignedValue, 1, 'Signed acceleration. Right means upward breadth is building faster, left means downward breadth is building faster.') +
+              renderCenteredEqualizer('BTC', btcSignedValue, 0.25, 'Net BTC anchor momentum. Right means BTC UP token dominates, left means BTC DOWN token dominates.') +
+              renderCenteredEqualizer('ETH', ethSignedValue, 0.25, 'Net ETH anchor momentum. Right means ETH UP token dominates, left means ETH DOWN token dominates.') +
+            '</div>';
           const cardMarkup = '<div class="global-regime-card">' +
               '<div class="global-regime-card-head">' +
                 '<div><strong>' + windowLabel + '</strong></div>' +
@@ -1483,18 +1584,16 @@ export class DashboardViewService {
               '</div>' +
               '<div class="global-regime-token-grid">' +
                 '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.btcUpTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('BTC U', 'Momentum of the BTC UP token.') + '</div></div>' +
-              '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.btcDownTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('BTC D', 'Momentum of the BTC DOWN token.') + '</div></div>' +
-              '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.ethUpTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('ETH U', 'Momentum of the ETH UP token.') + '</div></div>' +
-              '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.ethDownTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('ETH D', 'Momentum of the ETH DOWN token.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.btcDownTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('BTC D', 'Momentum of the BTC DOWN token.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.ethUpTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('ETH U', 'Momentum of the ETH UP token.') + '</div></div>' +
+                '<div class="global-regime-kpi"><strong>' + formatNumber(globalRegime?.ethDownTokenMomentum ?? 0, 2) + '</strong><div class="tiny">' + renderHintLabel('ETH D', 'Momentum of the ETH DOWN token.') + '</div></div>' +
               '</div>' +
-              '<div class="global-regime-chart"><canvas id="' + chartCanvasId + '"></canvas></div>' +
-              legendMarkup +
+              equalizerMarkup +
             '</div>';
           return cardMarkup;
         }).join('');
         const markup = '<div class="global-regime-stack">' + cardsMarkup + '</div>';
         replaceStaticContent("global-regime", markup);
-        hydrateGlobalRegimeCharts(chartConfigs);
       }
 
       function renderMarkets(summary) {
