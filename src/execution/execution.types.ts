@@ -31,9 +31,6 @@ export type ExecutionDecision = {
   window: MarketWindow;
   isEntryAllowed: boolean;
   marketScore: number | null;
-  researchScore: number | null;
-  executionScore: number | null;
-  effectiveExecutionScore: number | null;
   marketTradeCount: number;
   hasSufficientMarketHistory: boolean;
   positionSide: PositionSide | null;
@@ -63,7 +60,6 @@ export type ExecutionDecision = {
   selectedComboStrategyIds: string[];
   selectedComboAffordabilityScore: number | null;
   regimeId: string | null;
-  readinessScore: number;
   blockingReasons: string[];
   generatedAt: number | null;
 };
@@ -143,10 +139,7 @@ export type MarketPerformanceSummary = {
   asset: AssetSymbol;
   window: MarketWindow;
   predictionCount: number;
-  score: number;
-  researchScore: number;
-  executionScore: number | null;
-  effectiveExecutionScore: number;
+  marketScore: number;
   tradeCount: number;
   researchPredictionCount: number;
   executedTradeCount: number;

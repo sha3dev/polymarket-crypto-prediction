@@ -119,14 +119,38 @@ export class ComboMetricsService {
     return comboOutcomeEntries;
   }
 
+  private resolveMinimumStrategyScoreForCombo(marketKey: MarketKey): number {
+    let minimumStrategyScoreForCombo = config.MIN_STRATEGY_SCORE_FOR_COMBO;
+    if (marketKey.startsWith("eth:")) {
+      minimumStrategyScoreForCombo = 0.025;
+    }
+    if (marketKey.startsWith("sol:") || marketKey.startsWith("xrp:")) {
+      minimumStrategyScoreForCombo = 0.02;
+    }
+    return minimumStrategyScoreForCombo;
+  }
+
+  private resolveMinimumStrategyConfidenceForCombo(marketKey: MarketKey): number {
+    let minimumStrategyConfidenceForCombo = config.MIN_STRATEGY_CONFIDENCE_FOR_COMBO;
+    if (marketKey.startsWith("eth:")) {
+      minimumStrategyConfidenceForCombo = 0.52;
+    }
+    if (marketKey.startsWith("sol:") || marketKey.startsWith("xrp:")) {
+      minimumStrategyConfidenceForCombo = 0.515;
+    }
+    return minimumStrategyConfidenceForCombo;
+  }
+
   private buildActiveComboCandidates(marketKey: MarketKey, strategySignals: StrategySignal[]): ActiveComboCandidate[] {
+    const minimumStrategyScoreForCombo = this.resolveMinimumStrategyScoreForCombo(marketKey);
+    const minimumStrategyConfidenceForCombo = this.resolveMinimumStrategyConfidenceForCombo(marketKey);
     const participantSignals = strategySignals
       .filter((strategySignal) => {
         return (
           strategySignal.didParticipate &&
           strategySignal.isComboEligible &&
-          Math.abs(strategySignal.score) >= config.MIN_STRATEGY_SCORE_FOR_COMBO &&
-          strategySignal.confidence >= config.MIN_STRATEGY_CONFIDENCE_FOR_COMBO
+          Math.abs(strategySignal.score) >= minimumStrategyScoreForCombo &&
+          strategySignal.confidence >= minimumStrategyConfidenceForCombo
         );
       })
       .sort((leftSignal, rightSignal) => rightSignal.snapshotUtility - leftSignal.snapshotUtility);
@@ -233,33 +257,39 @@ export class ComboMetricsService {
     const isUpDirection = predictedDirection === "UP";
     const btcMomentum = isUpDirection ? crossAssetRegime.btcUpTokenMomentum : crossAssetRegime.btcDownTokenMomentum;
     const ethMomentum = isUpDirection ? crossAssetRegime.ethUpTokenMomentum : crossAssetRegime.ethDownTokenMomentum;
+    const softAnchorThreshold = config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD * 0.35;
+    const btcSupport = Math.max(0, Math.min(1, btcMomentum / Math.max(softAnchorThreshold, 0.0001)));
+    const ethSupport = Math.max(0, Math.min(1, ethMomentum / Math.max(softAnchorThreshold, 0.0001)));
+    const hasBtcHardConflict = crossAssetRegime.btcDirection !== "NEUTRAL" && crossAssetRegime.btcDirection !== predictedDirection;
+    const hasEthHardConflict = crossAssetRegime.ethDirection !== "NEUTRAL" && crossAssetRegime.ethDirection !== predictedDirection;
+    const hasBtcDirectionAligned = !hasBtcHardConflict && (crossAssetRegime.btcDirection === predictedDirection || btcSupport >= 0.35);
+    const hasEthDirectionAligned = !hasEthHardConflict && (crossAssetRegime.ethDirection === predictedDirection || ethSupport >= 0.35);
     let anchorFitScore = 0.75;
     if (asset === "btc") {
       anchorFitScore = 0.9 + crossAssetRegime.breadthStrength * 0.1;
     }
     if (asset === "eth") {
-      anchorFitScore = crossAssetRegime.btcDirection === predictedDirection && btcMomentum >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD ? 1 : 0.15;
+      anchorFitScore = hasBtcDirectionAligned
+        ? 0.52 + btcSupport * 0.34 + crossAssetRegime.breadthParticipation * 0.08 + crossAssetRegime.breadthStrength * 0.06
+        : 0.15;
     }
     if (asset === "sol" || asset === "xrp") {
       anchorFitScore =
-        crossAssetRegime.btcDirection === predictedDirection &&
-        crossAssetRegime.ethDirection === predictedDirection &&
-        btcMomentum >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD &&
-        ethMomentum >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD
-          ? 1
+        hasBtcDirectionAligned && hasEthDirectionAligned
+          ? 0.56 +
+            ((btcSupport + ethSupport) / 2) * 0.22 +
+            (crossAssetRegime.hasEthAlignment ? 0.1 : 0) +
+            crossAssetRegime.followerParticipation * 0.06 +
+            crossAssetRegime.breadthStrength * 0.06
           : 0.05;
     }
+    anchorFitScore = Math.max(0, Math.min(1, anchorFitScore));
     return anchorFitScore;
   }
 
   private computeMarketQualityScore(marketQualityScore: number): number {
     const normalizedMarketQualityScore = Math.max(0, Math.min(1, marketQualityScore));
     return normalizedMarketQualityScore;
-  }
-
-  private computeExecutionReadinessScore(executionScore: number | null): number {
-    const normalizedExecutionReadinessScore = executionScore === null ? 0.35 : Math.max(0, Math.min(1, executionScore));
-    return normalizedExecutionReadinessScore;
   }
 
   private computeAffordabilityScore(activeComboCandidate: ActiveComboCandidate): number {
@@ -304,12 +334,12 @@ export class ComboMetricsService {
     return historyReason;
   }
 
-  private buildReadinessReason(executionReadinessScore: number, marketQualityScore: number): string {
+  private buildExecutionReason(executionComboScore: number, marketQualityScore: number): string {
     let readinessReason = "entry readiness is weak";
-    if (executionReadinessScore >= 0.45 && marketQualityScore >= 0.75) {
+    if (executionComboScore >= 0.45 && marketQualityScore >= 0.75) {
       readinessReason = "entry conditions look tradable";
     }
-    if (executionReadinessScore >= 0.65 && marketQualityScore >= 0.82) {
+    if (executionComboScore >= 0.65 && marketQualityScore >= 0.82) {
       readinessReason = "entry conditions look strong";
     }
     return readinessReason;
@@ -320,7 +350,7 @@ export class ComboMetricsService {
     comboSummary: ComboSummary,
     agreementScore: number,
     anchorFitScore: number,
-    executionReadinessScore: number,
+    executionComboScore: number,
     marketQualityScore: number,
     affordabilityScore: number,
   ): string {
@@ -328,11 +358,44 @@ export class ComboMetricsService {
     const agreementReason = this.buildAgreementReason(agreementScore);
     const anchorFitReason = this.buildAnchorFitReason(anchorFitScore);
     const historyReason = this.buildHistoryReason(comboSummary);
-    const readinessReason = this.buildReadinessReason(executionReadinessScore, marketQualityScore);
+    const readinessReason = this.buildExecutionReason(executionComboScore, marketQualityScore);
     const affordabilityReason =
       affordabilityScore >= 0.75 ? "entry is not stretched" : affordabilityScore >= 0.45 ? "entry is getting stretched" : "entry looks late";
     const selectionReason = `${sourceReason}, ${agreementReason}, ${anchorFitReason}, ${historyReason}, ${readinessReason}, ${affordabilityReason}`;
     return selectionReason;
+  }
+
+  private resolveMinimumAnchorFit(marketKey: MarketKey): number {
+    let minimumAnchorFit = 0;
+    if (marketKey.startsWith("eth:")) {
+      minimumAnchorFit = 0.55;
+    }
+    if (marketKey.startsWith("sol:") || marketKey.startsWith("xrp:")) {
+      minimumAnchorFit = 0.68;
+    }
+    return minimumAnchorFit;
+  }
+
+  private resolveMinimumComboConfidence(marketKey: MarketKey, anchorFitScore: number): number {
+    let minimumComboConfidence = 0.58;
+    if (marketKey.startsWith("eth:")) {
+      minimumComboConfidence = anchorFitScore >= 0.7 ? 0.54 : anchorFitScore >= 0.6 ? 0.56 : 0.58;
+    }
+    if (marketKey.startsWith("sol:") || marketKey.startsWith("xrp:")) {
+      minimumComboConfidence = anchorFitScore >= 0.8 ? 0.53 : anchorFitScore >= 0.68 ? 0.55 : 0.58;
+    }
+    return minimumComboConfidence;
+  }
+
+  private resolveMinimumResearchComboScore(marketKey: MarketKey, anchorFitScore: number): number {
+    let minimumResearchComboScore = 0.52;
+    if (marketKey.startsWith("eth:")) {
+      minimumResearchComboScore = anchorFitScore >= 0.7 ? 0.47 : anchorFitScore >= 0.6 ? 0.5 : 0.52;
+    }
+    if (marketKey.startsWith("sol:") || marketKey.startsWith("xrp:")) {
+      minimumResearchComboScore = anchorFitScore >= 0.8 ? 0.46 : anchorFitScore >= 0.68 ? 0.49 : 0.52;
+    }
+    return minimumResearchComboScore;
   }
 
   private buildSelectedStrategyCombo(
@@ -340,7 +403,6 @@ export class ComboMetricsService {
     comboSummary: ComboSummary,
     crossAssetRegime: CrossAssetRegime,
     marketQualityScore: number,
-    executionScore: number | null,
     selectionSource: ComboSource,
   ): SelectedStrategyCombo | null {
     const direction = activeComboCandidate.direction;
@@ -350,13 +412,15 @@ export class ComboMetricsService {
     const semanticOverlapPenalty = this.computeSemanticOverlapPenalty(activeComboCandidate);
     const anchorFitScore = this.computeAnchorFitScore(activeComboCandidate.comboDefinition.marketKey, crossAssetRegime, direction);
     const normalizedQualityScore = this.computeMarketQualityScore(marketQualityScore);
-    const executionReadinessScore = this.computeExecutionReadinessScore(executionScore);
     const affordabilityScore = this.computeAffordabilityScore(activeComboCandidate);
     const sampleFloor = activeComboCandidate.comboDefinition.size === 2 ? config.MIN_COMBO_SAMPLES_PAIR : config.MIN_COMBO_SAMPLES_TRIO;
     const sampleScore = Math.max(0, Math.min(1, comboSummary.sampleCount / Math.max(1, sampleFloor)));
     const historicalHitScore = Math.max(0, Math.min(1, comboSummary.hitRate));
     const historicalPnlScore = Math.max(0, Math.min(1, 0.5 + comboSummary.averagePnlProxy));
     const drawdownPenalty = Math.max(0, Math.min(1, comboSummary.maxDrawdownProxy));
+    const minimumAnchorFit = this.resolveMinimumAnchorFit(activeComboCandidate.comboDefinition.marketKey);
+    const minimumComboConfidence = this.resolveMinimumComboConfidence(activeComboCandidate.comboDefinition.marketKey, anchorFitScore);
+    const minimumResearchComboScore = this.resolveMinimumResearchComboScore(activeComboCandidate.comboDefinition.marketKey, anchorFitScore);
     const researchComboScore =
       agreementScore * 0.24 +
       historicalHitScore * 0.18 +
@@ -367,21 +431,16 @@ export class ComboMetricsService {
       drawdownPenalty * 0.1 -
       familyRedundancyPenalty * 0.08 -
       semanticOverlapPenalty * 0.08;
-    const executionComboScore = researchComboScore * 0.7 + normalizedQualityScore * 0.12 + executionReadinessScore * 0.12 + affordabilityScore * 0.06;
+    const executionComboScore = researchComboScore * 0.82 + normalizedQualityScore * 0.12 + affordabilityScore * 0.06;
     const hasEnoughAgreement = activeComboCandidate.comboDefinition.size === 2 ? agreementScore >= 0.75 : agreementScore >= 0.67 && diversityScore >= 0.67;
-    const minimumAnchorFit = activeComboCandidate.comboDefinition.marketKey.startsWith("eth:")
-      ? 0.6
-      : activeComboCandidate.comboDefinition.marketKey.startsWith("sol:") || activeComboCandidate.comboDefinition.marketKey.startsWith("xrp:")
-        ? 0.75
-        : 0;
     const hasContrarianStretchSignal = activeComboCandidate.memberSignals.some(
       (memberSignal) => memberSignal.strategyId === "s24" && memberSignal.direction !== direction,
     );
     const isResearchEligible =
       direction !== null &&
       hasEnoughAgreement &&
-      activeComboCandidate.comboConfidence >= 0.58 &&
-      researchComboScore >= 0.52 &&
+      activeComboCandidate.comboConfidence >= minimumComboConfidence &&
+      researchComboScore >= minimumResearchComboScore &&
       anchorFitScore >= minimumAnchorFit &&
       !hasContrarianStretchSignal;
     const isExecutionEligible = isResearchEligible && executionComboScore >= 0.58 && affordabilityScore >= 0.35;
@@ -407,14 +466,13 @@ export class ComboMetricsService {
         semanticOverlapPenalty,
         anchorFitScore,
         marketQualityScore: normalizedQualityScore,
-        executionReadinessScore,
         affordabilityScore,
         selectionReason: this.buildSelectionReason(
           selectionSource,
           comboSummary,
           agreementScore,
           anchorFitScore,
-          executionReadinessScore,
+          executionComboScore,
           normalizedQualityScore,
           affordabilityScore,
         ),
@@ -445,7 +503,6 @@ export class ComboMetricsService {
     activeComboCandidates: ActiveComboCandidate[],
     crossAssetRegime: CrossAssetRegime,
     marketQualityScore: number,
-    executionScore: number | null,
   ): SelectedStrategyCombo | null {
     const scoredCombos: SelectedStrategyCombo[] = [];
     for (const activeComboCandidate of activeComboCandidates) {
@@ -453,14 +510,7 @@ export class ComboMetricsService {
       const researchSummary = this.buildSummaryFromDefinition(activeComboCandidate.comboDefinition, "research");
       const source = executionSummary.sampleCount > 0 ? "execution" : "research";
       const comboSummary = source === "execution" ? executionSummary : researchSummary;
-      const selectedStrategyCombo = this.buildSelectedStrategyCombo(
-        activeComboCandidate,
-        comboSummary,
-        crossAssetRegime,
-        marketQualityScore,
-        executionScore,
-        source,
-      );
+      const selectedStrategyCombo = this.buildSelectedStrategyCombo(activeComboCandidate, comboSummary, crossAssetRegime, marketQualityScore, source);
       if (selectedStrategyCombo?.isResearchEligible) {
         scoredCombos.push(selectedStrategyCombo);
       }
@@ -548,8 +598,9 @@ export class ComboMetricsService {
 
   private computeBootstrapDiscount(sampleCount: number, minimumSampleCount: number): number {
     const sampleProgress = Math.max(0, Math.min(1, sampleCount / Math.max(1, minimumSampleCount)));
-    const bootstrapDiscount =
-      config.EXECUTION_BOOTSTRAP_MIN_DISCOUNT + (config.EXECUTION_BOOTSTRAP_MAX_DISCOUNT - config.EXECUTION_BOOTSTRAP_MIN_DISCOUNT) * sampleProgress;
+    const bootstrapFloor = 0.45;
+    const bootstrapCeiling = 0.7;
+    const bootstrapDiscount = bootstrapFloor + (bootstrapCeiling - bootstrapFloor) * sampleProgress;
     return bootstrapDiscount;
   }
 
@@ -810,7 +861,6 @@ export class ComboMetricsService {
     baseConfidence: number,
     crossAssetRegime: CrossAssetRegime,
     marketQualityScore: number,
-    executionScore: number | null,
   ): {
     adjustedWeightedScore: number;
     adjustedConfidence: number;
@@ -882,7 +932,7 @@ export class ComboMetricsService {
       }
     }
     const comboGate = this.chooseBestExecutionCombo(marketKey, activeComboCandidates);
-    const selectedCombo = this.selectBestComboForMarketInternal(marketKey, activeComboCandidates, crossAssetRegime, marketQualityScore, executionScore);
+    const selectedCombo = this.selectBestComboForMarketInternal(marketKey, activeComboCandidates, crossAssetRegime, marketQualityScore);
     this.latestExecutionComboDecision.set(marketKey, comboGate);
     const adjustedWeightedScore = baseWeightedScore + totalBoostApplied;
     const adjustedConfidence = this.clampConfidence(baseConfidence + Math.min(Math.abs(totalBoostApplied) * 0.5, 0.08) - totalConfidencePenaltyApplied);
@@ -908,7 +958,6 @@ export class ComboMetricsService {
     strategySignals: StrategySignal[];
     crossAssetRegime: CrossAssetRegime;
     marketQualityScore: number;
-    executionScore: number | null;
   }): SelectedStrategyCombo | null {
     const activeComboCandidates = this.buildActiveComboCandidates(input.marketKey, input.strategySignals);
     const selectedStrategyCombo = this.selectBestComboForMarketInternal(
@@ -916,7 +965,6 @@ export class ComboMetricsService {
       activeComboCandidates,
       input.crossAssetRegime,
       input.marketQualityScore,
-      input.executionScore,
     );
     return selectedStrategyCombo;
   }

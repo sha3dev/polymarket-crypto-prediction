@@ -29,7 +29,7 @@ This project tries to solve that with a smaller and more coherent model:
 2. Read cross-asset anchor context from `BTC` and `ETH`.
 3. Search dynamic strategy combos for the current market.
 4. Select the best combo for research.
-5. Allow execution only if the combo also survives market quality, execution score, and anchor rules.
+5. Allow execution only if the combo also survives market quality, affordability, market-score, and anchor rules.
 
 ## Main Capabilities
 
@@ -116,7 +116,6 @@ The selected combo exposes:
 - `semanticOverlapPenalty`
 - `anchorFitScore`
 - `marketQualityScore`
-- `executionReadinessScore`
 - `affordabilityScore`
 - `selectionReason`
 
@@ -168,15 +167,9 @@ The important score layers are:
 - `researchComboScore`
   Combo ranking score used to decide whether a combo is worth recording as research.
 - `executionComboScore`
-  Combo score after market quality, execution readiness, and affordability are folded in.
-- `researchScore`
-  Market-level research trust built from resolved predictions.
-- `executionScore`
-  Market-level execution trust built from closed trades.
-- `effectiveExecutionScore`
-  Execution score after bootstrap discounting when history is thin.
-- `readinessScore`
-  Final operational `0..1` score used by the execution gate and the `Trade Candidates` panel.
+  Combo score after market quality and affordability are folded in.
+- `marketScore`
+  Market-level predictive trust built only from resolved research predictions.
 
 ### Cross-Asset Anchor Regime
 
@@ -323,9 +316,9 @@ It is driven by:
 - selected combo strength
 - combo confidence
 - anchor fit
-- readiness score
 - market quality
-- effective execution score
+- market score
+- affordability
 - price band
 - spread
 - live-market status
@@ -340,13 +333,10 @@ Typical blocking reasons:
 - `confidence_too_low`
 - `combo_score_too_low`
 - `anchor_fit_too_low`
-- `readiness_too_low`
 - `outside_entry_band`
 - `spread_too_wide`
 - `market_warming_up`
-- `insufficient_execution_history`
-- `bootstrap_discount_too_low`
-- `execution_score_too_low`
+- `market_score_too_low`
 
 ## Dashboard
 
@@ -399,14 +389,13 @@ Each row shows:
 - research combo score
 - execution combo score
 - affordability
-- research/execution/effective execution scores
 - regime
-- readiness
+- market score
 - blocking reason
 
 ### Trade Candidates
 
-Sorted list of markets by readiness.
+Sorted list of markets by operational priority.
 
 This panel is the fastest way to answer:
 
@@ -745,11 +734,13 @@ Current decision for one market.
 Important fields:
 
 - `isEntryAllowed`
+- `marketScore`
 - `selectedComboKey`
 - `selectedComboStrategyIds`
 - `selectedComboScore`
+- `selectedComboExecutionScore`
+- `selectedComboAffordabilityScore`
 - `selectedComboConfidence`
-- `readinessScore`
 - `blockingReasons`
 
 ### `MarketExecutionSummary`
@@ -882,12 +873,8 @@ These still affect the underlying strategy layer even though the final decision 
 - `MARKET_SCORE_WINDOW_SECONDS`
 - `MIN_MARKET_TRADES_FOR_SCORING`
 - `MIN_MARKET_SCORE_FOR_ENTRY`
-- `MIN_EXECUTION_SCORE_FOR_ENTRY`
-- `MIN_RESEARCH_SCORE_FOR_BOOTSTRAP`
 - `MIN_MARKET_PREDICTIONS_BEFORE_ENTRY`
 - `MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP`
-- `EXECUTION_BOOTSTRAP_MIN_DISCOUNT`
-- `EXECUTION_BOOTSTRAP_MAX_DISCOUNT`
 
 ### Entry and risk
 
@@ -964,16 +951,16 @@ Check:
 
 - `Global Regime` is not fragmented or heavily reversal-risk
 - the selected combo is non-empty
-- `readinessScore` is not low
+- `marketScore` is not below the trading threshold
 - `cross_asset_regime_conflict` is not blocking the market
-- `effectiveExecutionScore` is not still in bootstrap discount
+- the selected combo still has enough execution score and affordability
 
 ### Predictions exist but no trades happen
 
 That is normal when:
 
 - combos are good enough for research
-- but anchor fit, readiness, market quality, or execution score are still below threshold
+- but anchor fit, affordability, market quality, or combo execution score are still below threshold
 
 Read:
 

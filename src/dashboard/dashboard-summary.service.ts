@@ -72,9 +72,12 @@ export type DashboardSummaryPayload = {
   }>;
   tradeCandidates: Array<{
     marketKey: string;
-    readinessScore: number;
     comboKey: string | null;
+    marketScore: number | null;
+    executionComboScore: number | null;
+    affordabilityScore: number | null;
     blockingReason: string | null;
+    isEntryAllowed: boolean;
   }>;
   executionPerformance: PortfolioExecutionSummary;
   paperExecutionPerformance: PortfolioExecutionSummary;
@@ -203,12 +206,27 @@ export class DashboardSummaryService {
       .map((marketExecution) => {
         return {
           marketKey: marketExecution.marketKey,
-          readinessScore: marketExecution.decision.readinessScore,
           comboKey: marketExecution.decision.selectedComboKey,
+          marketScore: marketExecution.decision.marketScore,
+          executionComboScore: marketExecution.decision.selectedComboExecutionScore,
+          affordabilityScore: marketExecution.decision.selectedComboAffordabilityScore,
           blockingReason: marketExecution.decision.blockingReasons[0] ?? null,
+          isEntryAllowed: marketExecution.decision.isEntryAllowed,
         };
       })
-      .sort((leftCandidate, rightCandidate) => rightCandidate.readinessScore - leftCandidate.readinessScore);
+      .sort((leftCandidate, rightCandidate) => {
+        let comparison = Number(rightCandidate.isEntryAllowed) - Number(leftCandidate.isEntryAllowed);
+        if (comparison === 0) {
+          comparison = (rightCandidate.executionComboScore ?? 0) - (leftCandidate.executionComboScore ?? 0);
+        }
+        if (comparison === 0) {
+          comparison = (rightCandidate.affordabilityScore ?? 0) - (leftCandidate.affordabilityScore ?? 0);
+        }
+        if (comparison === 0) {
+          comparison = (rightCandidate.marketScore ?? 0) - (leftCandidate.marketScore ?? 0);
+        }
+        return comparison;
+      });
     return tradeCandidates;
   }
 

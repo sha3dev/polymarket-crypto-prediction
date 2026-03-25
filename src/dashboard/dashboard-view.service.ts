@@ -637,12 +637,12 @@ export class DashboardViewService {
             <div id="markets" class="loading panel-scroll">Loading market state…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="panel-title"><span>Execution Now</span><button type="button" class="panel-info-button" data-full-label="Execution Now" data-description="Current entry decision per market. This is the real execution gate: it shows whether the system would buy UP, buy DOWN, or do nothing, plus the selected combo, scores, regime, readiness, and blocking reason." aria-label="Execution Now. Current entry decision per market. This is the real execution gate: it shows whether the system would buy UP, buy DOWN, or do nothing, plus the selected combo, scores, regime, readiness, and blocking reason.">i</button></span></h2>
+            <h2><span class="panel-title"><span>Execution Now</span><button type="button" class="panel-info-button" data-full-label="Execution Now" data-description="Current entry decision per market. This is the real execution gate: it shows whether the system would buy UP, buy DOWN, or do nothing, plus the selected combo, market score, execution score for the combo, regime, and blocking reason." aria-label="Execution Now. Current entry decision per market. This is the real execution gate: it shows whether the system would buy UP, buy DOWN, or do nothing, plus the selected combo, market score, execution score for the combo, regime, and blocking reason.">i</button></span></h2>
             <p class="tiny panel-intro">This is the actual trading gate. It shows the selected combo, how ready it is, and which structural rule is blocking entry when no trade should be taken.</p>
             <div id="execution" class="loading panel-scroll">Loading execution decisions…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="panel-title"><span>Trade Candidates</span><button type="button" class="panel-info-button" data-full-label="Trade Candidates" data-description="How close each market is to becoming executable. It compresses the current combo strength, readiness, execution score, quality, and regime support into one proximity meter, then shows a short trend so you can see if a market is moving toward or away from tradeability." aria-label="Trade Candidates. How close each market is to becoming executable. It compresses the current combo strength, readiness, execution score, quality, and regime support into one proximity meter, then shows a short trend so you can see if a market is moving toward or away from tradeability.">i</button></span></h2>
+            <h2><span class="panel-title"><span>Trade Candidates</span><button type="button" class="panel-info-button" data-full-label="Trade Candidates" data-description="Operational ranking of markets. It prioritizes markets that are already allowed to trade, then sorts the rest by combo execution score, affordability, and market score so you can see what is closest to becoming tradable." aria-label="Trade Candidates. Operational ranking of markets. It prioritizes markets that are already allowed to trade, then sorts the rest by combo execution score, affordability, and market score so you can see what is closest to becoming tradable.">i</button></span></h2>
             <p class="tiny panel-intro">Readiness view of how near each market is to a real trade. Each row compresses combo quality, score, quality, and regime support so you can see what is almost ready and what is still structurally blocked.</p>
             <div id="trade-proximity" class="loading panel-scroll">Loading trade proximity…</div>
           </article>
@@ -760,11 +760,7 @@ export class DashboardViewService {
           CNF: { code: 'CNF', label: 'Confidence Too Low', description: 'The selected combo is not confident enough for execution.' },
           CMB: { code: 'CMB', label: 'Combo Weak', description: 'The selected combo is not strong enough yet.' },
           XRG: { code: 'XRG', label: 'Regime Conflict', description: 'The local prediction fights the active cross-asset regime.' },
-          EXE: { code: 'EXE', label: 'Execution Score Low', description: 'The execution score is below the minimum threshold.' },
-          HIS: { code: 'HIS', label: 'History Thin', description: 'There is not enough execution history yet.' },
-          BST: { code: 'BST', label: 'Bootstrap Low', description: 'The bootstrap-discounted execution score is still too low.' },
           FIT: { code: 'FIT', label: 'Anchor Fit Low', description: 'BTC and ETH do not support this combo strongly enough.' },
-          RDN: { code: 'RDN', label: 'Readiness Low', description: 'The combined readiness score is still too low for execution.' },
           BND: { code: 'BND', label: 'Entry Band', description: 'The reference token price is too far from the preferred entry band.' },
           SPR: { code: 'SPR', label: 'Spread Wide', description: 'The spread is too wide for execution.' },
           MSC: { code: 'MSC', label: 'Market Score', description: 'The market score is too low for execution.' },
@@ -1049,9 +1045,6 @@ export class DashboardViewService {
         if (reasonCode === 'anchor_fit_too_low') {
           humanReason = 'anchor fit too low';
         }
-        if (reasonCode === 'readiness_too_low') {
-          humanReason = 'readiness too low';
-        }
         if (reasonCode === 'combo_gate_failed') {
           humanReason = 'combo gate failed';
         }
@@ -1075,15 +1068,6 @@ export class DashboardViewService {
         }
         if (reasonCode === 'live_exit_not_confirmed') {
           humanReason = 'live exit not confirmed';
-        }
-        if (reasonCode === 'execution_score_too_low') {
-          humanReason = 'execution score too low';
-        }
-        if (reasonCode === 'insufficient_execution_history') {
-          humanReason = 'insufficient execution history';
-        }
-        if (reasonCode === 'bootstrap_discount_too_low') {
-          humanReason = 'bootstrap discount too low';
         }
         if (reasonCode === 'combo_requires_directional_regime') {
           humanReason = 'combo needs directional regime';
@@ -1270,9 +1254,6 @@ export class DashboardViewService {
         if (reasonCode === 'anchor fit too low') {
           reasonShortCode = 'FIT';
         }
-        if (reasonCode === 'readiness too low') {
-          reasonShortCode = 'RDN';
-        }
         if (reasonCode === 'combo gate failed') {
           reasonShortCode = 'CMB';
         }
@@ -1296,15 +1277,6 @@ export class DashboardViewService {
         }
         if (reasonCode === 'live exit not confirmed') {
           reasonShortCode = 'LXC';
-        }
-        if (reasonCode === 'execution score too low') {
-          reasonShortCode = 'EXE';
-        }
-        if (reasonCode === 'insufficient execution history') {
-          reasonShortCode = 'HIS';
-        }
-        if (reasonCode === 'bootstrap discount too low') {
-          reasonShortCode = 'BST';
         }
         if (reasonCode === 'combo needs directional regime') {
           reasonShortCode = 'SDR';
@@ -1720,7 +1692,7 @@ export class DashboardViewService {
           const marketPerformance = marketPerformanceMap[market.marketKey];
           const executionDecision = executionDecisionMap[market.marketKey];
           const latestPrediction = latestPredictionMap[market.marketKey];
-          const marketScore = marketPerformance ? formatNumber(marketPerformance.score, 2) : '—';
+          const marketScore = marketPerformance ? formatNumber(marketPerformance.marketScore, 2) : '—';
           const marketStatus = marketPerformance ? marketPerformance.status.replace('_', ' ') : 'warming up';
           const regimeLabel =
             latestPrediction === undefined
@@ -1742,7 +1714,7 @@ export class DashboardViewService {
             '<td><span class="quality-cell" title="' + qualityDetails + '"><span>' + formatNumber(market.quality.score, 2) + '</span><div class="quality-bar"><span style="width:' + qualityWidth + '%"></span></div></span></td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("markets", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP', 'Current midpoint for the UP token. This panel shows the midpoint directly, without the longer mid suffix.') + '</th><th>' + renderHintLabel('DOWN', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Mkt score', 'Recent trading score for this market only. It reflects local hit rate, PnL, drawdown, and sample size over the rolling market-score window.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset regime for this market or its latest resolved idea.') + '</th><th>' + renderHintLabel('Combo', 'Current best strategy combo for this market.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("markets", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP', 'Current midpoint for the UP token. This panel shows the midpoint directly, without the longer mid suffix.') + '</th><th>' + renderHintLabel('DOWN', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Mkt score', 'Historical predictive score for this market only. It comes from resolved research ideas, not from execution PnL or entry gates.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset regime for this market or its latest resolved idea.') + '</th><th>' + renderHintLabel('Combo', 'Current best strategy combo for this market.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderPredictions(summary) {
@@ -1762,7 +1734,7 @@ export class DashboardViewService {
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half, AFB = anchor-follow breakout, PBR = pullback resume, LGR = laggard release, BTR = BTC trend reversal.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Rsch', 'Research combo score used to rank the combo at prediction time.') + '</th><th>' + renderHintLabel('Exec', 'Execution combo score after quality, readiness, and affordability adjustments.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half, AFB = anchor-follow breakout, PBR = pullback resume, LGR = laggard release, BTR = BTC trend reversal.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Rsch', 'Research combo score used to rank the combo at prediction time.') + '</th><th>' + renderHintLabel('Exec', 'Execution combo score after market quality and affordability adjustments.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderExecution(summary) {
@@ -1774,10 +1746,6 @@ export class DashboardViewService {
             marketExecution.decision.marketScore === null
               ? '—'
               : formatNumber(marketExecution.decision.marketScore, 2) + ' / ' + marketExecution.decision.marketTradeCount;
-          const scoreLabel =
-            marketExecution.decision.researchScore === null
-              ? '—'
-              : formatNumber(marketExecution.decision.researchScore, 2) + ' / ' + formatNumber(marketExecution.decision.executionScore) + ' / ' + formatNumber(marketExecution.decision.effectiveExecutionScore, 2);
           const breadthLabel = marketExecution.decision.regimeId === null
             ? '—'
             : renderRegimeCompactCode(marketExecution.decision.regimeId, marketExecution.decision.breadthStrength);
@@ -1791,16 +1759,14 @@ export class DashboardViewService {
             '<td><span title="' + comboHover + '">' + renderCodeListGroup('strategy', marketExecution.decision.selectedComboStrategyIds, 3) + '</span></td>' +
             '<td>' + formatNumber(marketExecution.decision.selectedComboScore, 2) + '</td>' +
             '<td>' + formatNumber(marketExecution.decision.selectedComboExecutionScore, 2) + '</td>' +
-            '<td>' + scoreLabel + '</td>' +
             '<td><span title="' + breadthHover + '">' + breadthLabel + '</span></td>' +
             '<td>' + marketScoreLabel + '</td>' +
-            '<td>' + formatNumber(marketExecution.decision.readinessScore, 2) + '</td>' +
             '<td>' + formatNumber(marketExecution.decision.selectedComboAffordabilityScore, 2) + '</td>' +
             '<td>' + renderConvictionLabel(marketExecution.decision.positionSizeSuggestion) + '</td>' +
             '<td><span class="truncate-cell">' + reasonCodes + '</span></td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Act', 'BU = buy UP, BD = buy DOWN, NO = no trade.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for the market.') + '</th><th>' + renderHintLabel('Rsch', 'Research combo score for the selected combo.') + '</th><th>' + renderHintLabel('Exec', 'Execution combo score after quality, readiness, and affordability.') + '</th><th>' + renderHintLabel('Scores', 'Research / execution / effective execution score for this market.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window.') + '</th><th>' + renderHintLabel('Mkt score', 'Effective execution score followed by recent trade count.') + '</th><th>' + renderHintLabel('Ready', 'Overall readiness score for entry.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score. High means the token price is still attractive relative to the TP target.') + '</th><th>' + renderHintLabel('Cnv', 'HI/MD/LO conviction from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Act', 'BU = buy UP, BD = buy DOWN, NO = no trade.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for the market.') + '</th><th>' + renderHintLabel('Rsch', 'Research combo score for the selected combo.') + '</th><th>' + renderHintLabel('Exec', 'Execution combo score after market quality and affordability.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window.') + '</th><th>' + renderHintLabel('Mkt score', 'Historical predictive score for this market followed by recent trade count.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score. High means the token price is still attractive relative to the TP target.') + '</th><th>' + renderHintLabel('Cnv', 'HI/MD/LO conviction from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function clamp01(value) {
@@ -1809,19 +1775,21 @@ export class DashboardViewService {
 
       function computeTradeProximity(decision, market) {
         const comboStrength = clamp01(decision.selectedComboScore ?? 0);
-        const readinessStrength = clamp01(decision.readinessScore ?? 0);
-        const scoreStrength = decision.effectiveExecutionScore === null ? 0 : clamp01(decision.effectiveExecutionScore);
+        const executionStrength = clamp01(decision.selectedComboExecutionScore ?? 0);
+        const affordabilityStrength = clamp01(decision.selectedComboAffordabilityScore ?? 0);
         const qualityStrength = clamp01(market?.quality?.score ?? 0);
+        const marketScoreStrength = clamp01(decision.marketScore ?? 0);
         let regimeStrength = 0.45;
         if (decision.regimeId !== null) {
           regimeStrength = decision.hasBreadthAlignment ? (decision.hasStrongBreadth ? 1 : 0.72) : 0.18;
         }
         const weightedBase =
           comboStrength * 0.24 +
-          readinessStrength * 0.18 +
-          scoreStrength * 0.22 +
-          qualityStrength * 0.18 +
-          regimeStrength * 0.18;
+          executionStrength * 0.24 +
+          affordabilityStrength * 0.16 +
+          qualityStrength * 0.16 +
+          marketScoreStrength * 0.16 +
+          regimeStrength * 0.14;
         let proximity = decision.isEntryAllowed ? 1 : weightedBase;
         if (decision.blockingReasons.includes('combo_score_too_low')) {
           proximity *= 0.58;
@@ -1832,7 +1800,7 @@ export class DashboardViewService {
         if (decision.blockingReasons.includes('market_warming_up')) {
           proximity *= 0.62;
         }
-        if (decision.blockingReasons.includes('bootstrap_discount_too_low') || decision.blockingReasons.includes('insufficient_execution_history')) {
+        if (decision.blockingReasons.includes('market_score_too_low')) {
           proximity *= 0.74;
         }
         if (decision.blockingReasons.includes('quality_too_low')) {
@@ -1844,9 +1812,10 @@ export class DashboardViewService {
         return {
           proximity: clamp01(proximity),
           comboStrength,
-          readinessStrength,
-          scoreStrength,
+          executionStrength,
+          affordabilityStrength,
           qualityStrength,
+          marketScoreStrength,
           regimeStrength,
         };
       }
@@ -1932,9 +1901,10 @@ export class DashboardViewService {
           const trendCanvasId = buildTradeProximityDomId('trade-proximity-trend', tradeCandidate.marketKey);
           const factorEntries = [
             ['CMB', proximity.comboStrength, 'Strength of the selected strategy combo.'],
-            ['RDY', proximity.readinessStrength, 'Aggregate readiness after anchor checks, market quality, and execution score.'],
-            ['SCR', proximity.scoreStrength, 'Effective execution-score contribution.'],
+            ['EXE', proximity.executionStrength, 'Execution score of the selected combo after market quality and affordability.'],
+            ['AFF', proximity.affordabilityStrength, 'How attractive the current token price still is relative to the target entry.'],
             ['QLT', proximity.qualityStrength, 'Current market-quality contribution.'],
+            ['MKT', proximity.marketScoreStrength, 'Historical predictive score for this market.'],
             ['REG', proximity.regimeStrength, 'Cross-asset regime support contribution.'],
           ];
           const factorMarkup = factorEntries.map(([label, value, description]) => {
@@ -1980,11 +1950,11 @@ export class DashboardViewService {
             '<td>' + formatNumber(marketPerformance.cumulativeNetPnl) + '</td>' +
             '<td>' + formatNumber(marketPerformance.averageNetPnlPerTrade) + '</td>' +
             '<td>' + formatNumber(marketPerformance.maxDrawdown) + '</td>' +
-            '<td>' + formatNumber(marketPerformance.researchScore, 2) + ' / ' + formatNumber(marketPerformance.executionScore) + ' / ' + formatNumber(marketPerformance.effectiveExecutionScore, 2) + '</td>' +
+            '<td>' + formatNumber(marketPerformance.marketScore, 2) + '</td>' +
             '<td><span title="' + marketPerformance.status.replace('_', ' ') + '">' + renderMarketStatusCode(marketPerformance.status) + '</span></td>' +
             '</tr>';
         }).join('');
-        replacePanelContent('market-pnl', renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key.') + '</th><th>' + renderHintLabel('Trd', 'Number of recent closed paper trades in this market.') + '</th><th>' + renderHintLabel('Hit', 'Recent paper trade hit rate in this market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative recent paper net PnL for this market.') + '</th><th>' + renderHintLabel('Avg', 'Average net PnL per trade in this market.') + '</th><th>' + renderHintLabel('DD', 'Maximum rolling drawdown proxy for this market.') + '</th><th>' + renderHintLabel('Scr', 'Research / execution / effective execution score.') + '</th><th>' + renderHintLabel('St', 'Market status. WRM = warming up, RSC = research only, TRD = tradable, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent('market-pnl', renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key.') + '</th><th>' + renderHintLabel('Trd', 'Number of recent closed paper trades in this market.') + '</th><th>' + renderHintLabel('Hit', 'Recent paper trade hit rate in this market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative recent paper net PnL for this market.') + '</th><th>' + renderHintLabel('Avg', 'Average net PnL per trade in this market.') + '</th><th>' + renderHintLabel('DD', 'Maximum rolling drawdown proxy for this market.') + '</th><th>' + renderHintLabel('Scr', 'Historical market score based on resolved research ideas.') + '</th><th>' + renderHintLabel('St', 'Market status. WRM = warming up, RSC = research only, TRD = tradable, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderWinningCombinations(summary) {

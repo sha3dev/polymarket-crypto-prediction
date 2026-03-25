@@ -108,6 +108,21 @@ test("ExecutionPolicyService blocks SOL UP when BTC and ETH UP tokens do not bot
   assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
 });
 
+test("ExecutionPolicyService blocks entries when the historical market score is too low", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "btc", "UP", "UP");
+  const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("btc"), prediction, null, {
+    ...buildMarketPerformanceSummary("btc"),
+    marketScore: 0.54,
+  });
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
+  assert.equal(executionDecision.isEntryAllowed, false);
+  assert.equal(executionDecision.blockingReasons.includes("market_score_too_low"), true);
+});
+
 function buildMarketSnapshotSlice(asset: "btc" | "eth" | "sol" | "xrp" = "btc"): MarketSnapshotSlice {
   const tokenMetrics = buildTokenMetrics(0.5);
   const marketQuality: MarketQuality = {
@@ -294,7 +309,6 @@ function buildPredictionResponse(
       semanticOverlapPenalty: 0,
       anchorFitScore: asset === "btc" ? 1 : asset === "eth" ? 0.95 : btcDirection === ethDirection && btcDirection === direction ? 1 : 0.2,
       marketQualityScore: 0.95,
-      executionReadinessScore: 0.79,
       affordabilityScore: 0.81,
       selectionReason: "research good agr 1.00 fit 1.00",
       isResearchEligible: true,
@@ -317,10 +331,7 @@ function buildMarketPerformanceSummary(asset: "btc" | "eth" | "sol" | "xrp" = "b
     asset,
     window: "5m",
     predictionCount: 10,
-    score: 0.81,
-    researchScore: 0.82,
-    executionScore: 0.79,
-    effectiveExecutionScore: 0.79,
+    marketScore: 0.82,
     tradeCount: 8,
     researchPredictionCount: 10,
     executedTradeCount: 8,

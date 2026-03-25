@@ -33,10 +33,7 @@ export class ExecutionPolicyService {
       asset: marketSlice.asset,
       window: marketSlice.window,
       isEntryAllowed: false,
-      marketScore: marketPerformanceSummary?.effectiveExecutionScore ?? null,
-      researchScore: marketPerformanceSummary?.researchScore ?? null,
-      executionScore: marketPerformanceSummary?.executionScore ?? null,
-      effectiveExecutionScore: marketPerformanceSummary?.effectiveExecutionScore ?? null,
+      marketScore: marketPerformanceSummary?.marketScore ?? null,
       marketTradeCount: marketPerformanceSummary?.tradeCount ?? 0,
       hasSufficientMarketHistory: marketPerformanceSummary?.hasSufficientHistory ?? false,
       positionSide,
@@ -66,7 +63,6 @@ export class ExecutionPolicyService {
       selectedComboStrategyIds: prediction?.selectedCombo.memberStrategyIds ?? [],
       selectedComboAffordabilityScore: prediction?.selectedCombo.affordabilityScore ?? null,
       regimeId: prediction?.crossAssetRegime.regimeId ?? null,
-      readinessScore: prediction === null ? 0 : this.computeReadinessScore(prediction, marketPerformanceSummary, false),
       blockingReasons,
       generatedAt: marketSlice.generatedAt,
     };
@@ -137,25 +133,6 @@ export class ExecutionPolicyService {
         this.appendBlockingReasonIfMissing(blockingReasons, "cross_asset_regime_conflict");
       }
     }
-  }
-
-  private computeReadinessScore(prediction: PredictionResponse, marketPerformanceSummary: MarketPerformanceSummary | null, hasPassedAnchors: boolean): number {
-    const comboScore = prediction.selectedCombo.researchComboScore;
-    const comboExecutionScore = prediction.selectedCombo.executionComboScore;
-    const comboConfidence = prediction.selectedCombo.comboConfidence;
-    const qualityScore = prediction.crossAssetRegime.isTradableGlobalContext ? 1 : 0.7;
-    const executionScore = marketPerformanceSummary?.effectiveExecutionScore ?? 0.35;
-    const readinessScore =
-      comboScore * 0.22 +
-      comboExecutionScore * 0.16 +
-      comboConfidence * 0.22 +
-      prediction.selectedCombo.anchorFitScore * 0.2 +
-      prediction.selectedCombo.marketQualityScore * 0.12 +
-      prediction.selectedCombo.executionReadinessScore * 0.05 +
-      prediction.selectedCombo.affordabilityScore * 0.05 +
-      executionScore * 0.08;
-    const normalizedReadinessScore = Math.max(0, Math.min(1, readinessScore * (hasPassedAnchors ? 1 : 0.55) * qualityScore));
-    return normalizedReadinessScore;
   }
 
   private resolveTokenPrice(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number | null {
@@ -330,15 +307,8 @@ export class ExecutionPolicyService {
           if (marketPerformanceSummary !== null && marketPerformanceSummary.status === "warming_up") {
             blockingReasons.push("market_warming_up");
           }
-          if (marketPerformanceSummary !== null && marketPerformanceSummary.executionScore === null) {
-            blockingReasons.push("insufficient_execution_history");
-          }
-          if (marketPerformanceSummary !== null && marketPerformanceSummary.effectiveExecutionScore < config.MIN_EXECUTION_SCORE_FOR_ENTRY) {
-            blockingReasons.push(
-              marketPerformanceSummary.executionScore === null || !marketPerformanceSummary.hasSufficientHistory
-                ? "bootstrap_discount_too_low"
-                : "execution_score_too_low",
-            );
+          if (marketPerformanceSummary !== null && marketPerformanceSummary.marketScore < config.MIN_MARKET_SCORE_FOR_ENTRY) {
+            blockingReasons.push("market_score_too_low");
           }
           const orderShareCount = referencePrice === null ? 0 : this.computeMinimumShareCount(referencePrice);
           const orderNotionalUsd = referencePrice === null ? null : this.computeOrderNotionalUsd(referencePrice, orderShareCount);
@@ -347,11 +317,6 @@ export class ExecutionPolicyService {
           }
           if (orderShareCount < config.MIN_ORDER_SHARES) {
             blockingReasons.push("order_share_count_too_low");
-          }
-          const hasPassedAnchors = !blockingReasons.includes("cross_asset_regime_conflict") && !blockingReasons.includes("anchor_fit_too_low");
-          const readinessScore = this.computeReadinessScore(prediction, marketPerformanceSummary, hasPassedAnchors);
-          if (readinessScore < 0.55) {
-            blockingReasons.push("readiness_too_low");
           }
           if (blockingReasons.length > 0 || referencePrice === null || marketPerformanceSummary === null) {
             executionDecision = this.buildBlockedDecision(marketSlice, prediction, marketPerformanceSummary, blockingReasons);
@@ -369,10 +334,7 @@ export class ExecutionPolicyService {
               asset: marketSlice.asset,
               window: marketSlice.window,
               isEntryAllowed: true,
-              marketScore: marketPerformanceSummary.effectiveExecutionScore,
-              researchScore: marketPerformanceSummary.researchScore,
-              executionScore: marketPerformanceSummary.executionScore,
-              effectiveExecutionScore: marketPerformanceSummary.effectiveExecutionScore,
+              marketScore: marketPerformanceSummary.marketScore,
               marketTradeCount: marketPerformanceSummary.tradeCount,
               hasSufficientMarketHistory: marketPerformanceSummary.hasSufficientHistory,
               positionSide,
@@ -402,7 +364,6 @@ export class ExecutionPolicyService {
               selectedComboStrategyIds: [...prediction.selectedCombo.memberStrategyIds],
               selectedComboAffordabilityScore: prediction.selectedCombo.affordabilityScore,
               regimeId: prediction.crossAssetRegime.regimeId,
-              readinessScore,
               blockingReasons: [],
               generatedAt: marketSlice.generatedAt,
             };

@@ -51,7 +51,6 @@ export type SelectedStrategyCombo = {
   semanticOverlapPenalty: number;
   anchorFitScore: number;
   marketQualityScore: number;
-  executionReadinessScore: number;
   affordabilityScore: number;
   selectionReason: string;
   isResearchEligible: boolean;

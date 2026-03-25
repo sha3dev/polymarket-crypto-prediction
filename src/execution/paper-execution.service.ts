@@ -414,34 +414,8 @@ export class PaperExecutionService {
     return windowedResearchPredictions;
   }
 
-  private computeExecutionScore(windowedTrades: PaperTrade[]): number | null {
-    let executionScore: number | null = null;
-    if (windowedTrades.length > 0) {
-      const winCount = windowedTrades.filter((paperTrade) => paperTrade.realizedPnlAfterCosts > 0).length;
-      const hitRate = winCount / windowedTrades.length;
-      const cumulativeNetPnl = windowedTrades.reduce((aggregatedPnl, paperTrade) => aggregatedPnl + paperTrade.realizedPnlAfterCosts, 0);
-      const averageNetPnlPerTrade = cumulativeNetPnl / windowedTrades.length;
-      const marketEquityState: EquityState = { peak: 0, running: 0, maxDrawdown: 0 };
-      for (const paperTrade of windowedTrades) {
-        marketEquityState.running += paperTrade.realizedPnlAfterCosts;
-        if (marketEquityState.running > marketEquityState.peak) {
-          marketEquityState.peak = marketEquityState.running;
-        }
-        const drawdown = marketEquityState.peak - marketEquityState.running;
-        if (drawdown > marketEquityState.maxDrawdown) {
-          marketEquityState.maxDrawdown = drawdown;
-        }
-      }
-      const sampleTrust = Math.min(1, windowedTrades.length / Math.max(1, config.MIN_MARKET_TRADES_FOR_SCORING * 2));
-      const pnlComponent = Math.max(-1, Math.min(1, averageNetPnlPerTrade / 0.1));
-      const drawdownPenalty = Math.max(0, Math.min(1, marketEquityState.maxDrawdown / 0.6));
-      executionScore = Math.max(0, Math.min(1, 0.5 + ((hitRate - 0.5) * 0.5 + pnlComponent * 0.35 - drawdownPenalty * 0.25) * sampleTrust));
-    }
-    return executionScore;
-  }
-
-  private computeResearchScore(windowedPredictions: PredictionResponse[]): number {
-    let researchScore = 0.5;
+  private computeMarketScore(windowedPredictions: PredictionResponse[]): number {
+    let marketScore = 0.5;
     if (windowedPredictions.length > 0) {
       const resolvedPredictions = windowedPredictions.filter((prediction) => prediction.result.status !== "void");
       const winCount = resolvedPredictions.filter((prediction) => prediction.result.status === "ok").length;
@@ -459,25 +433,9 @@ export class PaperExecutionService {
               return aggregatedError + Math.abs(prediction.confidence - targetConfidence);
             }, 0) / windowedPredictions.length;
       const sampleTrust = Math.min(1, windowedPredictions.length / Math.max(1, config.MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP * 2));
-      researchScore = Math.max(0, Math.min(1, 0.5 + ((hitRate - 0.5) * 0.6 + averageSignedEdge * 0.35 - calibrationError * 0.2) * sampleTrust));
+      marketScore = Math.max(0, Math.min(1, 0.5 + ((hitRate - 0.5) * 0.6 + averageSignedEdge * 0.35 - calibrationError * 0.2) * sampleTrust));
     }
-    return researchScore;
-  }
-
-  private computeBootstrapDiscount(researchPredictionCount: number, tradeCount: number, qualityScore: number): number {
-    const researchProgress = Math.max(0, Math.min(1, researchPredictionCount / Math.max(1, config.MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP)));
-    const tradeProgress = Math.max(0, Math.min(1, tradeCount / Math.max(1, config.MIN_MARKET_TRADES_FOR_SCORING)));
-    const bootstrapDiscount =
-      config.EXECUTION_BOOTSTRAP_MIN_DISCOUNT +
-      (config.EXECUTION_BOOTSTRAP_MAX_DISCOUNT - config.EXECUTION_BOOTSTRAP_MIN_DISCOUNT) * (researchProgress * 0.7 + tradeProgress * 0.2 + qualityScore * 0.1);
-    return bootstrapDiscount;
-  }
-
-  private applyBootstrapDiscountToResearchScore(researchScore: number, bootstrapDiscount: number): number {
-    const neutralScore = 0.5;
-    const discountedResearchScore = neutralScore + (researchScore - neutralScore) * bootstrapDiscount;
-    const normalizedDiscountedResearchScore = Math.max(0, Math.min(1, discountedResearchScore));
-    return normalizedDiscountedResearchScore;
+    return marketScore;
   }
 
   private buildMarketPerformanceSummary(asset: AssetSymbol, window: MarketWindow): MarketPerformanceSummary {
@@ -503,12 +461,7 @@ export class PaperExecutionService {
         marketEquityState.maxDrawdown = drawdown;
       }
     }
-    const researchScore = this.computeResearchScore(windowedResearchPredictions);
-    const executionScore = this.computeExecutionScore(windowedTrades);
-    const marketSlice = this.marketStateService.getLatestSlice(marketKey);
-    const bootstrapDiscount = this.computeBootstrapDiscount(windowedResearchPredictions.length, tradeCount, marketSlice?.quality.score ?? 0);
-    const discountedResearchScore = this.applyBootstrapDiscountToResearchScore(researchScore, bootstrapDiscount);
-    const effectiveExecutionScore = executionScore === null ? discountedResearchScore : Math.min(executionScore, discountedResearchScore);
+    const marketScore = this.computeMarketScore(windowedResearchPredictions);
     const hasSufficientHistory = tradeCount >= config.MIN_MARKET_TRADES_FOR_SCORING;
     const hasWarmupComplete =
       predictionCount >= config.MIN_MARKET_PREDICTIONS_BEFORE_ENTRY && windowedResearchPredictions.length >= config.MIN_RESEARCH_PREDICTIONS_FOR_BOOTSTRAP;
@@ -516,10 +469,10 @@ export class PaperExecutionService {
     let status: MarketPerformanceSummary["status"] = "warming_up";
     if (hasWarmupComplete) {
       status = "research_only";
-      if (effectiveExecutionScore < config.MIN_EXECUTION_SCORE_FOR_ENTRY || researchScore < config.MIN_RESEARCH_SCORE_FOR_BOOTSTRAP) {
+      if (marketScore < config.MIN_MARKET_SCORE_FOR_ENTRY) {
         status = "avoid";
       }
-      if (effectiveExecutionScore >= config.MIN_EXECUTION_SCORE_FOR_ENTRY && hasComboReadiness) {
+      if (marketScore >= config.MIN_MARKET_SCORE_FOR_ENTRY && hasComboReadiness) {
         status = "tradable";
       }
     }
@@ -528,10 +481,7 @@ export class PaperExecutionService {
       asset,
       window,
       predictionCount,
-      score: effectiveExecutionScore,
-      researchScore,
-      executionScore,
-      effectiveExecutionScore,
+      marketScore,
       tradeCount,
       researchPredictionCount: windowedResearchPredictions.length,
       executedTradeCount: tradeCount,
@@ -611,9 +561,6 @@ export class PaperExecutionService {
           positionSide: null,
           predictionDirection: null,
           marketScore: null,
-          researchScore: null,
-          executionScore: null,
-          effectiveExecutionScore: null,
           marketTradeCount: 0,
           hasSufficientMarketHistory: false,
           entryReferencePrice: null,
@@ -641,7 +588,6 @@ export class PaperExecutionService {
           selectedComboStrategyIds: [],
           selectedComboAffordabilityScore: null,
           regimeId: null,
-          readinessScore: 0,
           blockingReasons: ["no_market_data"],
           generatedAt: null,
         };

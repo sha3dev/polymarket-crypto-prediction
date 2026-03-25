@@ -250,25 +250,10 @@ export class PredictionEngineService {
     return shouldReplacePendingTrigger;
   }
 
-  private resolveMarketExecutionScore(marketKey: MarketKey): number | null {
-    const strategySummaries = this.strategyMetricsService.getSummaries(marketKey);
-    const resolvedStrategies = strategySummaries.filter((strategySummary) => strategySummary.executionTotalResolved > 0);
-    const totalWeight = resolvedStrategies.reduce((aggregatedWeight, strategySummary) => aggregatedWeight + strategySummary.weight, 0);
-    const marketExecutionScore =
-      totalWeight === 0
-        ? null
-        : resolvedStrategies.reduce(
-            (aggregatedScore, strategySummary) => aggregatedScore + strategySummary.executionAveragePnlProxy * strategySummary.weight,
-            0,
-          ) /
-            totalWeight +
-          0.5;
-    return marketExecutionScore === null ? null : Math.max(0, Math.min(1, marketExecutionScore));
-  }
-
-  private maybeCreatePrediction(marketTrigger: MarketTrigger, createdAt: number): void {
+  private maybeCreatePrediction(marketTrigger: MarketTrigger, createdAt: number): boolean {
     const lastPredictionTimestamp = this.marketStateService.getLastPredictionTimestamp(marketTrigger.marketKey);
     const isCoolingDown = lastPredictionTimestamp !== null && createdAt - lastPredictionTimestamp < config.MARKET_COOLDOWN_MS;
+    let hasCreatedPrediction = false;
     if (!isCoolingDown) {
       const predictionContext = this.marketStateService.getPredictionContext(marketTrigger.marketKey);
       if (predictionContext) {
@@ -282,45 +267,45 @@ export class PredictionEngineService {
           evaluationResult.finalConfidence,
           predictionContext.crossAssetRegime,
           predictionContext.current.quality.score,
-          this.resolveMarketExecutionScore(predictionContext.marketKey),
         );
         const selectedCombo = comboApplicationResult.selectedCombo;
-        if (selectedCombo === null) {
-          return;
+        if (selectedCombo !== null) {
+          const winningDirection = selectedCombo.direction;
+          const positionSide = this.resolvePositionSide(winningDirection);
+          const baselineSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
+          const entryReferencePrice = this.resolveEntryReferencePrice(baselineSlice, positionSide);
+          const takeProfitPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice + config.TAKE_PROFIT_DELTA);
+          const stopLossPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice - config.STOP_LOSS_DELTA);
+          const predictionRecord = this.buildPredictionRecord(
+            marketTrigger.marketKey,
+            winningDirection,
+            selectedCombo.comboConfidence,
+            selectedCombo.executionComboScore,
+            selectedCombo.direction === "UP" ? selectedCombo.comboScore : selectedCombo.comboScore * -1,
+            evaluationResult.baseWeightedScore,
+            evaluationResult.baseConfidence,
+            marketTrigger,
+            evaluationResult.strategyBreakdown,
+            selectedCombo,
+            comboApplicationResult.comboBreakdown,
+            comboApplicationResult.comboGate,
+            predictionContext.crossAssetRegime,
+            createdAt,
+            positionSide,
+            entryReferencePrice,
+            takeProfitPrice,
+            stopLossPrice,
+            baselineSlice?.up.price ?? null,
+            baselineSlice?.up.midpoint ?? null,
+          );
+          this.predictionStoreService.addPrediction(predictionRecord);
+          this.marketStateService.markPredictionCreated(marketTrigger.marketKey, createdAt);
+          this.strategyMetricsService.markParticipated(predictionRecord.marketKey, evaluationResult.strategyBreakdown, predictionRecord.createdAt);
+          hasCreatedPrediction = true;
         }
-        const winningDirection = selectedCombo.direction;
-        const positionSide = this.resolvePositionSide(winningDirection);
-        const baselineSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
-        const entryReferencePrice = this.resolveEntryReferencePrice(baselineSlice, positionSide);
-        const takeProfitPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice + config.TAKE_PROFIT_DELTA);
-        const stopLossPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice - config.STOP_LOSS_DELTA);
-        const predictionRecord = this.buildPredictionRecord(
-          marketTrigger.marketKey,
-          winningDirection,
-          selectedCombo.comboConfidence,
-          selectedCombo.executionComboScore,
-          selectedCombo.direction === "UP" ? selectedCombo.comboScore : selectedCombo.comboScore * -1,
-          evaluationResult.baseWeightedScore,
-          evaluationResult.baseConfidence,
-          marketTrigger,
-          evaluationResult.strategyBreakdown,
-          selectedCombo,
-          comboApplicationResult.comboBreakdown,
-          comboApplicationResult.comboGate,
-          predictionContext.crossAssetRegime,
-          createdAt,
-          positionSide,
-          entryReferencePrice,
-          takeProfitPrice,
-          stopLossPrice,
-          baselineSlice?.up.price ?? null,
-          baselineSlice?.up.midpoint ?? null,
-        );
-        this.predictionStoreService.addPrediction(predictionRecord);
-        this.marketStateService.markPredictionCreated(marketTrigger.marketKey, createdAt);
-        this.strategyMetricsService.markParticipated(predictionRecord.marketKey, evaluationResult.strategyBreakdown, predictionRecord.createdAt);
       }
     }
+    return hasCreatedPrediction;
   }
 
   private buildPredictionRecord(
@@ -461,8 +446,10 @@ export class PredictionEngineService {
         const pendingTrigger = this.pendingTriggers.get(marketKey) ?? null;
         if (pendingTrigger !== null) {
           if (this.hasPendingTriggerConfirmed(pendingTrigger, _generatedAt)) {
-            this.maybeCreatePrediction(pendingTrigger, _generatedAt);
-            this.pendingTriggers.delete(marketKey);
+            const hasCreatedPrediction = this.maybeCreatePrediction(pendingTrigger, _generatedAt);
+            if (hasCreatedPrediction) {
+              this.pendingTriggers.delete(marketKey);
+            }
           } else {
             if (this.shouldDropPendingTrigger(pendingTrigger, _generatedAt)) {
               this.pendingTriggers.delete(marketKey);

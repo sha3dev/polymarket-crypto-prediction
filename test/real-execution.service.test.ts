@@ -141,8 +141,34 @@ test("RealExecutionService keeps neutral market score at baseline during bootstr
   assert.notEqual(marketPerformanceSummary, undefined);
   assert.equal(marketPerformanceSummary?.researchPredictionCount, 0);
   assert.equal(marketPerformanceSummary?.tradeCount, 0);
-  assert.equal(marketPerformanceSummary?.researchScore, 0.5);
-  assert.equal(marketPerformanceSummary?.effectiveExecutionScore, 0.5);
+  assert.equal(marketPerformanceSummary?.marketScore, 0.5);
+});
+
+test("RealExecutionService derives market score from resolved predictions instead of trade PnL", () => {
+  const realExecutionService = new RealExecutionService(
+    buildMarketStateServiceMock(buildMarketSnapshotSlice(2_000, 0.52)),
+    buildPredictionEngineMock(buildLivePredictionResponse(), buildResolvedPredictionHistory()),
+    buildExecutionPolicyServiceMock(),
+    buildOrderServiceMock(),
+    buildMarketCatalogServiceMock(),
+  );
+  const mutableRealExecutionService = realExecutionService as unknown as { recentTrades: ExecutionTrade[] };
+  const seedTrade = buildSeedTrades()[0];
+  if (seedTrade === undefined) {
+    throw new Error("expected seed trade");
+  }
+  mutableRealExecutionService.recentTrades.push({
+    ...seedTrade,
+    marketKey: "btc:5m",
+    realizedPnlAfterCosts: -0.4,
+    exitFilledAt: 19_500,
+  });
+
+  const marketPerformanceSummary = realExecutionService.getMarketPerformanceSummaries().find((summary) => summary.marketKey === "btc:5m");
+
+  assert.notEqual(marketPerformanceSummary, undefined);
+  assert.equal((marketPerformanceSummary?.marketScore ?? 0) > 0.7, true);
+  assert.equal(marketPerformanceSummary?.status, "tradable");
 });
 
 function buildMarketStateServiceMock(marketSliceOrFactory: MarketSnapshotSlice | (() => MarketSnapshotSlice)): MarketStateService {
@@ -236,9 +262,6 @@ function buildExecutionPolicyServiceMock(): ExecutionPolicyService {
           window: marketSlice.window,
           isEntryAllowed: true,
           marketScore: 0.82,
-          researchScore: 0.86,
-          executionScore: 0.78,
-          effectiveExecutionScore: 0.74,
           marketTradeCount: 12,
           hasSufficientMarketHistory: true,
           positionSide: "up",
@@ -268,7 +291,6 @@ function buildExecutionPolicyServiceMock(): ExecutionPolicyService {
           selectedComboStrategyIds: ["s01", "s02"],
           selectedComboAffordabilityScore: 0.84,
           regimeId: "btc_eth_up",
-          readinessScore: 0.88,
           blockingReasons: [],
           generatedAt: marketSlice.generatedAt,
         };
@@ -472,7 +494,6 @@ function buildLivePredictionResponse(): PredictionResponse {
       semanticOverlapPenalty: 0,
       anchorFitScore: 1,
       marketQualityScore: 0.95,
-      executionReadinessScore: 0.8,
       affordabilityScore: 0.86,
       selectionReason: "execution good agr 1.00 fit 1.00",
       isResearchEligible: true,

@@ -251,7 +251,10 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(typeof executionJson.executionNow[0].decision.marketTradeCount, "number");
   assert.equal(typeof executionJson.executionNow[0].decision.breadthDirection, "string");
   assert.equal(typeof executionJson.executionNow[0].decision.hasBreadthAlignment, "boolean");
-  assert.equal(typeof executionJson.executionNow[0].decision.readinessScore, "number");
+  assert.equal(typeof executionJson.executionNow[0].decision.marketScore, "number");
+  assert.equal("readinessScore" in executionJson.executionNow[0].decision, false);
+  assert.equal("executionScore" in executionJson.executionNow[0].decision, false);
+  assert.equal("effectiveExecutionScore" in executionJson.executionNow[0].decision, false);
   assert.equal(Array.isArray(executionJson.executionNow[0].decision.selectedComboStrategyIds), true);
   assert.equal(executionJson.executionNow[0].decision.orderShareCount >= 5, true);
   assert.equal(executionJson.executionNow[0].decision.orderNotionalUsd === null || executionJson.executionNow[0].decision.orderNotionalUsd >= 1, true);
@@ -354,6 +357,12 @@ test("ServiceRuntime exposes ETH combo candidates from BTC anchor support before
       eth5m: { slug: "eth-5m", upPrice: 0.59, downPrice: 0.41, upMidpoint: 0.59, downMidpoint: 0.41 },
     }),
   );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(12_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.645, downPrice: 0.355, upMidpoint: 0.645, downMidpoint: 0.355 },
+      eth5m: { slug: "eth-5m", upPrice: 0.595, downPrice: 0.405, upMidpoint: 0.595, downMidpoint: 0.405 },
+    }),
+  );
 
   const ethCombosResponse = await fetch(`http://127.0.0.1:${address.port}/v1/combos?asset=eth&window=5m&limit=5`);
   const ethCombosJson = await ethCombosResponse.json();
@@ -362,6 +371,84 @@ test("ServiceRuntime exposes ETH combo candidates from BTC anchor support before
   assert.equal(Array.isArray(ethCombosJson), true);
   assert.equal(ethCombosJson.length >= 1, true);
   assert.equal(typeof ethCombosJson[0].comboKey, "string");
+
+  const ethPredictionsResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=eth&window=5m&limit=5`);
+  const ethPredictionsJson = await ethPredictionsResponse.json();
+
+  assert.equal(ethPredictionsResponse.status, 200);
+  assert.equal(Array.isArray(ethPredictionsJson), true);
+  assert.equal(ethPredictionsJson.length >= 1, true);
+  assert.equal(ethPredictionsJson[0].marketKey, "eth:5m");
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+});
+
+test("ServiceRuntime can create SOL predictions when BTC and ETH only provide soft aligned anchor support", async () => {
+  const serviceRuntime = ServiceRuntime.createDefault();
+  const server = serviceRuntime.buildServer();
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, () => {
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("failed to bind test server");
+  }
+
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(1_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.48, downPrice: 0.52, upMidpoint: 0.48, downMidpoint: 0.52 },
+      eth5m: { slug: "eth-5m", upPrice: 0.485, downPrice: 0.515, upMidpoint: 0.485, downMidpoint: 0.515 },
+      sol5m: { slug: "sol-5m", upPrice: 0.47, downPrice: 0.53, upMidpoint: 0.47, downMidpoint: 0.53 },
+    }),
+  );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(2_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.53, downPrice: 0.47, upMidpoint: 0.53, downMidpoint: 0.47 },
+      eth5m: { slug: "eth-5m", upPrice: 0.515, downPrice: 0.485, upMidpoint: 0.515, downMidpoint: 0.485 },
+      sol5m: { slug: "sol-5m", upPrice: 0.505, downPrice: 0.495, upMidpoint: 0.505, downMidpoint: 0.495 },
+    }),
+  );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(4_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.58, downPrice: 0.42, upMidpoint: 0.58, downMidpoint: 0.42 },
+      eth5m: { slug: "eth-5m", upPrice: 0.55, downPrice: 0.45, upMidpoint: 0.55, downMidpoint: 0.45 },
+      sol5m: { slug: "sol-5m", upPrice: 0.54, downPrice: 0.46, upMidpoint: 0.54, downMidpoint: 0.46 },
+    }),
+  );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(7_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.61, downPrice: 0.39, upMidpoint: 0.61, downMidpoint: 0.39 },
+      eth5m: { slug: "eth-5m", upPrice: 0.58, downPrice: 0.42, upMidpoint: 0.58, downMidpoint: 0.42 },
+      sol5m: { slug: "sol-5m", upPrice: 0.57, downPrice: 0.43, upMidpoint: 0.57, downMidpoint: 0.43 },
+    }),
+  );
+  serviceRuntime.ingestSnapshot(
+    buildSnapshot(9_000, {
+      btc5m: { slug: "btc-5m", upPrice: 0.615, downPrice: 0.385, upMidpoint: 0.615, downMidpoint: 0.385 },
+      eth5m: { slug: "eth-5m", upPrice: 0.585, downPrice: 0.415, upMidpoint: 0.585, downMidpoint: 0.415 },
+      sol5m: { slug: "sol-5m", upPrice: 0.575, downPrice: 0.425, upMidpoint: 0.575, downMidpoint: 0.425 },
+    }),
+  );
+
+  const solPredictionsResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=sol&window=5m&limit=5`);
+  const solPredictionsJson = await solPredictionsResponse.json();
+
+  assert.equal(solPredictionsResponse.status, 200);
+  assert.equal(Array.isArray(solPredictionsJson), true);
+  assert.equal(solPredictionsJson.length >= 1, true);
+  assert.equal(solPredictionsJson[0].marketKey, "sol:5m");
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
