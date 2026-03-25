@@ -33,6 +33,7 @@ test("ServiceRuntime serves the dashboard HTML", async () => {
   assert.equal(response.status, 200);
   assert.match(html, /Polymarket 5m \/ 15m predictor/);
   assert.match(html, /Combo Board/);
+  assert.match(html, /Combo Search/);
   assert.match(html, /Trade Candidates/);
   assert.match(html, /Direction chosen by the winning combo/);
 
@@ -482,6 +483,8 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.ok(summaryJson.executionNow.length === 8);
   assert.equal(summaryJson.marketPerformance.length, 8);
   assert.equal(summaryJson.marketPnlTable.length, 8);
+  assert.equal(Array.isArray(summaryJson.comboSearchBoards), true);
+  assert.equal(summaryJson.comboSearchBoards.length, 8);
   assert.equal(Array.isArray(summaryJson.winningCombinations), true);
   assert.equal(Array.isArray(summaryJson.tradeCandidates), true);
   assert.equal(typeof summaryJson.executionPerformance.tradeCount, "number");

@@ -2,6 +2,7 @@
  * @section imports:internals
  */
 
+import type { MarketComboBoard } from "../combo/combo.types.ts";
 import config from "../config.ts";
 import type {
   ExecutionAccountSummary,
@@ -60,6 +61,7 @@ export type DashboardSummaryPayload = {
   recentTrades: ExecutionTrade[];
   marketPerformance: MarketPerformanceSummary[];
   marketPnlTable: MarketPerformanceSummary[];
+  comboSearchBoards: MarketComboBoard[];
   tradeCandidates: Array<{
     marketKey: string;
     comboKey: string | null;
@@ -193,6 +195,7 @@ export class DashboardSummaryService {
     const marketPnlTable = [...marketPerformance].sort((leftMarketPerformance, rightMarketPerformance) => {
       return rightMarketPerformance.cumulativeNetPnl - leftMarketPerformance.cumulativeNetPnl;
     });
+    const comboSearchBoards = this.predictionEngineService.getMarketComboBoards(markets.map((market) => market.marketKey));
     const winningCombinations = latestPredictions.slice(0, 12);
     const tradeCandidates = this.buildTradeCandidates(executionNow);
     const executionPerformance = this.executionService.getPortfolioSummary();
@@ -229,6 +232,7 @@ export class DashboardSummaryService {
       recentTrades,
       marketPerformance,
       marketPnlTable,
+      comboSearchBoards,
       tradeCandidates,
       executionPerformance,
       paperExecutionPerformance,

@@ -24,12 +24,30 @@ export type ComboUsage = {
   size: ComboSize;
   direction: PredictionDirection | null;
   isAgreement: boolean;
+  agreementScore: number;
+  comboConfidence: number;
   comboScore: number;
+  effectiveComboScore: number;
+  sampleCount: number;
+  status: ComboStatus;
+  isExecutionEligible: boolean;
   boostApplied: number;
   confidencePenaltyApplied: number;
   didAffectFinalScore: boolean;
   didAffectFinalConfidence: boolean;
   reason: string;
+};
+export type ComboSearchSnapshot = {
+  marketKey: MarketKey;
+  selectedComboKey: string | null;
+  selectedComboSource: ComboSource | null;
+  executionComboDecision: ComboGateDecision;
+  pairCandidateCount: number;
+  trioCandidateCount: number;
+  totalCandidateCount: number;
+  scoreGapVsRunnerUp: number | null;
+  activeCombosNow: ComboUsage[];
+  lastAppliedCombos: ComboUsage[];
 };
 export type SelectedStrategyCombo = {
   comboKey: string;
@@ -83,6 +101,7 @@ export type MarketComboBoard = {
   marketKey: MarketKey;
   topPairs: ComboSummary[];
   topTrios: ComboSummary[];
+  comboSearchSnapshot: ComboSearchSnapshot;
   activeCombosNow: ComboUsage[];
   lastAppliedCombos: ComboUsage[];
   comboBoostShare: number;

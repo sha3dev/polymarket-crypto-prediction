@@ -127,6 +127,59 @@ export class DashboardViewService {
         background: rgba(13, 27, 42, 0.16);
         border-radius: 999px;
       }
+      .tab-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .tab-button {
+        border: 1px solid rgba(13, 27, 42, 0.14);
+        background: rgba(13, 27, 42, 0.04);
+        color: var(--text);
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .tab-button.is-active {
+        background: rgba(31, 162, 255, 0.14);
+        border-color: rgba(31, 162, 255, 0.35);
+      }
+      .combo-search-summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .combo-search-card {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 10px;
+        background: rgba(13, 27, 42, 0.03);
+      }
+      .combo-search-card strong {
+        display: block;
+        font-size: 18px;
+      }
+      .combo-search-inline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 10px 0 12px;
+      }
+      .combo-search-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(13, 27, 42, 0.12);
+        background: rgba(13, 27, 42, 0.04);
+        font-size: 12px;
+        font-weight: 700;
+      }
       h2 {
         margin: 0 0 12px;
         font-size: 15px;
@@ -698,6 +751,11 @@ export class DashboardViewService {
           </article>
         </div>
         <div class="stack">
+          <article class="panel panel-tall">
+            <h2><span class="panel-title"><span>Combo Search</span><button type="button" class="panel-info-button" data-full-label="Combo Search" data-description="Live exploration view for one market at a time. It shows how many pair and trio candidates were generated, which combo won the research layer, which combo is closest to execution, and what other candidates are being tested right now." aria-label="Combo Search. Live exploration view for one market at a time. It shows how many pair and trio candidates were generated, which combo won the research layer, which combo is closest to execution, and what other candidates are being tested right now.">i</button></span></h2>
+            <p class="tiny panel-intro">This is the closest thing to the combo discovery process. Each tab shows one market's current search space: candidates generated from active strategies, the research winner, the execution gate decision, and the runners-up that are being evaluated right now.</p>
+            <div id="combo-search" class="loading panel-scroll">Loading combo search…</div>
+          </article>
           <article class="panel panel-medium">
             <h2><span class="panel-title"><span>Market PnL</span><button type="button" class="panel-info-button" data-full-label="Market PnL" data-description="Per-market performance table. It separates markets that merely look interesting from markets that are actually generating useful trading outcomes." aria-label="Market PnL. Per-market performance table. It separates markets that merely look interesting from markets that are actually generating useful trading outcomes.">i</button></span></h2>
             <p class="tiny panel-intro">Performance summary by market. It helps separate markets that look interesting for research from markets that are actually proving they deserve execution capital.</p>
@@ -717,6 +775,7 @@ export class DashboardViewService {
       const maxTradeProximityHistory = 18;
       const maxGlobalRegimeHistory = 24;
       let activeInfoPopover = null;
+      let activeComboSearchMarketKey = 'btc:5m';
       const tradeProximityHistory = new Map();
       const tradeProximityTrendCharts = new Map();
       const globalRegimeHistory = new Map();
@@ -2040,6 +2099,92 @@ export class DashboardViewService {
           : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Dir', 'Direction chosen by the winning combo for this prediction.') + '</th><th>' + renderHintLabel('Combo', 'Winning strategy combo for the prediction.') + '</th><th>' + renderHintLabel('Score', 'Main combo score for the selected combination. Real execution expects at least ' + formatNumber(${config.MIN_COMBO_EXECUTION_SCORE}, 2) + '.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen combo. Real entry also needs at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Why', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
+      function renderComboStatusPill(status, isExecutionEligible) {
+        const label = isExecutionEligible ? 'EXE' : status === 'good' ? 'GOOD' : status === 'neutral' ? 'NEU' : status === 'avoid' ? 'AVD' : 'WRM';
+        return '<span class="pill">' + label + '</span>';
+      }
+
+      function renderComboSearch(summary) {
+        const comboSearchBoards = summary.comboSearchBoards ?? [];
+        if (comboSearchBoards.length === 0) {
+          replacePanelContent('combo-search', '<div class="tiny">No combo search state yet.</div>');
+          return;
+        }
+        const marketKeys = summary.markets.map((market) => market.marketKey);
+        if (!marketKeys.includes(activeComboSearchMarketKey)) {
+          activeComboSearchMarketKey = marketKeys[0] ?? comboSearchBoards[0].marketKey;
+        }
+        const activeBoard = comboSearchBoards.find((comboSearchBoard) => comboSearchBoard.marketKey === activeComboSearchMarketKey) ?? comboSearchBoards[0];
+        if (activeBoard === undefined) {
+          replacePanelContent('combo-search', '<div class="tiny">No combo search state yet.</div>');
+          return;
+        }
+        const searchSnapshot = activeBoard.comboSearchSnapshot;
+        const candidateRows = [...searchSnapshot.activeCombosNow]
+          .sort((leftComboUsage, rightComboUsage) => rightComboUsage.effectiveComboScore - leftComboUsage.effectiveComboScore)
+          .slice(0, 12)
+          .map((comboUsage) => {
+            const comboLabel = renderCodeListGroup('strategy', comboUsage.memberStrategyIds, 3);
+            const relationLabel =
+              searchSnapshot.selectedComboKey === comboUsage.comboKey
+                ? 'selected'
+                : searchSnapshot.executionComboDecision.selectedComboKey === comboUsage.comboKey
+                  ? 'execution'
+                  : comboUsage.didAffectFinalScore || comboUsage.didAffectFinalConfidence
+                    ? 'applied'
+                    : 'candidate';
+            return '<tr>' +
+              '<td>' + comboLabel + '</td>' +
+              '<td>' + comboUsage.size + '</td>' +
+              '<td>' + (comboUsage.direction === null ? '—' : renderDirectionPill(comboUsage.direction, "combo-direction-pill")) + '</td>' +
+              '<td>' + formatNumber(comboUsage.effectiveComboScore, 2) + '</td>' +
+              '<td>' + formatNumber(comboUsage.comboConfidence, 2) + '</td>' +
+              '<td>' + formatNumber(comboUsage.agreementScore, 2) + '</td>' +
+              '<td>' + comboUsage.sampleCount + '</td>' +
+              '<td>' + renderComboStatusPill(comboUsage.status, comboUsage.isExecutionEligible) + '</td>' +
+              '<td>' + relationLabel + '</td>' +
+              '<td><span class="truncate-cell" title="' + comboUsage.reason + '">' + comboUsage.reason + '</span></td>' +
+              '</tr>';
+          }).join('');
+        const tabMarkup = marketKeys.map((marketKey) => {
+          const comboSearchBoard = comboSearchBoards.find((currentBoard) => currentBoard.marketKey === marketKey);
+          const candidateCount = comboSearchBoard?.comboSearchSnapshot.totalCandidateCount ?? 0;
+          const isActionable = comboSearchBoard?.comboSearchSnapshot.executionComboDecision.hasComboGatePassed ?? false;
+          return '<button type="button" class="tab-button' + (marketKey === activeComboSearchMarketKey ? ' is-active' : '') + '" data-market-key="' + marketKey + '">' +
+            marketKey.replace(':', ' ') +
+            ' · ' +
+            candidateCount +
+            (isActionable ? ' · EXE' : '') +
+            '</button>';
+        }).join('');
+        const summaryMarkup =
+          '<div class="combo-search-summary">' +
+            '<div class="combo-search-card"><strong>' + searchSnapshot.totalCandidateCount + '</strong><div class="tiny">' + renderHintLabel('Candidates', 'Total pair and trio candidates generated from the active strategy set for this market.') + '</div></div>' +
+            '<div class="combo-search-card"><strong>' + searchSnapshot.pairCandidateCount + ' / ' + searchSnapshot.trioCandidateCount + '</strong><div class="tiny">' + renderHintLabel('Pairs / Trios', 'How many pair candidates and trio candidates were generated in this snapshot.') + '</div></div>' +
+            '<div class="combo-search-card"><strong>' + (searchSnapshot.selectedComboKey === null ? '—' : renderCodeListGroup('strategy', searchSnapshot.selectedComboKey.split('+'), 3)) + '</strong><div class="tiny">' + renderHintLabel('Research winner', 'Combo currently selected by the research layer for this market.') + '</div></div>' +
+            '<div class="combo-search-card"><strong>' + (searchSnapshot.executionComboDecision.selectedComboKey === null ? '—' : renderCodeListGroup('strategy', searchSnapshot.executionComboDecision.selectedComboKey.split('+'), 3)) + '</strong><div class="tiny">' + renderHintLabel('Execution candidate', 'Combo currently closest to or passing the execution gate.') + '</div></div>' +
+          '</div>';
+        const inlineMarkup =
+          '<div class="combo-search-inline">' +
+            '<span class="combo-search-chip">' + renderHintLabel('Runner-up gap', 'Score gap between the current research winner and the second-best research-eligible combo.') + ': ' + formatNumber(searchSnapshot.scoreGapVsRunnerUp, 2) + '</span>' +
+            '<span class="combo-search-chip">' + renderHintLabel('Execution gate', 'Whether the current execution combo decision is already passing the combo gate.') + ': ' + (searchSnapshot.executionComboDecision.hasComboGatePassed ? 'passed' : 'blocked') + '</span>' +
+            '<span class="combo-search-chip">' + renderHintLabel('Gate reason', 'Gate failure reason when no combo is execution-ready.') + ': ' + (searchSnapshot.executionComboDecision.gateReason ?? 'none') + '</span>' +
+          '</div>';
+        const tableMarkup = candidateRows.length === 0
+          ? '<div class="tiny">No active combo candidates for this market right now.</div>'
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Candidate combo generated from the current active strategies for this market.') + '</th><th>' + renderHintLabel('Sz', 'Combo size: pair or trio.') + '</th><th>' + renderHintLabel('Dir', 'Dominant direction of the combo candidate.') + '</th><th>' + renderHintLabel('Eff scr', 'Effective combo score used for ranking candidates.') + '</th><th>' + renderHintLabel('Conf', 'Candidate combo confidence.') + '</th><th>' + renderHintLabel('Agr', 'Agreement share across member strategies.') + '</th><th>' + renderHintLabel('N', 'Rolling sample count already accumulated for this combo.') + '</th><th>' + renderHintLabel('St', 'Current combo status based on rolling performance.') + '</th><th>' + renderHintLabel('Role', 'Whether the combo is selected, execution-candidate, merely applied as an adjustment, or just a background candidate.') + '</th><th>' + renderHintLabel('Why', 'Current status or application reason attached to the combo.') + '</th></tr></thead><tbody>' + candidateRows + '</tbody></table>');
+        replacePanelContent('combo-search', '<div class="tab-strip">' + tabMarkup + '</div>' + summaryMarkup + inlineMarkup + tableMarkup);
+        document.querySelectorAll('#combo-search .tab-button[data-market-key]').forEach((tabButton) => {
+          tabButton.addEventListener('click', () => {
+            const marketKey = tabButton.getAttribute('data-market-key');
+            if (marketKey !== null) {
+              activeComboSearchMarketKey = marketKey;
+              renderComboSearch(summary);
+            }
+          });
+        });
+      }
+
       function renderPositions(summary) {
         const rows = summary.openPositions.map((position) => {
           return '<tr>' +
@@ -2103,6 +2248,7 @@ export class DashboardViewService {
         renderExecution(summary);
         renderTradeProximity(summary);
         renderWinningCombinations(summary);
+        renderComboSearch(summary);
         renderMarketPnl(summary);
         renderPositions(summary);
         renderTrades(summary);

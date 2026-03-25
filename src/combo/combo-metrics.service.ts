@@ -10,6 +10,7 @@ import type {
   ComboBreakdown,
   ComboDefinition,
   ComboGateDecision,
+  ComboSearchSnapshot,
   ComboSize,
   ComboSummary,
   ComboUsage,
@@ -58,6 +59,10 @@ export class ComboMetricsService {
   private readonly latestActiveCombos: Map<MarketKey, ComboUsage[]>;
   private readonly latestAppliedCombos: Map<MarketKey, ComboUsage[]>;
   private readonly latestExecutionComboDecision: Map<MarketKey, ComboGateDecision>;
+  private readonly latestSelectedCombo: Map<MarketKey, SelectedStrategyCombo | null>;
+  private readonly latestScoreGapVsRunnerUp: Map<MarketKey, number | null>;
+  private readonly latestPairCandidateCount: Map<MarketKey, number>;
+  private readonly latestTrioCandidateCount: Map<MarketKey, number>;
 
   /**
    * @section constructor
@@ -69,6 +74,10 @@ export class ComboMetricsService {
     this.latestActiveCombos = new Map<MarketKey, ComboUsage[]>();
     this.latestAppliedCombos = new Map<MarketKey, ComboUsage[]>();
     this.latestExecutionComboDecision = new Map<MarketKey, ComboGateDecision>();
+    this.latestSelectedCombo = new Map<MarketKey, SelectedStrategyCombo | null>();
+    this.latestScoreGapVsRunnerUp = new Map<MarketKey, number | null>();
+    this.latestPairCandidateCount = new Map<MarketKey, number>();
+    this.latestTrioCandidateCount = new Map<MarketKey, number>();
   }
 
   /**
@@ -516,7 +525,14 @@ export class ComboMetricsService {
         scoredCombos.push(selectedStrategyCombo);
       }
     }
-    const selectedStrategyCombo = [...scoredCombos].sort((leftCombo, rightCombo) => this.compareSelectedCombos(leftCombo, rightCombo))[0] ?? null;
+    const sortedCombos = [...scoredCombos].sort((leftCombo, rightCombo) => this.compareSelectedCombos(leftCombo, rightCombo));
+    const selectedStrategyCombo = sortedCombos[0] ?? null;
+    const runnerUpCombo = sortedCombos[1] ?? null;
+    this.latestSelectedCombo.set(_marketKey, selectedStrategyCombo);
+    this.latestScoreGapVsRunnerUp.set(
+      _marketKey,
+      selectedStrategyCombo === null || runnerUpCombo === null ? null : selectedStrategyCombo.comboScore - runnerUpCombo.comboScore,
+    );
     return selectedStrategyCombo;
   }
 
@@ -703,7 +719,13 @@ export class ComboMetricsService {
       size: activeComboCandidate.comboDefinition.size,
       direction: activeComboCandidate.direction,
       isAgreement: activeComboCandidate.isAgreement,
+      agreementScore: activeComboCandidate.agreementScore,
+      comboConfidence: activeComboCandidate.comboConfidence,
       comboScore: comboSummary.comboScore,
+      effectiveComboScore: comboSummary.effectiveComboScore,
+      sampleCount: comboSummary.sampleCount,
+      status: comboSummary.status,
+      isExecutionEligible: comboSummary.isExecutionEligible,
       boostApplied: 0,
       confidencePenaltyApplied: 0,
       didAffectFinalScore: false,
@@ -755,10 +777,33 @@ export class ComboMetricsService {
     const lastAppliedCombos = this.latestAppliedCombos.get(marketKey) ?? [];
     const comboBoostShare = lastAppliedCombos.reduce((aggregatedBoost, comboUsage) => aggregatedBoost + Math.abs(comboUsage.boostApplied), 0);
     const comboConfidencePenaltyShare = lastAppliedCombos.reduce((aggregatedPenalty, comboUsage) => aggregatedPenalty + comboUsage.confidencePenaltyApplied, 0);
+    const pairCandidateCount = this.latestPairCandidateCount.get(marketKey) ?? 0;
+    const trioCandidateCount = this.latestTrioCandidateCount.get(marketKey) ?? 0;
+    const executionComboDecision = this.latestExecutionComboDecision.get(marketKey) ?? {
+      hasComboGatePassed: false,
+      selectedComboKey: null,
+      selectedComboSize: null,
+      selectedComboSource: null,
+      effectiveComboScore: null,
+      gateReason: "combo_gate_failed",
+    };
+    const comboSearchSnapshot: ComboSearchSnapshot = {
+      marketKey,
+      selectedComboKey: this.latestSelectedCombo.get(marketKey)?.comboKey ?? null,
+      selectedComboSource: this.latestSelectedCombo.get(marketKey)?.selectionSource ?? null,
+      executionComboDecision,
+      pairCandidateCount,
+      trioCandidateCount,
+      totalCandidateCount: pairCandidateCount + trioCandidateCount,
+      scoreGapVsRunnerUp: this.latestScoreGapVsRunnerUp.get(marketKey) ?? null,
+      activeCombosNow,
+      lastAppliedCombos,
+    };
     return {
       marketKey,
       topPairs,
       topTrios,
+      comboSearchSnapshot,
       activeCombosNow,
       lastAppliedCombos,
       comboBoostShare,
@@ -870,6 +915,14 @@ export class ComboMetricsService {
     selectedCombo: SelectedStrategyCombo | null;
   } {
     const activeComboCandidates = this.buildActiveComboCandidates(marketKey, strategySignals);
+    this.latestPairCandidateCount.set(
+      marketKey,
+      activeComboCandidates.filter((activeComboCandidate) => activeComboCandidate.comboDefinition.size === 2).length,
+    );
+    this.latestTrioCandidateCount.set(
+      marketKey,
+      activeComboCandidates.filter((activeComboCandidate) => activeComboCandidate.comboDefinition.size === 3).length,
+    );
     const strategySummaryMap = new Map<string, StrategySummary>();
     for (const strategySummary of strategySummaries) {
       strategySummaryMap.set(strategySummary.strategyId, strategySummary);

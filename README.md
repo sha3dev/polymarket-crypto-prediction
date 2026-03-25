@@ -413,6 +413,18 @@ It tells you:
 - affordability
 - why it beat alternatives
 
+### Combo Search
+
+Live per-market combo exploration surface.
+
+Each market tab shows:
+
+- how many pair and trio candidates were generated
+- which combo currently wins the research layer
+- which combo is closest to execution
+- the current active candidate table for that market
+- score gap versus the runner-up
+
 ### Resolved Predictions
 
 Recent finished predictions.
@@ -624,6 +636,7 @@ Key fields:
 - `markets`
 - `latestPredictions`
 - `winningCombinations`
+- `comboSearchBoards`
 - `executionNow`
 - `tradeCandidates`
 - `marketPnlTable`
@@ -702,11 +715,29 @@ Rolling summary for one combo:
 
 ### `ComboUsage`
 
-Usage counters and last-seen information for one combo.
+Live snapshot for one active combo candidate.
+
+Important fields:
+
+- combo confidence
+- agreement score
+- effective combo score
+- sample count
+- status
+- whether it is execution-eligible
+- whether it affected the final score or confidence
 
 ### `MarketComboBoard`
 
-Top combos currently associated with one market.
+Per-market combo surface for the dashboard.
+
+Important fields:
+
+- top pairs
+- top trios
+- combo search snapshot
+- active combos now
+- last applied combos
 
 ### `DashboardSummaryPayload`
 
