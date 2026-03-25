@@ -518,6 +518,26 @@ runtime.ingestSnapshot({
 await runtime.stop();
 ```
 
+## Examples
+
+### Inspect the latest BTC 5m prediction
+
+```bash
+curl "http://127.0.0.1:3300/v1/predict?asset=btc&window=5m"
+```
+
+### Inspect execution decisions for all markets
+
+```bash
+curl "http://127.0.0.1:3300/v1/execution"
+```
+
+### Inspect dashboard summary JSON
+
+```bash
+curl "http://127.0.0.1:3300/v1/dashboard/summary"
+```
+
 ## HTTP API
 
 ### `GET /`
