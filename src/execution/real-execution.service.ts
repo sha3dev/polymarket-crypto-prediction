@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { MarketCatalogService, OrderService } from "@sha3/polymarket";
 import type { PolymarketMarket, PostedOrderWithStatus } from "@sha3/polymarket";
 import config from "../config.ts";
+import type { LlmLogService } from "../llm/llm-log.service.ts";
 import logger from "../logger.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketKey, MarketSnapshotSlice, MarketWindow } from "../market/market.types.ts";
@@ -61,6 +62,7 @@ export class RealExecutionService {
   private readonly marketStateService: MarketStateService;
   private readonly predictionEngineService: PredictionEngineService;
   private readonly executionPolicyService: ExecutionPolicyService;
+  private readonly llmLogService: LlmLogService | null;
   private readonly orderService: OrderServiceLike;
   private readonly marketCatalogService: MarketCatalogServiceLike;
   private readonly executionDecisions: Map<MarketKey, ExecutionDecision>;
@@ -87,6 +89,7 @@ export class RealExecutionService {
     executionPolicyService: ExecutionPolicyService,
     orderService?: OrderServiceLike,
     marketCatalogService?: MarketCatalogServiceLike,
+    llmLogService?: LlmLogService,
   ) {
     if (orderService === undefined && config.POLYMARKET_PRIVATE_KEY.length === 0) {
       throw new Error("EXECUTION_MODE=real requires POLYMARKET_PRIVATE_KEY.");
@@ -94,6 +97,7 @@ export class RealExecutionService {
     this.marketStateService = marketStateService;
     this.predictionEngineService = predictionEngineService;
     this.executionPolicyService = executionPolicyService;
+    this.llmLogService = llmLogService ?? null;
     this.orderService = orderService ?? OrderService.createDefault();
     this.marketCatalogService = marketCatalogService ?? MarketCatalogService.createDefault();
     this.executionDecisions = new Map<MarketKey, ExecutionDecision>();
@@ -709,7 +713,7 @@ export class RealExecutionService {
       positionRecord.realizedPnlTokenPrice = grossMove;
       positionRecord.realizedPnlAfterCosts = grossMove - entryCost - exitCost;
       positionRecord.status = "closed";
-      this.recentTrades.unshift({
+      const executionTrade: ExecutionTrade = {
         positionId: positionRecord.positionId,
         marketKey: positionRecord.marketKey,
         asset: positionRecord.asset,
@@ -729,9 +733,13 @@ export class RealExecutionService {
         realizedPnlAfterCosts: positionRecord.realizedPnlAfterCosts,
         holdTimeMs: marketSlice.generatedAt - entryFilledAt,
         hasTakerFallbackUsed: positionRecord.hasTakerFallbackUsed,
-      });
+      };
+      this.recentTrades.unshift(executionTrade);
       if (this.recentTrades.length > config.MAX_PREDICTION_HISTORY_PER_MARKET * 4) {
         this.recentTrades.splice(config.MAX_PREDICTION_HISTORY_PER_MARKET * 4);
+      }
+      if (this.llmLogService !== null) {
+        this.llmLogService.recordTradeClosed(executionTrade);
       }
       this.openPositions.delete(positionRecord.marketKey);
       this.predictionEngineService.resolvePredictionFromTrade(

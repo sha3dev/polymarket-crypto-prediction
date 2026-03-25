@@ -7,6 +7,7 @@ import type { ExecutionService } from "../src/execution/execution.types.ts";
 import { HttpServerService } from "../src/http/http-server.service.ts";
 import { ServiceRuntime } from "../src/index.ts";
 import type { StrategySummary } from "../src/index.ts";
+import type { LlmPromptService } from "../src/llm/llm-prompt.service.ts";
 import type { MarketStateService } from "../src/market/market-state.service.ts";
 import type { PredictionEngineService } from "../src/prediction/prediction-engine.service.ts";
 import type { UpdateService } from "../src/update/update.service.ts";
@@ -143,6 +144,11 @@ test("HttpServerService exposes an update endpoint that delegates to the update 
         };
       },
     } as unknown as UpdateService,
+    {
+      buildPrompt: () => {
+        return "prompt body";
+      },
+    } as unknown as LlmPromptService,
   );
 
   const server = httpServerService.buildServer();
@@ -172,6 +178,93 @@ test("HttpServerService exposes an update endpoint that delegates to the update 
   assert.equal(payload.ok, true);
   assert.equal(payload.gitStdout.includes("Already up to date."), true);
   assert.equal(payload.pm2AppName, "@sha3/polymarket-crypto-prediction");
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+});
+
+test("HttpServerService exposes the prompt endpoint", async () => {
+  const httpServerService = new HttpServerService(
+    {
+      getStrategySummaries: (): [] => [],
+      getComboSummaries: (): [] => [],
+      getLatestPrediction: (): null => null,
+      getPredictions: (): [] => [],
+    } as unknown as PredictionEngineService,
+    {
+      getPortfolioSummary: () => {
+        return {};
+      },
+      getExecutionMode: () => {
+        return "paper";
+      },
+      getAccountSummary: async () => {
+        return {};
+      },
+      getExecutionSummaries: () => [],
+      getOpenPositions: () => [],
+      getRecentTrades: () => [],
+    } as unknown as ExecutionService,
+    {
+      getMarketSummaries: () => [],
+    } as unknown as MarketStateService,
+    {
+      buildHealthPayload: () => {
+        return { ok: true };
+      },
+      buildDashboardSummary: async () => {
+        return {};
+      },
+    } as unknown as DashboardSummaryService,
+    {
+      buildHtml: () => {
+        return "<html></html>";
+      },
+    } as unknown as DashboardViewService,
+    {
+      runUpdate: async () => {
+        return {
+          ok: true,
+          repositoryRoot: "/repo",
+          pm2AppName: "@sha3/polymarket-crypto-prediction",
+          gitStdout: "",
+          gitStderr: "",
+          message: "Update started. PM2 restart has been requested.",
+        };
+      },
+    } as unknown as UpdateService,
+    {
+      buildPrompt: () => {
+        return "prompt body";
+      },
+    } as unknown as LlmPromptService,
+  );
+  const server = httpServerService.buildServer();
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, () => {
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("failed to bind test server");
+  }
+
+  const response = await fetch(`http://127.0.0.1:${address.port}/prompt`);
+  const body = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type")?.startsWith("text/plain; charset=") ?? false, true);
+  assert.equal(body, "prompt body");
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
@@ -394,6 +487,13 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(Array.isArray(summaryJson.tradeCandidates), true);
   assert.equal(typeof summaryJson.executionPerformance.tradeCount, "number");
   assert.equal(typeof summaryJson.paperExecutionPerformance.tradeCount, "number");
+
+  const promptResponse = await fetch(`http://127.0.0.1:${address.port}/prompt`);
+  const promptBody = await promptResponse.text();
+  assert.equal(promptResponse.status, 200);
+  assert.equal(promptBody.includes("https://github.com/sha3dev/polymarket-crypto-prediction"), true);
+  assert.equal(promptBody.includes("## Curated Runtime Evidence"), true);
+  assert.equal(promptBody.includes("btc:5m"), true);
 
   const invalidLimitResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=999`);
   assert.equal(invalidLimitResponse.status, 400);

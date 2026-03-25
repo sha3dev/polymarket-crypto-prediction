@@ -583,6 +583,19 @@ Returns the operator dashboard HTML.
 
 Returns runtime health and monitored market count.
 
+### `GET /prompt`
+
+Returns a plain-text prompt curated for an external LLM.
+
+The prompt is intentionally compact and includes:
+
+- task specification
+- repository and runtime context
+- curated runtime evidence from `runtime/llm/llm-summary.json`
+- recent high-signal events from `runtime/llm/llm-events.jsonl`
+
+This route is fixed and non-versioned on purpose.
+
 ### `GET /v1/predict?asset={btc|eth|sol|xrp}&window={5m|15m}`
 
 Returns the latest prediction for one market.
@@ -807,6 +820,9 @@ Every top-level key from `src/config.ts` is documented below.
 - `DEFAULT_PORT`: server port
 - `SERVICE_NAME`: service name exposed in health and dashboard
 - `EXECUTION_MODE`: `paper` or `real`
+- `LLM_LOG_DIRECTORY`: runtime directory for LLM-oriented logs and summaries
+- `LLM_PROMPT_MAX_CHARS`: hard character cap for `GET /prompt`
+- `LLM_PROMPT_RECENT_EVENT_LIMIT`: max recent curated events considered when building the prompt
 
 ### Snapshot cadence and prediction trigger
 

@@ -18,6 +18,8 @@ import type { ExecutionService } from "../execution/execution.types.ts";
 import { PaperExecutionService } from "../execution/paper-execution.service.ts";
 import { RealExecutionService } from "../execution/real-execution.service.ts";
 import { HttpServerService } from "../http/http-server.service.ts";
+import { LlmLogService } from "../llm/llm-log.service.ts";
+import { LlmPromptService } from "../llm/llm-prompt.service.ts";
 import logger from "../logger.ts";
 import { MarketStateService } from "../market/market-state.service.ts";
 import type { InputSnapshot } from "../market/market.types.ts";
@@ -79,17 +81,25 @@ export class ServiceRuntime {
     const strategyEngineService = new StrategyEngineService(strategyMetricsService);
     const comboMetricsService = new ComboMetricsService();
     const executionPolicyService = new ExecutionPolicyService();
+    const llmLogService = new LlmLogService();
     const predictionEngineService = new PredictionEngineService(
       marketStateService,
       strategyEngineService,
       strategyMetricsService,
       new PredictionStoreService(),
       comboMetricsService,
+      llmLogService,
     );
     const executionService =
       config.EXECUTION_MODE === "real"
-        ? new RealExecutionService(marketStateService, predictionEngineService, executionPolicyService)
-        : new PaperExecutionService(marketStateService, predictionEngineService, executionPolicyService);
+        ? new RealExecutionService(marketStateService, predictionEngineService, executionPolicyService, undefined, undefined, llmLogService)
+        : new PaperExecutionService(marketStateService, predictionEngineService, executionPolicyService, llmLogService);
+    const llmPromptService = new LlmPromptService(
+      llmLogService.getSummaryFilePath(),
+      llmLogService.getEventFilePath(),
+      "https://github.com/sha3dev/polymarket-crypto-prediction",
+      config.EXECUTION_MODE,
+    );
     const httpServerService = new HttpServerService(
       predictionEngineService,
       executionService,
@@ -97,6 +107,7 @@ export class ServiceRuntime {
       new DashboardSummaryService(marketStateService, predictionEngineService, executionService, startedAt),
       new DashboardViewService(),
       new UpdateService(process.cwd(), "@sha3/polymarket-crypto-prediction"),
+      llmPromptService,
     );
     return new ServiceRuntime(
       new SnapshotService(config.SNAPSHOT_INTERVAL_MS),

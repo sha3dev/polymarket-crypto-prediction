@@ -14,6 +14,7 @@ import config from "../config.ts";
 import type { DashboardSummaryService } from "../dashboard/dashboard-summary.service.ts";
 import type { DashboardViewService } from "../dashboard/dashboard-view.service.ts";
 import type { ExecutionService } from "../execution/execution.types.ts";
+import type { LlmPromptService } from "../llm/llm-prompt.service.ts";
 import logger from "../logger.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketWindow } from "../market/market.types.ts";
@@ -36,6 +37,7 @@ export class HttpServerService {
   private readonly dashboardSummaryService: DashboardSummaryService;
   private readonly dashboardViewService: DashboardViewService;
   private readonly updateService: UpdateService;
+  private readonly llmPromptService: LlmPromptService;
 
   /**
    * @section constructor
@@ -48,6 +50,7 @@ export class HttpServerService {
     dashboardSummaryService: DashboardSummaryService,
     dashboardViewService: DashboardViewService,
     updateService: UpdateService,
+    llmPromptService: LlmPromptService,
   ) {
     this.predictionEngineService = predictionEngineService;
     this.executionService = executionService;
@@ -55,6 +58,7 @@ export class HttpServerService {
     this.dashboardSummaryService = dashboardSummaryService;
     this.dashboardViewService = dashboardViewService;
     this.updateService = updateService;
+    this.llmPromptService = llmPromptService;
   }
 
   /**
@@ -103,6 +107,15 @@ export class HttpServerService {
     app.get("/v1/healthz", (context) => {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
       return context.json(this.dashboardSummaryService.buildHealthPayload(Date.now()), 200);
+    });
+    app.get("/prompt", (context) => {
+      try {
+        context.header("content-type", "text/plain; charset=utf-8");
+        return context.text(this.llmPromptService.buildPrompt(), 200);
+      } catch (error) {
+        logger.error(`prompt endpoint failed: ${error instanceof Error ? error.message : String(error)}`);
+        return context.json({ code: "internal_error", message: "Failed to build the LLM prompt." }, 500);
+      }
     });
     app.get("/v1/dashboard/summary", async (context) => {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);

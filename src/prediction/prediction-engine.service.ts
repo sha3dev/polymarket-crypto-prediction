@@ -7,6 +7,7 @@ import type { ComboMetricsService } from "../combo/combo-metrics.service.ts";
 import type { ComboSummary, MarketComboBoard } from "../combo/combo.types.ts";
 import config from "../config.ts";
 import type { ComboSource, PositionSide, TradeExitReason } from "../execution/execution.types.ts";
+import type { LlmLogService } from "../llm/llm-log.service.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketKey, MarketSnapshotSlice, MarketTrigger, MarketWindow, PredictionDirection, TriggerType } from "../market/market.types.ts";
 import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
@@ -56,6 +57,7 @@ export class PredictionEngineService {
   private readonly strategyMetricsService: StrategyMetricsService;
   private readonly predictionStoreService: PredictionStoreService;
   private readonly comboMetricsService: ComboMetricsService;
+  private readonly llmLogService: LlmLogService | null;
   private readonly pendingTriggers: Map<MarketKey, MarketTrigger>;
   private readonly modelStateSnapshots: Map<MarketKey, ModelStateSnapshot>;
 
@@ -69,12 +71,14 @@ export class PredictionEngineService {
     strategyMetricsService: StrategyMetricsService,
     predictionStoreService: PredictionStoreService,
     comboMetricsService: ComboMetricsService,
+    llmLogService?: LlmLogService,
   ) {
     this.marketStateService = marketStateService;
     this.strategyEngineService = strategyEngineService;
     this.strategyMetricsService = strategyMetricsService;
     this.predictionStoreService = predictionStoreService;
     this.comboMetricsService = comboMetricsService;
+    this.llmLogService = llmLogService ?? null;
     this.pendingTriggers = new Map<MarketKey, MarketTrigger>();
     this.modelStateSnapshots = new Map<MarketKey, ModelStateSnapshot>();
   }
@@ -191,6 +195,9 @@ export class PredictionEngineService {
           researchOutcome.resolvedAt,
           "research",
         );
+        if (this.llmLogService !== null) {
+          this.llmLogService.recordPredictionResolved(this.buildPredictionResponse(predictionRecord));
+        }
       }
     }
   }
@@ -500,6 +507,9 @@ export class PredictionEngineService {
           this.predictionStoreService.addPrediction(predictionRecord);
           this.marketStateService.markPredictionCreated(marketTrigger.marketKey, createdAt);
           this.strategyMetricsService.markParticipated(predictionRecord.marketKey, evaluationResult.strategyBreakdown, predictionRecord.createdAt);
+          if (this.llmLogService !== null) {
+            this.llmLogService.recordPredictionCreated(this.buildPredictionResponse(predictionRecord));
+          }
           hasCreatedPrediction = true;
         }
       }
@@ -721,6 +731,9 @@ export class PredictionEngineService {
       if (!predictionRecord.isResolved) {
         predictionRecord.isResolved = true;
         predictionRecord.outcome = outcome;
+        if (this.llmLogService !== null) {
+          this.llmLogService.recordPredictionResolved(this.buildPredictionResponse(predictionRecord));
+        }
       }
     }
   }

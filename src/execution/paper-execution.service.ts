@@ -4,6 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import config from "../config.ts";
+import type { LlmLogService } from "../llm/llm-log.service.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketKey, MarketSnapshotSlice, MarketWindow } from "../market/market.types.ts";
 import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
@@ -43,6 +44,7 @@ export class PaperExecutionService {
   private readonly marketStateService: MarketStateService;
   private readonly predictionEngineService: PredictionEngineService;
   private readonly executionPolicyService: ExecutionPolicyService;
+  private readonly llmLogService: LlmLogService | null;
   private readonly executionDecisions: Map<MarketKey, ExecutionDecision>;
   private readonly openPositions: Map<MarketKey, PaperPosition>;
   private readonly recentTrades: PaperTrade[];
@@ -53,10 +55,16 @@ export class PaperExecutionService {
    * @section constructor
    */
 
-  public constructor(marketStateService: MarketStateService, predictionEngineService: PredictionEngineService, executionPolicyService: ExecutionPolicyService) {
+  public constructor(
+    marketStateService: MarketStateService,
+    predictionEngineService: PredictionEngineService,
+    executionPolicyService: ExecutionPolicyService,
+    llmLogService?: LlmLogService,
+  ) {
     this.marketStateService = marketStateService;
     this.predictionEngineService = predictionEngineService;
     this.executionPolicyService = executionPolicyService;
+    this.llmLogService = llmLogService ?? null;
     this.executionDecisions = new Map<MarketKey, ExecutionDecision>();
     this.openPositions = new Map<MarketKey, PaperPosition>();
     this.recentTrades = [];
@@ -299,7 +307,7 @@ export class PaperExecutionService {
       paperPosition.realizedPnlTokenPrice = grossMove;
       paperPosition.realizedPnlAfterCosts = grossMove - entryCost - exitCost;
       paperPosition.status = "closed";
-      this.recentTrades.unshift({
+      const executionTrade: ExecutionTrade = {
         positionId: paperPosition.positionId,
         marketKey: paperPosition.marketKey,
         asset: paperPosition.asset,
@@ -319,9 +327,13 @@ export class PaperExecutionService {
         realizedPnlAfterCosts: paperPosition.realizedPnlAfterCosts,
         holdTimeMs: marketSlice.generatedAt - entryFilledAt,
         hasTakerFallbackUsed: paperPosition.hasTakerFallbackUsed,
-      });
+      };
+      this.recentTrades.unshift(executionTrade);
       if (this.recentTrades.length > config.MAX_PREDICTION_HISTORY_PER_MARKET * 4) {
         this.recentTrades.splice(config.MAX_PREDICTION_HISTORY_PER_MARKET * 4);
+      }
+      if (this.llmLogService !== null) {
+        this.llmLogService.recordTradeClosed(executionTrade);
       }
       this.openPositions.delete(paperPosition.marketKey);
       this.predictionEngineService.resolvePredictionFromTrade(
