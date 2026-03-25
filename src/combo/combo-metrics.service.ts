@@ -259,21 +259,43 @@ export class ComboMetricsService {
   private computeSemanticOverlapPenalty(activeComboCandidate: ActiveComboCandidate): number {
     const memberKey = activeComboCandidate.comboDefinition.memberStrategyIds.join("+");
     let semanticOverlapPenalty = 0;
+    // Momentum family overlaps
     if (memberKey.includes("s01+s09")) {
       semanticOverlapPenalty = 0.2;
     }
     if (memberKey.includes("s01+s12")) {
       semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.12);
     }
+    if (memberKey.includes("s09+s12")) {
+      semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.1);
+    }
+    // Microstructure family overlaps
     if (memberKey.includes("s02+s05")) {
       semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.12);
+    }
+    if (memberKey.includes("s02+s10")) {
+      semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.14);
+    }
+    if (memberKey.includes("s03+s04")) {
+      semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.1);
+    }
+    if (memberKey.includes("s07+s13")) {
+      semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.1);
+    }
+    // Pricing family overlaps
+    if (memberKey.includes("s14+s15")) {
+      semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.14);
+    }
+    if (memberKey.includes("s06+s15")) {
+      semanticOverlapPenalty = Math.max(semanticOverlapPenalty, 0.08);
     }
     return semanticOverlapPenalty;
   }
 
   private hasSanityCheckMember(activeComboCandidate: ActiveComboCandidate): boolean {
+    // Accept pricing, reversion, or cross_asset as diversifying "sanity" families
     const hasSanityCheckMember = activeComboCandidate.memberSignals.some((memberSignal) => {
-      return memberSignal.family === "pricing" || memberSignal.family === "reversion";
+      return memberSignal.family === "pricing" || memberSignal.family === "reversion" || memberSignal.family === "cross_asset";
     });
     return hasSanityCheckMember;
   }
@@ -440,14 +462,17 @@ export class ComboMetricsService {
     const minimumAnchorFit = this.resolveMinimumAnchorFit(activeComboCandidate.comboDefinition.marketKey);
     const minimumResearchComboScore = this.resolveMinimumResearchComboScore(activeComboCandidate.comboDefinition.marketKey, anchorFitScore);
     const hasSanityCheckMember = this.hasSanityCheckMember(activeComboCandidate);
+    // Reduce historical weight early when sample count is low (cold-start fix)
+    const historicalTrust = Math.min(1, sampleScore);
     const comboScore =
-      agreementScore * 0.24 +
-      historicalHitScore * 0.18 +
-      historicalPnlScore * 0.18 +
-      sampleScore * 0.12 +
-      diversityScore * 0.12 +
-      anchorFitScore * 0.1 -
-      drawdownPenalty * 0.1 -
+      agreementScore * 0.28 +
+      historicalHitScore * 0.14 * historicalTrust +
+      historicalPnlScore * 0.14 * historicalTrust +
+      sampleScore * 0.08 +
+      diversityScore * 0.14 +
+      anchorFitScore * 0.12 +
+      normalizedQualityScore * 0.04 * (1 - historicalTrust) -
+      drawdownPenalty * 0.1 * historicalTrust -
       familyRedundancyPenalty * 0.14 -
       semanticOverlapPenalty * 0.14;
     const hasEnoughAgreement = activeComboCandidate.comboDefinition.size === 2 ? agreementScore >= 0.75 : agreementScore >= 0.67 && diversityScore >= 0.67;

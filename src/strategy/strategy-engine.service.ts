@@ -45,13 +45,81 @@ export class StrategyEngineService {
 
   private createDefinitions(): StrategyDefinition[] {
     const strategyDefinitions: StrategyDefinition[] = [
+      // --- low tier: always evaluated ---
       { strategyId: "s01", name: "Momentum EWMA", tier: "low", family: "momentum", description: "Short drift continuation.", isComboEligible: true },
       { strategyId: "s02", name: "Token Microprice", tier: "low", family: "microstructure", description: "Top-of-book pressure.", isComboEligible: true },
-      { strategyId: "s05", name: "Order Book Churn", tier: "medium", family: "microstructure", description: "Book rotation pressure.", isComboEligible: true },
+      { strategyId: "s06", name: "No-Arb Consistency", tier: "low", family: "pricing", description: "Up+down deviation from unity.", isComboEligible: true },
+      {
+        strategyId: "s07",
+        name: "Spread Compression",
+        tier: "low",
+        family: "microstructure",
+        description: "Spread diff plus spot drift.",
+        isComboEligible: true,
+      },
       { strategyId: "s09", name: "Spot Consensus Momentum", tier: "low", family: "momentum", description: "Cross-venue spot drift.", isComboEligible: true },
-      { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: false },
+      {
+        strategyId: "s10",
+        name: "Spot Micropressure",
+        tier: "low",
+        family: "microstructure",
+        description: "Aggregated venue imbalance.",
+        isComboEligible: true,
+      },
       { strategyId: "s14", name: "Chainlink Basis", tier: "low", family: "pricing", description: "Oracle catch-up.", isComboEligible: true },
+      {
+        strategyId: "s15",
+        name: "Theoretical Probability Gap",
+        tier: "low",
+        family: "pricing",
+        description: "Oracle-implied vs observed gap.",
+        isComboEligible: true,
+      },
       { strategyId: "s16", name: "Freshness Gap", tier: "low", family: "pricing", description: "Spot leads stale token.", isComboEligible: true },
+      // --- medium tier: evaluated on escalation ---
+      {
+        strategyId: "s03",
+        name: "Token Imbalance Band",
+        tier: "medium",
+        family: "microstructure",
+        description: "Depth ratio pressure.",
+        isComboEligible: true,
+      },
+      { strategyId: "s04", name: "Wall Proximity", tier: "medium", family: "microstructure", description: "Spread-depth wall signal.", isComboEligible: true },
+      { strategyId: "s05", name: "Order Book Churn", tier: "medium", family: "microstructure", description: "Book rotation pressure.", isComboEligible: true },
+      {
+        strategyId: "s08",
+        name: "Barrier Timing",
+        tier: "medium",
+        family: "pricing",
+        description: "Chainlink vs price-to-beat proximity.",
+        isComboEligible: true,
+      },
+      {
+        strategyId: "s11",
+        name: "Spot Dispersion",
+        tier: "medium",
+        family: "reversion",
+        description: "Cross-venue price spread as reversion.",
+        isComboEligible: true,
+      },
+      { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: false },
+      {
+        strategyId: "s13",
+        name: "Spot Slippage Skew",
+        tier: "medium",
+        family: "microstructure",
+        description: "Venue spread skew direction.",
+        isComboEligible: true,
+      },
+      {
+        strategyId: "s17",
+        name: "Regime Switch",
+        tier: "medium",
+        family: "momentum",
+        description: "Conditional momentum or reversion.",
+        isComboEligible: true,
+      },
       { strategyId: "s18", name: "Liquidity Shock Fade", tier: "medium", family: "reversion", description: "Short mean reversion.", isComboEligible: true },
       {
         strategyId: "s21",
@@ -59,6 +127,23 @@ export class StrategyEngineService {
         tier: "medium",
         family: "cross_asset",
         description: "Market-wide breadth confirmation, not primary conviction.",
+        isComboEligible: false,
+      },
+      // --- high tier: evaluated only on strong escalation ---
+      {
+        strategyId: "s19",
+        name: "Recent Performance Hedge",
+        tier: "high",
+        family: "momentum",
+        description: "Meta signal from prior strategy consensus.",
+        isComboEligible: false,
+      },
+      {
+        strategyId: "s20",
+        name: "Online Logistic Blend",
+        tier: "high",
+        family: "momentum",
+        description: "Weighted blend of core strategies plus prior bias.",
         isComboEligible: false,
       },
       {
@@ -75,6 +160,15 @@ export class StrategyEngineService {
         tier: "high",
         family: "momentum",
         description: "BTC flips and followers start confirming the new side.",
+        isComboEligible: false,
+      },
+      // --- new: spot-token divergence ---
+      {
+        strategyId: "s24",
+        name: "Spot-Token Divergence",
+        tier: "low",
+        family: "pricing",
+        description: "Spot price moved but token midpoint lags behind.",
         isComboEligible: true,
       },
     ];
@@ -163,7 +257,7 @@ export class StrategyEngineService {
       memberStrategyIds = ["s02", "s03", "s05", "s07", "s10", "s13"];
     }
     if (engineId === "mispricing_engine") {
-      memberStrategyIds = ["s06", "s08", "s14", "s15", "s16"];
+      memberStrategyIds = ["s06", "s08", "s14", "s15", "s16", "s24"];
     }
     if (engineId === "reversion_engine") {
       memberStrategyIds = ["s11", "s13", "s18"];
@@ -261,13 +355,13 @@ export class StrategyEngineService {
           : 0;
     }
     if (engineId === "local_momentum_engine") {
-      engineBias = context.current.spotMomentum * 35;
+      engineBias = context.current.spotMomentum * 8;
     }
     if (engineId === "local_microstructure_engine") {
       engineBias = context.current.up.imbalance - context.current.down.imbalance;
     }
     if (engineId === "mispricing_engine") {
-      engineBias = this.scoreChainlinkBasis(context) * -6 + this.scoreTheoreticalProbabilityGap(context) * 0.7;
+      engineBias = this.scoreChainlinkBasis(context) * -1.5 + this.scoreTheoreticalProbabilityGap(context) * 0.7;
     }
     if (engineId === "reversion_engine") {
       engineBias = this.scoreLiquidityShockFade(context) + context.crossAssetRegime.reversalRiskScore * 0.25;
@@ -598,20 +692,27 @@ export class StrategyEngineService {
     if (strategyId === "s23") {
       score = this.scoreBtcTrendReversalConfirmation(context);
     }
+    if (strategyId === "s24") {
+      score = this.scoreSpotTokenDivergence(context);
+    }
     return score;
   }
 
   private scoreMomentumEwma(context: PredictionContext): number {
-    const recentUpMidpoints = context.history
+    const triggerSide = context.trigger.triggeredToken;
+    const recentPrices = context.history
       .slice(-8)
-      .map((entry) => entry.upMidpoint)
-      .filter((value) => value !== null) as number[];
+      .map((entry) => (triggerSide === "up" ? (entry.upMidpoint ?? entry.upPrice) : (entry.downMidpoint ?? entry.downPrice)))
+      .filter((value): value is number => value !== null);
     let score = 0;
-    if (recentUpMidpoints.length >= 2) {
-      const firstPrice = recentUpMidpoints[0] ?? 0;
-      const lastPrice = recentUpMidpoints[recentUpMidpoints.length - 1] ?? 0;
-      const averagePrice = recentUpMidpoints.reduce((aggregatedPrice, price) => aggregatedPrice + price, 0) / recentUpMidpoints.length;
-      score = averagePrice === 0 ? 0 : (lastPrice - firstPrice) / averagePrice;
+    if (recentPrices.length >= 2) {
+      const firstPrice = recentPrices[0] ?? 0;
+      const lastPrice = recentPrices[recentPrices.length - 1] ?? 0;
+      const averagePrice = recentPrices.reduce((aggregatedPrice, price) => aggregatedPrice + price, 0) / recentPrices.length;
+      const rawDrift = averagePrice === 0 ? 0 : (lastPrice - firstPrice) / averagePrice;
+      // For "up" token, positive drift means UP; for "down" token, positive drift means DOWN
+      // Normalize to UP=positive convention
+      score = triggerSide === "up" ? rawDrift : rawDrift * -1;
     }
     score *= this.computeContinuationValidityFactor(context);
     return score;
@@ -646,13 +747,12 @@ export class StrategyEngineService {
       previousEntry?.downMidpoint === null || previousEntry?.downMidpoint === undefined || context.current.down.midpoint === null
         ? 0
         : context.current.down.midpoint - previousEntry.downMidpoint;
-    const confirmationStrength = Math.max(
-      Math.abs(this.scoreChainlinkBasis(context)),
-      Math.abs(this.scoreFreshnessGap(context)),
-      Math.abs(this.scoreLiquidityShockFade(context)),
-      Math.abs(this.scoreBtcTrendReversalConfirmation(context)),
-    );
-    const score = (upMidpointChange - downMidpointChange) * Math.max(0.2, Math.min(1, confirmationStrength * 3));
+    // Self-contained: use imbalance shift as confirmation instead of calling other strategies
+    const imbalanceShift = context.current.up.imbalance - context.current.down.imbalance;
+    const midpointDelta = upMidpointChange - downMidpointChange;
+    const isImbalanceConfirming = Math.sign(midpointDelta) === Math.sign(imbalanceShift) || imbalanceShift === 0;
+    const confirmationFactor = isImbalanceConfirming ? Math.max(0.4, Math.min(1, Math.abs(imbalanceShift) + 0.4)) : 0.2;
+    const score = midpointDelta * confirmationFactor;
     return score;
   }
 
@@ -664,7 +764,8 @@ export class StrategyEngineService {
   }
 
   private scoreSpreadCompression(context: PredictionContext): number {
-    const score = (context.current.down.spread ?? 0) - (context.current.up.spread ?? 0) + context.current.spotMomentum * 40;
+    // Spot momentum multiplier reduced from 40 to 12 to stay proportional
+    const score = (context.current.down.spread ?? 0) - (context.current.up.spread ?? 0) + context.current.spotMomentum * 12;
     return score;
   }
 
@@ -679,7 +780,8 @@ export class StrategyEngineService {
   }
 
   private scoreSpotConsensusMomentum(context: PredictionContext): number {
-    const score = context.current.spotMomentum * 100 * this.computeContinuationValidityFactor(context);
+    // Scale factor reduced from 100 to 18 to keep scores in a comparable range with other strategies
+    const score = context.current.spotMomentum * 18 * this.computeContinuationValidityFactor(context);
     return score;
   }
 
@@ -696,21 +798,36 @@ export class StrategyEngineService {
   }
 
   private scoreVolatilityBreakout(context: PredictionContext): number {
+    const triggerSide = context.trigger.triggeredToken;
     const recentChanges = context.history.slice(-12).map((entry, index, entries) => {
       const previousEntry = index === 0 ? null : entries[index - 1];
       let change = 0;
-      if (previousEntry?.upMidpoint !== null && previousEntry?.upMidpoint !== undefined && entry.upMidpoint !== null) {
-        change = entry.upMidpoint - previousEntry.upMidpoint;
+      if (triggerSide === "up") {
+        if (previousEntry?.upMidpoint !== null && previousEntry?.upMidpoint !== undefined && entry.upMidpoint !== null) {
+          change = entry.upMidpoint - previousEntry.upMidpoint;
+        }
+      } else {
+        if (previousEntry?.downMidpoint !== null && previousEntry?.downMidpoint !== undefined && entry.downMidpoint !== null) {
+          change = entry.downMidpoint - previousEntry.downMidpoint;
+        }
       }
       return change;
     });
     const averageAbsChange = recentChanges.reduce((totalChange, change) => totalChange + Math.abs(change), 0) / Math.max(1, recentChanges.length);
-    const score = averageAbsChange === 0 ? 0 : this.scoreMomentumEwma(context) / averageAbsChange;
+    // Clamp to [-2, 2] to prevent extreme ratios when volatility is tiny
+    const rawScore = averageAbsChange === 0 ? 0 : this.scoreMomentumEwma(context) / averageAbsChange;
+    const score = Math.max(-2, Math.min(2, rawScore));
     return score;
   }
 
   private scoreSpotSlippageSkew(context: PredictionContext): number {
-    const score = context.current.spotVenues.reduce((totalSpread, spotVenue) => totalSpread + (spotVenue.spread ?? 0), 0) * -0.25;
+    // Compute directional skew: venues with tighter ask-side spreads favor UP, tighter bid-side favor DOWN
+    const venueImbalances = context.current.spotVenues.filter((spotVenue) => spotVenue.imbalance !== 0).map((spotVenue) => spotVenue.imbalance);
+    const averageImbalance = venueImbalances.length === 0 ? 0 : venueImbalances.reduce((total, imb) => total + imb, 0) / venueImbalances.length;
+    const totalSpread = context.current.spotVenues.reduce((total, spotVenue) => total + (spotVenue.spread ?? 0), 0);
+    // Combine venue imbalance direction with spread magnitude as a dampener
+    const spreadDampen = Math.max(0.3, 1 - totalSpread * 2);
+    const score = averageImbalance * spreadDampen;
     return score;
   }
 
@@ -828,6 +945,28 @@ export class StrategyEngineService {
     let score = 0;
     if (currentTriggerType === "btc_trend_reversal") {
       score = reversalEdge * 28 * assetMultiplier;
+    }
+    return score;
+  }
+
+  private scoreSpotTokenDivergence(context: PredictionContext): number {
+    // Detects when spot consensus has moved but the up-token midpoint hasn't caught up
+    const spotPrice = context.current.spotConsensusPrice;
+    const priceToBeat = context.current.priceToBeat;
+    const upTokenMidpoint = context.current.up.midpoint ?? context.current.up.price;
+    let score = 0;
+    if (spotPrice !== null && priceToBeat !== null && upTokenMidpoint !== null && priceToBeat !== 0) {
+      // Implied probability from spot: if spot > priceToBeat, up-token should trade higher
+      const spotImpliedDirection = spotPrice >= priceToBeat ? 1 : -1;
+      const spotDistanceFromBarrier = Math.abs(spotPrice - priceToBeat) / priceToBeat;
+      // How far is the token from reflecting the spot signal
+      const tokenDeviation = spotImpliedDirection === 1 ? Math.max(0, 0.55 - upTokenMidpoint) : Math.max(0, upTokenMidpoint - 0.45);
+      // Only fire if there's meaningful spot movement AND the token hasn't caught up
+      const hasSpotSignal = spotDistanceFromBarrier >= 0.002;
+      const hasTokenLag = tokenDeviation >= 0.01;
+      if (hasSpotSignal && hasTokenLag) {
+        score = spotImpliedDirection * Math.min(0.6, spotDistanceFromBarrier * 8 + tokenDeviation * 3);
+      }
     }
     return score;
   }
