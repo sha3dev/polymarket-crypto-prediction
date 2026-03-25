@@ -1396,6 +1396,18 @@ export class DashboardViewService {
         return reasonShortCode;
       }
 
+      function renderTradeExitReasonLabel(exitReason) {
+        let exitReasonLabel = renderInfoCode('tradeExitReason', exitReason, renderReasonCode(exitReason));
+        if (exitReason === 'take_profit_hit') {
+          exitReasonLabel = renderInfoCode('tradeExitReason', exitReason, '<span class="pill up">TPF</span>');
+        } else {
+          if (exitReason === 'stop_loss_hit') {
+            exitReasonLabel = renderInfoCode('tradeExitReason', exitReason, '<span class="pill down">STP</span>');
+          }
+        }
+        return exitReasonLabel;
+      }
+
       function renderMarketStatusCode(status) {
         let marketStatusCode = 'WRM';
         if (status === 'research_only') {
@@ -2096,7 +2108,7 @@ export class DashboardViewService {
             '<td>' + trade.shareCount + '</td>' +
             '<td>' + renderInfoCode('executionStyle', trade.entryExecutionStyle, renderExecutionStyleCode(trade.entryExecutionStyle)) + '</td>' +
             '<td>' + renderInfoCode('executionStyle', trade.exitExecutionStyle, renderExecutionStyleCode(trade.exitExecutionStyle)) + '</td>' +
-            '<td>' + renderInfoCode('tradeExitReason', trade.exitReason, renderReasonCode(trade.exitReason)) + '</td>' +
+            '<td>' + renderTradeExitReasonLabel(trade.exitReason) + '</td>' +
             '<td>' + formatNumber(trade.realizedPnlAfterCosts) + '</td>' +
             '<td>' + formatNumber(trade.holdTimeMs, 0) + '</td>' +
             '</tr>';
