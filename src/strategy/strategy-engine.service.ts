@@ -45,30 +45,63 @@ export class StrategyEngineService {
 
   private createDefinitions(): StrategyDefinition[] {
     const strategyDefinitions: StrategyDefinition[] = [
-      { strategyId: "s01", name: "Momentum EWMA", tier: "low", description: "Short drift continuation." },
-      { strategyId: "s02", name: "Token Microprice", tier: "low", description: "Top-of-book pressure." },
-      { strategyId: "s03", name: "Token Imbalance Band", tier: "medium", description: "Multi-level depth skew." },
-      { strategyId: "s04", name: "Wall Proximity", tier: "medium", description: "Liquidity barrier bias." },
-      { strategyId: "s05", name: "Order Book Churn", tier: "medium", description: "Book rotation pressure." },
-      { strategyId: "s06", name: "No-Arb Consistency", tier: "low", description: "UP and DOWN consistency." },
-      { strategyId: "s07", name: "Spread Compression", tier: "low", description: "Liquidity improvement momentum." },
-      { strategyId: "s08", name: "Barrier Timing", tier: "low", description: "Price-to-beat barrier." },
-      { strategyId: "s09", name: "Spot Consensus Momentum", tier: "low", description: "Cross-venue spot drift." },
-      { strategyId: "s10", name: "Spot Micropressure", tier: "medium", description: "Spot top-of-book skew." },
-      { strategyId: "s11", name: "Spot Dispersion", tier: "medium", description: "Noise versus confirmation." },
-      { strategyId: "s12", name: "Volatility Breakout", tier: "medium", description: "Regime breakout." },
-      { strategyId: "s13", name: "Spot Slippage Skew", tier: "medium", description: "Book slope asymmetry." },
-      { strategyId: "s14", name: "Chainlink Basis", tier: "low", description: "Oracle catch-up." },
-      { strategyId: "s15", name: "Theoretical Probability Gap", tier: "medium", description: "Token versus barrier." },
-      { strategyId: "s16", name: "Freshness Gap", tier: "low", description: "Spot leads stale token." },
-      { strategyId: "s17", name: "Regime Switch", tier: "medium", description: "Time plus liquidity regime." },
-      { strategyId: "s18", name: "Liquidity Shock Fade", tier: "medium", description: "Short mean reversion." },
-      { strategyId: "s19", name: "Recent Performance Hedge", tier: "high", description: "Meta performance hedge." },
-      { strategyId: "s20", name: "Online Logistic Blend", tier: "high", description: "Feature-weighted blend." },
-      { strategyId: "s21", name: "Cross-Asset Breadth Impulse", tier: "medium", description: "Market-wide breadth confirmation, not primary conviction." },
-      { strategyId: "s22", name: "Leader-Laggard Catch-Up", tier: "high", description: "Follow lagging asset after peer impulse." },
+      { strategyId: "s01", name: "Momentum EWMA", tier: "low", family: "momentum", description: "Short drift continuation.", isComboEligible: true },
+      { strategyId: "s02", name: "Token Microprice", tier: "low", family: "microstructure", description: "Top-of-book pressure.", isComboEligible: true },
+      { strategyId: "s05", name: "Order Book Churn", tier: "medium", family: "microstructure", description: "Book rotation pressure.", isComboEligible: true },
+      { strategyId: "s09", name: "Spot Consensus Momentum", tier: "low", family: "momentum", description: "Cross-venue spot drift.", isComboEligible: true },
+      { strategyId: "s12", name: "Volatility Breakout", tier: "medium", family: "momentum", description: "Regime breakout.", isComboEligible: true },
+      { strategyId: "s14", name: "Chainlink Basis", tier: "low", family: "pricing", description: "Oracle catch-up.", isComboEligible: true },
+      { strategyId: "s16", name: "Freshness Gap", tier: "low", family: "pricing", description: "Spot leads stale token.", isComboEligible: true },
+      { strategyId: "s18", name: "Liquidity Shock Fade", tier: "medium", family: "reversion", description: "Short mean reversion.", isComboEligible: true },
+      {
+        strategyId: "s21",
+        name: "Cross-Asset Breadth Impulse",
+        tier: "medium",
+        family: "cross_asset",
+        description: "Market-wide breadth confirmation, not primary conviction.",
+        isComboEligible: true,
+      },
+      {
+        strategyId: "s22",
+        name: "Anchor Follow Catch-Up",
+        tier: "high",
+        family: "cross_asset",
+        description: "Follow lagging asset after BTC and ETH impulse.",
+        isComboEligible: true,
+      },
+      {
+        strategyId: "s23",
+        name: "BTC Trend Reversal Confirmation",
+        tier: "high",
+        family: "momentum",
+        description: "BTC flips and followers start confirming the new side.",
+        isComboEligible: true,
+      },
+      {
+        strategyId: "s24",
+        name: "Price Stretch Penalty",
+        tier: "high",
+        family: "risk",
+        description: "Penalize late entries already too stretched for the TP target.",
+        isComboEligible: true,
+      },
     ];
     return strategyDefinitions;
+  }
+
+  private isDirectionAlignedWithAnchor(direction: PredictionDirection, context: PredictionContext): boolean {
+    const breadthDirection = context.crossAssetRegime.breadthDirection;
+    const isDirectionAlignedWithAnchor = breadthDirection === "NEUTRAL" || breadthDirection === direction;
+    return isDirectionAlignedWithAnchor;
+  }
+
+  private computeSnapshotUtility(rawScore: number, confidence: number, weight: number, direction: PredictionDirection, context: PredictionContext): number {
+    const anchorAlignmentMultiplier = this.isDirectionAlignedWithAnchor(direction, context) ? 1 : 0.55;
+    const normalizedMagnitude = Math.max(0, Math.min(1, Math.abs(rawScore)));
+    const normalizedWeight = Math.max(0, Math.min(1, weight));
+    const snapshotUtility =
+      (normalizedMagnitude * 0.45 + confidence * 0.25 + normalizedWeight * 0.2 + context.current.quality.score * 0.1) * anchorAlignmentMultiplier;
+    return snapshotUtility;
   }
 
   private evaluateTier(tier: StrategyTier, context: PredictionContext, priorSignals: StrategySignal[]): StrategySignal[] {
@@ -87,17 +120,21 @@ export class StrategyEngineService {
     const rawConfidence = 0.5 + Math.min(0.49, Math.abs(weightedScore));
     const confidence = Math.max(0.5, Math.min(0.99, rawConfidence));
     const weight = this.strategyMetricsService.getMarketWeight(definition.strategyId, context.marketKey);
+    const snapshotUtility = this.computeSnapshotUtility(weightedScore, confidence, weight, direction, context);
     return {
       strategyId: definition.strategyId,
       name: definition.name,
       tier: definition.tier,
+      family: definition.family,
       direction,
       score: weightedScore,
       confidence,
       weight,
+      snapshotUtility,
       qualityFactor,
       didRun: qualityFactor > 0,
       didParticipate: qualityFactor > 0,
+      isComboEligible: definition.isComboEligible,
       reason: qualityFactor > 0 ? null : "quality_gate",
       debug: this.buildDebug(definition.strategyId, context, priorSignals, weightedScore),
     };
@@ -565,6 +602,12 @@ export class StrategyEngineService {
     if (strategyId === "s22") {
       score = this.scoreLeaderLaggardCatchUp(context);
     }
+    if (strategyId === "s23") {
+      score = this.scoreBtcTrendReversalConfirmation(context);
+    }
+    if (strategyId === "s24") {
+      score = this.scorePriceStretchPenalty(context);
+    }
     return score;
   }
 
@@ -762,6 +805,36 @@ export class StrategyEngineService {
     ) {
       const breadthDirectionSign = crossAssetRegime.breadthDirection === "UP" ? 1 : -1;
       score = breadthDirectionSign * Math.min(1, crossAssetRegime.breadthStrength * Math.max(0.6, crossAssetRegime.lagRatio * 1.4));
+    }
+    return score;
+  }
+
+  private scoreBtcTrendReversalConfirmation(context: PredictionContext): number {
+    const currentTriggerType = context.trigger.triggerType;
+    const crossAssetRegime = context.crossAssetRegime;
+    const btcTriggeredMomentum = context.trigger.triggeredToken === "up" ? crossAssetRegime.btcUpTokenMomentum : crossAssetRegime.btcDownTokenMomentum;
+    const btcOppositeMomentum = context.trigger.triggeredToken === "up" ? crossAssetRegime.btcDownTokenMomentum : crossAssetRegime.btcUpTokenMomentum;
+    const assetMultiplier = context.asset === "btc" ? 0.55 : context.asset === "eth" ? 1 : 1.1;
+    const reversalEdge = Math.max(0, btcTriggeredMomentum - btcOppositeMomentum);
+    let score = 0;
+    if (currentTriggerType === "btc_trend_reversal" || currentTriggerType === "anchor_follow_breakout") {
+      score = reversalEdge * 28 * assetMultiplier;
+    }
+    return score;
+  }
+
+  private scorePriceStretchPenalty(context: PredictionContext): number {
+    const triggerSide = context.trigger.triggeredToken;
+    const tokenPrice =
+      triggerSide === "up"
+        ? (context.current.up.midpoint ?? context.current.up.price ?? 0.5)
+        : (context.current.down.midpoint ?? context.current.down.price ?? 0.5);
+    const affordableCeiling = Math.min(0.8, config.ENTRY_TARGET_PRICE + config.TAKE_PROFIT_DELTA * 2);
+    const hasExpensiveEntry = tokenPrice > 0.68;
+    const overshoot = Math.max(0, tokenPrice - affordableCeiling);
+    let score = 0;
+    if (hasExpensiveEntry) {
+      score = -Math.max(0.08, (tokenPrice - 0.68) * 2.4 + overshoot * 4);
     }
     return score;
   }

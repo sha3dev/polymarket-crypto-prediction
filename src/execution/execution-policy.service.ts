@@ -61,8 +61,10 @@ export class ExecutionPolicyService {
       selectedComboSource: prediction?.selectedCombo.selectionSource ?? null,
       selectedComboDirection: prediction?.selectedCombo.direction ?? null,
       selectedComboScore: prediction?.selectedCombo.comboScore ?? null,
+      selectedComboExecutionScore: prediction?.selectedCombo.executionComboScore ?? null,
       selectedComboConfidence: prediction?.selectedCombo.comboConfidence ?? null,
       selectedComboStrategyIds: prediction?.selectedCombo.memberStrategyIds ?? [],
+      selectedComboAffordabilityScore: prediction?.selectedCombo.affordabilityScore ?? null,
       regimeId: prediction?.crossAssetRegime.regimeId ?? null,
       readinessScore: prediction === null ? 0 : this.computeReadinessScore(prediction, marketPerformanceSummary, false),
       blockingReasons,
@@ -138,16 +140,19 @@ export class ExecutionPolicyService {
   }
 
   private computeReadinessScore(prediction: PredictionResponse, marketPerformanceSummary: MarketPerformanceSummary | null, hasPassedAnchors: boolean): number {
-    const comboScore = prediction.selectedCombo.comboScore;
+    const comboScore = prediction.selectedCombo.researchComboScore;
+    const comboExecutionScore = prediction.selectedCombo.executionComboScore;
     const comboConfidence = prediction.selectedCombo.comboConfidence;
     const qualityScore = prediction.crossAssetRegime.isTradableGlobalContext ? 1 : 0.7;
     const executionScore = marketPerformanceSummary?.effectiveExecutionScore ?? 0.35;
     const readinessScore =
-      comboScore * 0.28 +
+      comboScore * 0.22 +
+      comboExecutionScore * 0.16 +
       comboConfidence * 0.22 +
       prediction.selectedCombo.anchorFitScore * 0.2 +
       prediction.selectedCombo.marketQualityScore * 0.12 +
-      prediction.selectedCombo.executionReadinessScore * 0.1 +
+      prediction.selectedCombo.executionReadinessScore * 0.05 +
+      prediction.selectedCombo.affordabilityScore * 0.05 +
       executionScore * 0.08;
     const normalizedReadinessScore = Math.max(0, Math.min(1, readinessScore * (hasPassedAnchors ? 1 : 0.55) * qualityScore));
     return normalizedReadinessScore;
@@ -306,11 +311,14 @@ export class ExecutionPolicyService {
           if (prediction.selectedCombo.comboConfidence < config.MIN_ENTRY_CONFIDENCE) {
             blockingReasons.push("confidence_too_low");
           }
-          if (prediction.selectedCombo.comboScore < 0.45) {
+          if (prediction.selectedCombo.executionComboScore < 0.58) {
             blockingReasons.push("combo_score_too_low");
           }
           if (prediction.selectedCombo.anchorFitScore < 0.9) {
             blockingReasons.push("anchor_fit_too_low");
+          }
+          if (prediction.selectedCombo.affordabilityScore < 0.35) {
+            blockingReasons.push("combo_score_too_low");
           }
           if (referencePrice !== null && Math.abs(referencePrice - config.ENTRY_TARGET_PRICE) > config.ENTRY_BAND_HALF_WIDTH) {
             blockingReasons.push("outside_entry_band");
@@ -389,8 +397,10 @@ export class ExecutionPolicyService {
               selectedComboSource: prediction.selectedCombo.selectionSource,
               selectedComboDirection: prediction.selectedCombo.direction,
               selectedComboScore: prediction.selectedCombo.comboScore,
+              selectedComboExecutionScore: prediction.selectedCombo.executionComboScore,
               selectedComboConfidence: prediction.selectedCombo.comboConfidence,
               selectedComboStrategyIds: [...prediction.selectedCombo.memberStrategyIds],
+              selectedComboAffordabilityScore: prediction.selectedCombo.affordabilityScore,
               regimeId: prediction.crossAssetRegime.regimeId,
               readinessScore,
               blockingReasons: [],

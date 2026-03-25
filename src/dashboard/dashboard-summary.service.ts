@@ -63,7 +63,9 @@ export type DashboardSummaryPayload = {
   discoveryBoard: Array<{
     comboKey: string;
     hitRate: number;
-    averageComboScore: number;
+    averageResearchComboScore: number;
+    averageExecutionComboScore: number;
+    averageAffordabilityScore: number;
     averageConfidence: number;
     sampleCount: number;
     markets: string[];
@@ -141,7 +143,16 @@ export class DashboardSummaryService {
   private buildDiscoveryBoard(latestPredictions: PredictionResponse[]): DashboardSummaryPayload["discoveryBoard"] {
     const discoveryMap = new Map<
       string,
-      { comboKey: string; hits: number; totalConfidence: number; totalComboScore: number; sampleCount: number; markets: Set<string> }
+      {
+        comboKey: string;
+        hits: number;
+        totalConfidence: number;
+        totalResearchComboScore: number;
+        totalExecutionComboScore: number;
+        totalAffordabilityScore: number;
+        sampleCount: number;
+        markets: Set<string>;
+      }
     >();
     for (const prediction of latestPredictions) {
       const discoveryKey = prediction.selectedCombo.comboKey;
@@ -151,7 +162,9 @@ export class DashboardSummaryService {
           comboKey: prediction.selectedCombo.comboKey,
           hits: 0,
           totalConfidence: 0,
-          totalComboScore: 0,
+          totalResearchComboScore: 0,
+          totalExecutionComboScore: 0,
+          totalAffordabilityScore: 0,
           sampleCount: 0,
           markets: new Set<string>(),
         };
@@ -161,7 +174,9 @@ export class DashboardSummaryService {
         discoveryEntry.hits += 1;
       }
       discoveryEntry.totalConfidence += prediction.confidence;
-      discoveryEntry.totalComboScore += prediction.selectedCombo.comboScore;
+      discoveryEntry.totalResearchComboScore += prediction.selectedCombo.researchComboScore;
+      discoveryEntry.totalExecutionComboScore += prediction.selectedCombo.executionComboScore;
+      discoveryEntry.totalAffordabilityScore += prediction.selectedCombo.affordabilityScore;
       discoveryEntry.sampleCount += 1;
       discoveryEntry.markets.add(prediction.marketKey);
     }
@@ -170,7 +185,9 @@ export class DashboardSummaryService {
         return {
           comboKey: discoveryEntry.comboKey,
           hitRate: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.hits / discoveryEntry.sampleCount,
-          averageComboScore: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalComboScore / discoveryEntry.sampleCount,
+          averageResearchComboScore: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalResearchComboScore / discoveryEntry.sampleCount,
+          averageExecutionComboScore: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalExecutionComboScore / discoveryEntry.sampleCount,
+          averageAffordabilityScore: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalAffordabilityScore / discoveryEntry.sampleCount,
           averageConfidence: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalConfidence / discoveryEntry.sampleCount,
           sampleCount: discoveryEntry.sampleCount,
           markets: [...discoveryEntry.markets],

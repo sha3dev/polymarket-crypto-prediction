@@ -5,19 +5,24 @@ import { StrategyMetricsService } from "../src/strategy/strategy-metrics.service
 import type { StrategyDefinition, StrategySignal } from "../src/strategy/strategy.types.ts";
 
 test("StrategyMetricsService only counts outcomes inside the rolling time window", () => {
-  const strategyDefinitions: StrategyDefinition[] = [{ strategyId: "s01", name: "Momentum EWMA", tier: "low", description: "Short drift continuation." }];
+  const strategyDefinitions: StrategyDefinition[] = [
+    { strategyId: "s01", name: "Momentum EWMA", tier: "low", family: "momentum", description: "Short drift continuation.", isComboEligible: true },
+  ];
   const strategyMetricsService = new StrategyMetricsService(strategyDefinitions);
   const staleSignal: StrategySignal = {
     strategyId: "s01",
     name: "Momentum EWMA",
     tier: "low",
+    family: "momentum",
     direction: "UP",
     score: 0.9,
     confidence: 0.9,
     weight: 1,
+    snapshotUtility: 0.9,
     qualityFactor: 1,
     didRun: true,
     didParticipate: true,
+    isComboEligible: true,
     reason: null,
     debug: {},
   };
@@ -25,13 +30,16 @@ test("StrategyMetricsService only counts outcomes inside the rolling time window
     strategyId: "s01",
     name: "Momentum EWMA",
     tier: "low",
+    family: "momentum",
     direction: "DOWN",
     score: -0.8,
     confidence: 0.8,
     weight: 1,
+    snapshotUtility: 0.8,
     qualityFactor: 1,
     didRun: true,
     didParticipate: true,
+    isComboEligible: true,
     reason: null,
     debug: {},
   };

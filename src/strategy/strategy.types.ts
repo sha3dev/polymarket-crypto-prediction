@@ -9,12 +9,14 @@ import type { MarketKey, PredictionContext, PredictionDirection } from "../marke
  */
 
 export const STRATEGY_TIERS = ["low", "medium", "high"] as const;
+export const STRATEGY_FAMILIES = ["momentum", "microstructure", "pricing", "reversion", "cross_asset", "risk"] as const;
 
 /**
  * @section types
  */
 
 export type StrategyTier = (typeof STRATEGY_TIERS)[number];
+export type StrategyFamily = (typeof STRATEGY_FAMILIES)[number];
 export type SetupType =
   | "broad_continuation"
   | "leader_laggard_catchup"
@@ -36,19 +38,24 @@ export type StrategyDefinition = {
   strategyId: string;
   name: string;
   tier: StrategyTier;
+  family: StrategyFamily;
   description: string;
+  isComboEligible: boolean;
 };
 export type StrategySignal = {
   strategyId: string;
   name: string;
   tier: StrategyTier;
+  family: StrategyFamily;
   direction: PredictionDirection;
   score: number;
   confidence: number;
   weight: number;
+  snapshotUtility: number;
   qualityFactor: number;
   didRun: boolean;
   didParticipate: boolean;
+  isComboEligible: boolean;
   reason: string | null;
   debug: Record<string, number | string | boolean | null>;
 };

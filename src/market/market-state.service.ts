@@ -360,6 +360,17 @@ export class MarketStateService {
     return isPriceOnTriggeredSide;
   }
 
+  private resolveTriggerPriceCeiling(): number {
+    const triggerPriceCeiling = Math.min(0.8, config.ENTRY_TARGET_PRICE + config.TAKE_PROFIT_DELTA * 2);
+    return triggerPriceCeiling;
+  }
+
+  private isTriggerPriceAffordable(currentPrice: number | null): boolean {
+    const triggerPriceCeiling = this.resolveTriggerPriceCeiling();
+    const isTriggerPriceAffordable = currentPrice !== null && currentPrice <= triggerPriceCeiling;
+    return isTriggerPriceAffordable;
+  }
+
   private hasAnchorSupportForTrigger(currentSlice: MarketSnapshotSlice, tokenSide: TriggeredToken, crossAssetRegime: CrossAssetRegime): boolean {
     const anchorThreshold = config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD * 0.35;
     const requiredBtcMomentum = tokenSide === "up" ? crossAssetRegime.btcUpTokenMomentum : crossAssetRegime.btcDownTokenMomentum;
@@ -473,6 +484,43 @@ export class MarketStateService {
     return triggerType;
   }
 
+  private detectBtcTrendReversalTrigger(
+    currentSlice: MarketSnapshotSlice,
+    tokenSide: TriggeredToken,
+    currentPrice: number | null,
+    crossAssetRegime: CrossAssetRegime,
+  ): TriggerType | null {
+    const btcMarketRecord = this.requireMarketRecord(this.buildMarketKey("btc", currentSlice.window));
+    const btcLatestSlice = btcMarketRecord.latest;
+    const btcPreviousSlice = btcMarketRecord.previous;
+    const btcCurrentTriggeredPrice = btcLatestSlice === null ? null : this.resolveTriggerPrice(btcLatestSlice, tokenSide);
+    const btcPreviousTriggeredPrice = btcPreviousSlice === null ? null : this.resolveTriggerPrice(btcPreviousSlice, tokenSide);
+    const btcCurrentOppositePrice = btcLatestSlice === null ? null : this.resolveTriggerPrice(btcLatestSlice, tokenSide === "up" ? "down" : "up");
+    const btcPreviousOppositePrice = btcPreviousSlice === null ? null : this.resolveTriggerPrice(btcPreviousSlice, tokenSide === "up" ? "down" : "up");
+    const signedBtcTriggeredChange = this.computeSignedTokenChange(btcPreviousTriggeredPrice, btcCurrentTriggeredPrice, tokenSide);
+    const hasOppositeDominanceRecently = btcPreviousOppositePrice !== null && btcPreviousOppositePrice >= 0.5 + config.MIN_TRIGGER_DISTANCE_FROM_HALF * 0.5;
+    const hasOppositeSideFading = btcPreviousOppositePrice !== null && btcCurrentOppositePrice !== null && btcCurrentOppositePrice < btcPreviousOppositePrice;
+    const hasTriggeredSideRecovery =
+      btcCurrentTriggeredPrice !== null &&
+      btcPreviousTriggeredPrice !== null &&
+      btcCurrentTriggeredPrice > btcPreviousTriggeredPrice &&
+      signedBtcTriggeredChange >= config.MIN_TRIGGER_SPOT_MOMENTUM;
+    const hasTargetAnchorSupport = this.hasAnchorSupportForTrigger(currentSlice, tokenSide, crossAssetRegime);
+    const isFollowerMarket = currentSlice.asset !== "btc";
+    let triggerType: TriggerType | null = null;
+    if (
+      isFollowerMarket &&
+      hasTargetAnchorSupport &&
+      hasOppositeDominanceRecently &&
+      hasOppositeSideFading &&
+      hasTriggeredSideRecovery &&
+      this.isPriceOnTriggeredSide(currentPrice, tokenSide)
+    ) {
+      triggerType = "btc_trend_reversal";
+    }
+    return triggerType;
+  }
+
   private detectTriggerType(
     marketRecord: MarketRecord,
     currentSlice: MarketSnapshotSlice,
@@ -482,20 +530,25 @@ export class MarketStateService {
     crossAssetRegime: CrossAssetRegime,
   ): TriggerType | null {
     const crossedHalfTrigger = this.detectCrossedHalfTrigger(previousPrice, currentPrice, tokenSide);
+    const btcTrendReversalTrigger = this.detectBtcTrendReversalTrigger(currentSlice, tokenSide, currentPrice, crossAssetRegime);
     const laggardReleaseTrigger = this.detectLaggardReleaseTrigger(currentSlice, tokenSide, previousPrice, currentPrice, crossAssetRegime);
     const anchorFollowBreakoutTrigger = this.detectAnchorFollowBreakoutTrigger(currentSlice, tokenSide, previousPrice, currentPrice, crossAssetRegime);
     const pullbackResumeTrigger = this.detectPullbackResumeTrigger(marketRecord, tokenSide, previousPrice, currentPrice);
     let triggerType: TriggerType | null = null;
-    if (crossedHalfTrigger !== null) {
+    const isTriggerAffordable = this.isTriggerPriceAffordable(currentPrice);
+    if (crossedHalfTrigger !== null && isTriggerAffordable) {
       triggerType = crossedHalfTrigger;
     }
-    if (triggerType === null && laggardReleaseTrigger !== null) {
+    if (triggerType === null && btcTrendReversalTrigger !== null && isTriggerAffordable) {
+      triggerType = btcTrendReversalTrigger;
+    }
+    if (triggerType === null && laggardReleaseTrigger !== null && isTriggerAffordable) {
       triggerType = laggardReleaseTrigger;
     }
-    if (triggerType === null && anchorFollowBreakoutTrigger !== null) {
+    if (triggerType === null && anchorFollowBreakoutTrigger !== null && isTriggerAffordable) {
       triggerType = anchorFollowBreakoutTrigger;
     }
-    if (triggerType === null && pullbackResumeTrigger !== null) {
+    if (triggerType === null && pullbackResumeTrigger !== null && isTriggerAffordable) {
       triggerType = pullbackResumeTrigger;
     }
     return triggerType;

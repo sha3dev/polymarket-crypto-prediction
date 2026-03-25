@@ -21,6 +21,7 @@ export type SelectedComboSnapshot = {
   selectedComboSource: ComboSource | null;
   selectedComboDirection: PredictionDirection | null;
   selectedComboScore: number | null;
+  selectedComboExecutionScore: number | null;
   selectedComboConfidence: number | null;
   selectedComboStrategyIds: string[];
 };
@@ -57,8 +58,10 @@ export type ExecutionDecision = {
   selectedComboSource: ComboSource | null;
   selectedComboDirection: PredictionDirection | null;
   selectedComboScore: number | null;
+  selectedComboExecutionScore: number | null;
   selectedComboConfidence: number | null;
   selectedComboStrategyIds: string[];
+  selectedComboAffordabilityScore: number | null;
   regimeId: string | null;
   readinessScore: number;
   blockingReasons: string[];

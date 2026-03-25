@@ -91,12 +91,12 @@ For each market:
    - historical hit rate
    - historical pnl proxy
    - sample count
-   - bootstrap discount
    - drawdown penalty
    - diversity
+   - family redundancy penalty
+   - semantic overlap penalty
    - anchor fit
-   - market quality
-   - execution readiness
+   - affordability
 5. it picks one `selectedCombo`
 
 The selected combo exposes:
@@ -105,14 +105,19 @@ The selected combo exposes:
 - `memberStrategyIds`
 - `direction`
 - `comboScore`
+- `researchComboScore`
+- `executionComboScore`
 - `comboConfidence`
 - `historicalHitRate`
 - `historicalPnlProxy`
 - `sampleCount`
 - `diversityScore`
+- `familyRedundancyPenalty`
+- `semanticOverlapPenalty`
 - `anchorFitScore`
 - `marketQualityScore`
 - `executionReadinessScore`
+- `affordabilityScore`
 - `selectionReason`
 
 ### Why `setup` disappeared
@@ -160,6 +165,10 @@ The important score layers are:
   Signed contribution from one strategy.
 - `combo score`
   Final score for the selected pair or trio.
+- `researchComboScore`
+  Combo ranking score used to decide whether a combo is worth recording as research.
+- `executionComboScore`
+  Combo score after market quality, execution readiness, and affordability are folded in.
 - `researchScore`
   Market-level research trust built from resolved predictions.
 - `executionScore`
@@ -250,18 +259,36 @@ The most important visible strategies today are:
 - `s16` Freshness Gap
 - `s18` Liquidity Shock Fade
 - `s21` Cross-Asset Breadth Impulse
-- `s22` Cross-Asset Catch-Up
+- `s22` Anchor Follow Catch-Up
+- `s23` BTC Trend Reversal Confirmation
+- `s24` Price Stretch Penalty
 
-The combo engine may still use other strategies, but the goal is:
+The combo engine is now deliberately pruned. These strategies are no longer first-class combo members:
+
+- `s03`
+- `s04`
+- `s06`
+- `s07`
+- `s08`
+- `s10`
+- `s11`
+- `s13`
+- `s15`
+- `s17`
+- `s19`
+- `s20`
+
+They may still survive as supporting ideas in the codebase, but they do not compete as primary combo members. The goal is:
 
 - fewer redundant votes
-- more distinct information sources
-- better pair/trio discovery
+- more orthogonal pairs and trios
+- less optimistic continuation bias
+- better correlation between combo score and real outcomes
 
 ## Prediction Lifecycle
 
 1. A market produces a trigger.
-2. Trigger confirmation logic waits for post-cross confirmation.
+2. Trigger confirmation logic waits for post-trigger confirmation.
 3. Strategies score the market.
 4. The combo engine searches pairs and trios.
 5. One combo is selected.
@@ -278,6 +305,14 @@ Prediction records now describe:
 - combo breakdown
 - execution eligibility
 - result
+
+Current triggers are:
+
+- `XH` = `crossed_half`
+- `AFB` = `anchor_follow_breakout`
+- `PBR` = `pullback_resume`
+- `LGR` = `laggard_release`
+- `BTR` = `btc_trend_reversal`
 
 ## Execution Gate
 
@@ -361,7 +396,9 @@ Each row shows:
 
 - action
 - selected combo
-- combo score
+- research combo score
+- execution combo score
+- affordability
 - research/execution/effective execution scores
 - regime
 - readiness
@@ -384,8 +421,9 @@ Recent winning combos from the prediction layer.
 It tells you:
 
 - which combo won
-- what direction it implied
-- how strong it was
+- research score
+- execution score
+- affordability
 - why it beat alternatives
 
 ### Resolved Predictions
@@ -408,7 +446,9 @@ Rolling learning surface for combos.
 It groups recent resolved predictions by combo and shows:
 
 - hit rate
-- average combo score
+- average research combo score
+- average execution combo score
+- average affordability
 - average confidence
 - sample count
 - markets where the combo appeared
@@ -814,6 +854,9 @@ These still affect the underlying strategy layer even though the final decision 
 - `COMBO_ROLLING_WINDOW_SECONDS`
 - `COMBO_TOP_STRATEGIES_FOR_PAIRS`
 - `COMBO_TOP_STRATEGIES_FOR_TRIOS`
+- `COMBO_MAX_CANDIDATE_STRATEGIES`
+- `MIN_STRATEGY_SCORE_FOR_COMBO`
+- `MIN_STRATEGY_CONFIDENCE_FOR_COMBO`
 - `MIN_COMBO_SAMPLES_PAIR`
 - `MIN_COMBO_SAMPLES_TRIO`
 - `MIN_COMBO_EXECUTION_SAMPLES_PAIR`

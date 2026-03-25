@@ -1135,6 +1135,9 @@ export class DashboardViewService {
         if (reasonCode === 'laggard_release') {
           humanReason = 'laggard release';
         }
+        if (reasonCode === 'btc_trend_reversal') {
+          humanReason = 'btc trend reversal';
+        }
         return humanReason;
       }
 
@@ -1181,6 +1184,9 @@ export class DashboardViewService {
         }
         if (triggerType === 'laggard_release') {
           triggerCode = 'LGR';
+        }
+        if (triggerType === 'btc_trend_reversal') {
+          triggerCode = 'BTR';
         }
         return triggerCode;
       }
@@ -1734,12 +1740,13 @@ export class DashboardViewService {
             '<td>' + formatNumber(prediction.confidence) + '</td>' +
             '<td><span title="' + triggerLabel + '">' + renderTriggerCode(prediction.trigger.triggerType) + '</span></td>' +
             '<td>' + renderCodeListGroup('strategy', prediction.selectedCombo.memberStrategyIds, 3) + '</td>' +
-            '<td>' + formatNumber(prediction.selectedCombo.comboScore, 2) + '</td>' +
+            '<td>' + formatNumber(prediction.selectedCombo.researchComboScore, 2) + '</td>' +
+            '<td>' + formatNumber(prediction.selectedComboExecutionScore, 2) + '</td>' +
             '<td>' + renderResultBadge(prediction.result) + '</td>' +
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half, AFB = anchor-follow breakout, PBR = pullback resume, LGR = laggard release.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Selected combo score for this prediction.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half, AFB = anchor-follow breakout, PBR = pullback resume, LGR = laggard release, BTR = BTC trend reversal.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Rsch', 'Research combo score used to rank the combo at prediction time.') + '</th><th>' + renderHintLabel('Exec', 'Execution combo score after quality, readiness, and affordability adjustments.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderExecution(summary) {
@@ -1767,15 +1774,17 @@ export class DashboardViewService {
             '<td>' + renderActionLabel(marketExecution.decision) + '</td>' +
             '<td><span title="' + comboHover + '">' + renderCodeListGroup('strategy', marketExecution.decision.selectedComboStrategyIds, 3) + '</span></td>' +
             '<td>' + formatNumber(marketExecution.decision.selectedComboScore, 2) + '</td>' +
+            '<td>' + formatNumber(marketExecution.decision.selectedComboExecutionScore, 2) + '</td>' +
             '<td>' + scoreLabel + '</td>' +
             '<td><span title="' + breadthHover + '">' + breadthLabel + '</span></td>' +
             '<td>' + marketScoreLabel + '</td>' +
             '<td>' + formatNumber(marketExecution.decision.readinessScore, 2) + '</td>' +
+            '<td>' + formatNumber(marketExecution.decision.selectedComboAffordabilityScore, 2) + '</td>' +
             '<td>' + renderConvictionLabel(marketExecution.decision.positionSizeSuggestion) + '</td>' +
             '<td><span class="truncate-cell">' + reasonCodes + '</span></td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Act', 'BU = buy UP, BD = buy DOWN, NO = no trade.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for the market.') + '</th><th>' + renderHintLabel('Cmb scr', 'Selected combo score for the market.') + '</th><th>' + renderHintLabel('Scores', 'Research / execution / effective execution score for this market.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window.') + '</th><th>' + renderHintLabel('Mkt score', 'Effective execution score followed by recent trade count.') + '</th><th>' + renderHintLabel('Ready', 'Overall readiness score for entry.') + '</th><th>' + renderHintLabel('Cnv', 'HI/MD/LO conviction from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Act', 'BU = buy UP, BD = buy DOWN, NO = no trade.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for the market.') + '</th><th>' + renderHintLabel('Rsch', 'Research combo score for the selected combo.') + '</th><th>' + renderHintLabel('Exec', 'Execution combo score after quality, readiness, and affordability.') + '</th><th>' + renderHintLabel('Scores', 'Research / execution / effective execution score for this market.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window.') + '</th><th>' + renderHintLabel('Mkt score', 'Effective execution score followed by recent trade count.') + '</th><th>' + renderHintLabel('Ready', 'Overall readiness score for entry.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score. High means the token price is still attractive relative to the TP target.') + '</th><th>' + renderHintLabel('Cnv', 'HI/MD/LO conviction from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function clamp01(value) {
@@ -1967,7 +1976,9 @@ export class DashboardViewService {
           return '<tr>' +
             '<td><strong>' + prediction.marketKey.replace(':', ' ') + '</strong></td>' +
             '<td>' + renderCodeListGroup('strategy', prediction.selectedCombo.memberStrategyIds, 3) + '</td>' +
-            '<td>' + formatNumber(prediction.selectedCombo.comboScore, 2) + '</td>' +
+            '<td>' + formatNumber(prediction.selectedCombo.researchComboScore, 2) + '</td>' +
+            '<td>' + formatNumber(prediction.selectedComboExecutionScore, 2) + '</td>' +
+            '<td>' + formatNumber(prediction.selectedCombo.affordabilityScore, 2) + '</td>' +
             '<td>' + formatNumber(prediction.confidence, 2) + '</td>' +
             '<td>' + renderRegimeCode(prediction.crossAssetRegime) + '</td>' +
             '<td><span class="truncate-cell" title="' + prediction.selectedCombo.selectionReason + '">' + prediction.selectedCombo.selectionReason + '</span></td>' +
@@ -1975,7 +1986,7 @@ export class DashboardViewService {
         }).join('');
         replacePanelContent('winning-combinations', summary.winningCombinations.length === 0
           ? '<div class="tiny">No combo selections yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Combo', 'Winning strategy combo for the prediction.') + '</th><th>' + renderHintLabel('Score', 'Winning combo score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen combo.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Why', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Combo', 'Winning strategy combo for the prediction.') + '</th><th>' + renderHintLabel('Rsch', 'Research combo score.') + '</th><th>' + renderHintLabel('Exec', 'Execution combo score.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen combo.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Why', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderDiscoveryBoard(summary) {
@@ -1983,7 +1994,9 @@ export class DashboardViewService {
           return '<tr>' +
             '<td><span title="' + discoveryEntry.markets.join(', ') + '">' + renderCodeListGroup('strategy', discoveryEntry.comboKey.split('+'), 3) + '</span></td>' +
             '<td>' + formatNumber(discoveryEntry.hitRate, 2) + '</td>' +
-            '<td>' + formatNumber(discoveryEntry.averageComboScore, 2) + '</td>' +
+            '<td>' + formatNumber(discoveryEntry.averageResearchComboScore, 2) + '</td>' +
+            '<td>' + formatNumber(discoveryEntry.averageExecutionComboScore, 2) + '</td>' +
+            '<td>' + formatNumber(discoveryEntry.averageAffordabilityScore, 2) + '</td>' +
             '<td>' + formatNumber(discoveryEntry.averageConfidence, 2) + '</td>' +
             '<td>' + discoveryEntry.sampleCount + '</td>' +
             '<td><span title="' + discoveryEntry.markets.join(', ') + '">' + discoveryEntry.markets.join(', ') + '</span></td>' +
@@ -1991,7 +2004,7 @@ export class DashboardViewService {
         }).join('');
         replacePanelContent('discovery', summary.discoveryBoard.length === 0
           ? '<div class="tiny">No combo learning history yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Strategy combo being learned.') + '</th><th>' + renderHintLabel('Hit', 'Resolved hit rate for that combo.') + '</th><th>' + renderHintLabel('Avg scr', 'Average combo score for that combo.') + '</th><th>' + renderHintLabel('Avg conf', 'Average confidence for that combo.') + '</th><th>' + renderHintLabel('N', 'Number of resolved predictions inside the dashboard window.') + '</th><th>' + renderHintLabel('Markets', 'Markets where this combo has recently appeared.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Strategy combo being learned.') + '</th><th>' + renderHintLabel('Hit', 'Resolved hit rate for that combo.') + '</th><th>' + renderHintLabel('Rsch', 'Average research combo score for that combo.') + '</th><th>' + renderHintLabel('Exec', 'Average execution combo score for that combo.') + '</th><th>' + renderHintLabel('Aff', 'Average affordability score for that combo.') + '</th><th>' + renderHintLabel('Avg conf', 'Average confidence for that combo.') + '</th><th>' + renderHintLabel('N', 'Number of resolved predictions inside the dashboard window.') + '</th><th>' + renderHintLabel('Markets', 'Markets where this combo has recently appeared.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderPositions(summary) {

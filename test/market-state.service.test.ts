@@ -125,6 +125,50 @@ test("MarketStateService detects laggard-release triggers for follower assets", 
   assert.equal(solSummary?.lastTrigger?.triggerType, "laggard_release");
 });
 
+test("MarketStateService detects btc trend reversal triggers for followers", () => {
+  const marketStateService = new MarketStateService();
+
+  marketStateService.ingestSnapshot(
+    buildSelectiveSnapshot(1_000, {
+      "btc:5m": 0.44,
+      "eth:5m": 0.51,
+    }),
+  );
+  marketStateService.ingestSnapshot(
+    buildSelectiveSnapshot(3_000, {
+      "btc:5m": 0.52,
+      "eth:5m": 0.53,
+    }),
+  );
+
+  const ethSummary = marketStateService.getMarketSummaries(3_000).find((marketSummary) => marketSummary.marketKey === "eth:5m");
+
+  assert.notEqual(ethSummary, undefined);
+  assert.equal(ethSummary?.lastTrigger?.triggerType, "btc_trend_reversal");
+});
+
+test("MarketStateService skips triggers when the token price is already too expensive", () => {
+  const marketStateService = new MarketStateService();
+
+  marketStateService.ingestSnapshot(
+    buildSelectiveSnapshot(1_000, {
+      "btc:5m": 0.56,
+      "eth:5m": 0.68,
+    }),
+  );
+  marketStateService.ingestSnapshot(
+    buildSelectiveSnapshot(3_000, {
+      "btc:5m": 0.64,
+      "eth:5m": 0.75,
+    }),
+  );
+
+  const ethSummary = marketStateService.getMarketSummaries(3_000).find((marketSummary) => marketSummary.marketKey === "eth:5m");
+
+  assert.notEqual(ethSummary, undefined);
+  assert.equal(ethSummary?.lastTrigger, null);
+});
+
 function buildSnapshot(generatedAt: number, driftMultiplier: number): Record<string, number | string | null> & { generated_at: number } {
   const snapshot: Record<string, number | string | null> & { generated_at: number } = {
     generated_at: generatedAt,

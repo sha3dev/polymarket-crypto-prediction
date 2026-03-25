@@ -30,6 +30,7 @@ export type PredictionRecord = {
   marketKey: MarketKey;
   direction: PredictionDirection;
   confidence: number;
+  selectedComboExecutionScore: number;
   weightedScore: number;
   baseWeightedScore: number;
   adjustedWeightedScore: number;
@@ -62,6 +63,7 @@ export type PredictionResponse = {
   marketKey: MarketKey;
   direction: PredictionDirection;
   confidence: number;
+  selectedComboExecutionScore: number;
   weightedScore: number;
   baseWeightedScore: number;
   adjustedWeightedScore: number;
