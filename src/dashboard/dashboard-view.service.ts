@@ -298,7 +298,17 @@ export class DashboardViewService {
       }
       .global-regime-chart {
         position: relative;
-        height: 90px;
+        height: 98px;
+        margin-top: 4px;
+        padding: 6px 4px 2px;
+        border-radius: 12px;
+        overflow: hidden;
+        background: linear-gradient(180deg, rgba(13, 27, 42, 0.015), rgba(13, 27, 42, 0.035));
+      }
+      .global-regime-chart canvas {
+        display: block;
+        width: 100% !important;
+        height: 100% !important;
       }
       .global-regime-legend {
         display: flex;
