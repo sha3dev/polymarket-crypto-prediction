@@ -27,7 +27,7 @@ test("ComboMetricsService ignores strategies removed from combo search", () => {
   assert.equal(comboMembers.includes("s01"), true);
 });
 
-test("ComboMetricsService penalizes semantic overlap and keeps research and execution scores separate", () => {
+test("ComboMetricsService penalizes semantic overlap and keeps a usable combo score", () => {
   const comboMetricsService = new ComboMetricsService();
   const selectedStrategyCombo = comboMetricsService.selectBestComboForMarket({
     marketKey: "btc:5m",
@@ -44,8 +44,7 @@ test("ComboMetricsService penalizes semantic overlap and keeps research and exec
   assert.notEqual(selectedStrategyCombo, null);
   assert.equal(selectedStrategyCombo?.comboKey === "s01+s09", false);
   assert.equal((selectedStrategyCombo?.semanticOverlapPenalty ?? 0) <= 0.08, true);
-  assert.equal(selectedStrategyCombo?.researchComboScore !== selectedStrategyCombo?.executionComboScore, true);
-  assert.equal((selectedStrategyCombo?.executionComboScore ?? 0) > 0, true);
+  assert.equal((selectedStrategyCombo?.comboScore ?? 0) > 0, true);
 });
 
 test("ComboMetricsService uses affordability to weaken late-entry combos", () => {

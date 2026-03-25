@@ -58,7 +58,6 @@ export class ExecutionPolicyService {
       selectedComboSource: prediction?.selectedCombo.selectionSource ?? null,
       selectedComboDirection: prediction?.selectedCombo.direction ?? null,
       selectedComboScore: prediction?.selectedCombo.comboScore ?? null,
-      selectedComboExecutionScore: prediction?.selectedCombo.executionComboScore ?? null,
       selectedComboConfidence: prediction?.selectedCombo.comboConfidence ?? null,
       selectedComboStrategyIds: prediction?.selectedCombo.memberStrategyIds ?? [],
       selectedComboAffordabilityScore: prediction?.selectedCombo.affordabilityScore ?? null,
@@ -288,7 +287,7 @@ export class ExecutionPolicyService {
           if (prediction.selectedCombo.comboConfidence < config.MIN_ENTRY_CONFIDENCE) {
             blockingReasons.push("confidence_too_low");
           }
-          if (prediction.selectedCombo.executionComboScore < 0.58) {
+          if (prediction.selectedCombo.comboScore < 0.58) {
             blockingReasons.push("combo_score_too_low");
           }
           if (prediction.selectedCombo.anchorFitScore < 0.9) {
@@ -359,7 +358,6 @@ export class ExecutionPolicyService {
               selectedComboSource: prediction.selectedCombo.selectionSource,
               selectedComboDirection: prediction.selectedCombo.direction,
               selectedComboScore: prediction.selectedCombo.comboScore,
-              selectedComboExecutionScore: prediction.selectedCombo.executionComboScore,
               selectedComboConfidence: prediction.selectedCombo.comboConfidence,
               selectedComboStrategyIds: [...prediction.selectedCombo.memberStrategyIds],
               selectedComboAffordabilityScore: prediction.selectedCombo.affordabilityScore,

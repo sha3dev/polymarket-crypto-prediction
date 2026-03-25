@@ -829,13 +829,11 @@ export class StrategyEngineService {
       triggerSide === "up"
         ? (context.current.up.midpoint ?? context.current.up.price ?? 0.5)
         : (context.current.down.midpoint ?? context.current.down.price ?? 0.5);
+    const idealEntryFloor = 0.2;
     const affordableCeiling = Math.min(0.8, config.ENTRY_TARGET_PRICE + config.TAKE_PROFIT_DELTA * 2);
-    const hasExpensiveEntry = tokenPrice > 0.68;
-    const overshoot = Math.max(0, tokenPrice - affordableCeiling);
-    let score = 0;
-    if (hasExpensiveEntry) {
-      score = -Math.max(0.08, (tokenPrice - 0.68) * 2.4 + overshoot * 4);
-    }
+    const affordableRange = Math.max(0.01, affordableCeiling - idealEntryFloor);
+    const normalizedAffordability = Math.max(0, Math.min(1, (affordableCeiling - tokenPrice) / affordableRange));
+    const score = normalizedAffordability - 1;
     return score;
   }
 

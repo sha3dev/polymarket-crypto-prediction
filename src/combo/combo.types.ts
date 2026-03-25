@@ -39,8 +39,6 @@ export type SelectedStrategyCombo = {
   direction: PredictionDirection;
   comboConfidence: number;
   comboScore: number;
-  researchComboScore: number;
-  executionComboScore: number;
   agreementScore: number;
   historicalHitRate: number;
   historicalPnlProxy: number;

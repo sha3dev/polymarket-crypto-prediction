@@ -637,17 +637,17 @@ export class DashboardViewService {
             <div id="markets" class="loading panel-scroll">Loading market state…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="panel-title"><span>Execution Now</span><button type="button" class="panel-info-button" data-full-label="Execution Now" data-description="Current entry decision per market. This is the real execution gate: it shows whether the system would buy UP, buy DOWN, or do nothing, plus the selected combo, market score, execution score for the combo, regime, and blocking reason." aria-label="Execution Now. Current entry decision per market. This is the real execution gate: it shows whether the system would buy UP, buy DOWN, or do nothing, plus the selected combo, market score, execution score for the combo, regime, and blocking reason.">i</button></span></h2>
-            <p class="tiny panel-intro">This is the actual trading gate. It shows the selected combo, how ready it is, and which structural rule is blocking entry when no trade should be taken.</p>
+            <h2><span class="panel-title"><span>Execution Now</span><button type="button" class="panel-info-button" data-full-label="Execution Now" data-description="Current entry decision per market. This is the real execution gate: it shows whether the system would buy UP, buy DOWN, or do nothing, plus the selected combo score, market score, regime, and blocking reason." aria-label="Execution Now. Current entry decision per market. This is the real execution gate: it shows whether the system would buy UP, buy DOWN, or do nothing, plus the selected combo score, market score, regime, and blocking reason.">i</button></span></h2>
+            <p class="tiny panel-intro">This is the actual trading gate. It shows the selected combo, its score, and which structural rule is blocking entry when no trade should be taken.</p>
             <div id="execution" class="loading panel-scroll">Loading execution decisions…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="panel-title"><span>Trade Candidates</span><button type="button" class="panel-info-button" data-full-label="Trade Candidates" data-description="Operational ranking of markets. It prioritizes markets that are already allowed to trade, then sorts the rest by combo execution score, affordability, and market score so you can see what is closest to becoming tradable." aria-label="Trade Candidates. Operational ranking of markets. It prioritizes markets that are already allowed to trade, then sorts the rest by combo execution score, affordability, and market score so you can see what is closest to becoming tradable.">i</button></span></h2>
+            <h2><span class="panel-title"><span>Trade Candidates</span><button type="button" class="panel-info-button" data-full-label="Trade Candidates" data-description="Operational ranking of markets. It prioritizes markets that are already allowed to trade, then sorts the rest by combo score, affordability, and market score so you can see what is closest to becoming tradable." aria-label="Trade Candidates. Operational ranking of markets. It prioritizes markets that are already allowed to trade, then sorts the rest by combo score, affordability, and market score so you can see what is closest to becoming tradable.">i</button></span></h2>
             <p class="tiny panel-intro">Readiness view of how near each market is to a real trade. Each row compresses combo quality, score, quality, and regime support so you can see what is almost ready and what is still structurally blocked.</p>
             <div id="trade-proximity" class="loading panel-scroll">Loading trade proximity…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="panel-title"><span>Combo Board</span><button type="button" class="panel-info-button" data-full-label="Combo Board" data-description="Latest winning strategy combinations from the prediction layer. Each row shows which combo won, how strong it was, and the short explanation for why that combination beat the alternatives." aria-label="Combo Board. Latest winning strategy combinations from the prediction layer. Each row shows which combo won, how strong it was, and the short explanation for why that combination beat the alternatives.">i</button></span></h2>
+            <h2><span class="panel-title"><span>Combo Board</span><button type="button" class="panel-info-button" data-full-label="Combo Board" data-description="Latest winning strategy combinations from the prediction layer. Each row shows which combo won, its score, and the short explanation for why that combination beat the alternatives." aria-label="Combo Board. Latest winning strategy combinations from the prediction layer. Each row shows which combo won, its score, and the short explanation for why that combination beat the alternatives.">i</button></span></h2>
             <p class="tiny panel-intro">The prediction layer now works by selecting a combo of strategies. This panel shows that winning combo directly instead of an artificial narrative layer.</p>
             <div id="winning-combinations" class="loading panel-scroll">Loading combo board…</div>
           </article>
@@ -1728,13 +1728,12 @@ export class DashboardViewService {
             '<td>' + formatNumber(prediction.confidence) + '</td>' +
             '<td><span title="' + triggerLabel + '">' + renderTriggerCode(prediction.trigger.triggerType) + '</span></td>' +
             '<td>' + renderCodeListGroup('strategy', prediction.selectedCombo.memberStrategyIds, 3) + '</td>' +
-            '<td>' + formatNumber(prediction.selectedCombo.researchComboScore, 2) + '</td>' +
-            '<td>' + formatNumber(prediction.selectedComboExecutionScore, 2) + '</td>' +
+            '<td>' + formatNumber(prediction.selectedCombo.comboScore, 2) + '</td>' +
             '<td>' + renderResultBadge(prediction.result) + '</td>' +
             '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo. Real entry also expects confidence of at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half, AFB = anchor-follow breakout, PBR = pullback resume, LGR = laggard release, BTR = BTC trend reversal.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Rsch', 'Research combo score used to rank the combo at prediction time. This is idea quality before hard entry gates.') + '</th><th>' + renderHintLabel('Exec', 'Execution combo score after market quality and affordability adjustments. Real execution expects this to clear ' + formatNumber(${config.MIN_COMBO_EXECUTION_SCORE}, 2) + '.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo. Real entry also expects confidence of at least ' + formatNumber(config.MIN_ENTRY_CONFIDENCE, 2) + '.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = crossed half, AFB = anchor-follow breakout, PBR = pullback resume, LGR = laggard release, BTR = BTC trend reversal.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Combo score used to rank the combo at prediction time. This is idea quality before hard entry gates.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderExecution(summary) {
@@ -1758,7 +1757,6 @@ export class DashboardViewService {
             '<td>' + renderActionLabel(marketExecution.decision) + '</td>' +
             '<td><span title="' + comboHover + '">' + renderCodeListGroup('strategy', marketExecution.decision.selectedComboStrategyIds, 3) + '</span></td>' +
             '<td>' + formatNumber(marketExecution.decision.selectedComboScore, 2) + '</td>' +
-            '<td>' + formatNumber(marketExecution.decision.selectedComboExecutionScore, 2) + '</td>' +
             '<td><span title="' + breadthHover + '">' + breadthLabel + '</span></td>' +
             '<td>' + marketScoreLabel + '</td>' +
             '<td>' + formatNumber(marketExecution.decision.selectedComboAffordabilityScore, 2) + '</td>' +
@@ -1766,7 +1764,7 @@ export class DashboardViewService {
             '<td><span class="truncate-cell">' + reasonCodes + '</span></td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Act', 'BU = buy UP, BD = buy DOWN, NO = no trade.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for the market.') + '</th><th>' + renderHintLabel('Rsch', 'Research combo score for the selected combo. Think of this as idea quality before hard execution filters.') + '</th><th>' + renderHintLabel('Exec', 'Execution combo score after market quality and affordability. The execution layer expects at least ' + formatNumber(${config.MIN_COMBO_EXECUTION_SCORE}, 2) + ' here.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window.') + '</th><th>' + renderHintLabel('Mkt score', 'Historical predictive score for this market followed by recent trade count. The system only allows trades when this market score is at least ' + formatNumber(${config.MIN_MARKET_SCORE_FOR_ENTRY}, 2) + '.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score. High means the token price is still attractive relative to the TP target.') + '</th><th>' + renderHintLabel('Cnv', 'HI/MD/LO conviction from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Act', 'BU = buy UP, BD = buy DOWN, NO = no trade.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for the market.') + '</th><th>' + renderHintLabel('Score', 'Combo score for the selected combo. This is the main combo ranking score, and execution expects at least ' + formatNumber(config.MIN_COMBO_EXECUTION_SCORE, 2) + ' here.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window.') + '</th><th>' + renderHintLabel('Mkt score', 'Historical predictive score for this market followed by recent trade count. The system only allows trades when this market score is at least ' + formatNumber(config.MIN_MARKET_SCORE_FOR_ENTRY, 2) + '.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score. High means the token price is still attractive relative to the TP target.') + '</th><th>' + renderHintLabel('Cnv', 'HI/MD/LO conviction from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function clamp01(value) {
@@ -1775,7 +1773,6 @@ export class DashboardViewService {
 
       function computeTradeProximity(decision, market) {
         const comboStrength = clamp01(decision.selectedComboScore ?? 0);
-        const executionStrength = clamp01(decision.selectedComboExecutionScore ?? 0);
         const affordabilityStrength = clamp01(decision.selectedComboAffordabilityScore ?? 0);
         const qualityStrength = clamp01(market?.quality?.score ?? 0);
         const marketScoreStrength = clamp01(decision.marketScore ?? 0);
@@ -1784,9 +1781,8 @@ export class DashboardViewService {
           regimeStrength = decision.hasBreadthAlignment ? (decision.hasStrongBreadth ? 1 : 0.72) : 0.18;
         }
         const weightedBase =
-          comboStrength * 0.24 +
-          executionStrength * 0.24 +
-          affordabilityStrength * 0.16 +
+          comboStrength * 0.36 +
+          affordabilityStrength * 0.18 +
           qualityStrength * 0.16 +
           marketScoreStrength * 0.16 +
           regimeStrength * 0.14;
@@ -1812,7 +1808,6 @@ export class DashboardViewService {
         return {
           proximity: clamp01(proximity),
           comboStrength,
-          executionStrength,
           affordabilityStrength,
           qualityStrength,
           marketScoreStrength,
@@ -1900,8 +1895,7 @@ export class DashboardViewService {
           const historyValues = pushTradeProximityHistory(tradeCandidate.marketKey, proximity.proximity);
           const trendCanvasId = buildTradeProximityDomId('trade-proximity-trend', tradeCandidate.marketKey);
           const factorEntries = [
-            ['Combo', proximity.comboStrength, 'How strong the currently selected strategy combo looks right now. High means the idea itself is convincing.'],
-            ['Exec', proximity.executionStrength, 'How tradable that combo looks after adding execution-specific filters like quality and affordability.'],
+            ['Score', proximity.comboStrength, 'How strong the currently selected strategy combo looks right now. High means the idea itself is convincing and closer to passing the combo gate.'],
             ['Price', proximity.affordabilityStrength, 'Whether the current token price still looks attractive for entry, or whether the move already feels too stretched.'],
             ['Quality', proximity.qualityStrength, 'How healthy the live market data is right now: freshness, spreads, midpoint quality, and venue consistency.'],
             ['Market', proximity.marketScoreStrength, 'Historical market score. This tells you whether this market has recently been predictable for us.'],
@@ -1954,7 +1948,7 @@ export class DashboardViewService {
             '<td><span title="' + marketPerformance.status.replace('_', ' ') + '">' + renderMarketStatusCode(marketPerformance.status) + '</span></td>' +
             '</tr>';
         }).join('');
-        replacePanelContent('market-pnl', renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key.') + '</th><th>' + renderHintLabel('Trd', 'Number of recent closed paper trades in this market.') + '</th><th>' + renderHintLabel('Hit', 'Recent paper trade hit rate in this market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative recent paper net PnL for this market.') + '</th><th>' + renderHintLabel('Avg', 'Average net PnL per trade in this market.') + '</th><th>' + renderHintLabel('DD', 'Drawdown. This is the maximum rolling peak-to-trough loss seen in the recent PnL path for this market. High DD means the market has been painful or unstable even if the final PnL is positive.') + '</th><th>' + renderHintLabel('Scr', 'Historical market score based on resolved research ideas only. This is the main market score, and the system only allows trades once it reaches at least ' + formatNumber(${config.MIN_MARKET_SCORE_FOR_ENTRY}, 2) + '.') + '</th><th>' + renderHintLabel('St', 'Market status. WRM = warming up, RSC = research only, TRD = tradable, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent('market-pnl', renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key.') + '</th><th>' + renderHintLabel('Trd', 'Number of recent closed paper trades in this market.') + '</th><th>' + renderHintLabel('Hit', 'Recent paper trade hit rate in this market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative recent paper net PnL for this market.') + '</th><th>' + renderHintLabel('Avg', 'Average net PnL per trade in this market.') + '</th><th>' + renderHintLabel('DD', 'Drawdown. This is the maximum rolling peak-to-trough loss seen in the recent PnL path for this market. High DD means the market has been painful or unstable even if the final PnL is positive.') + '</th><th>' + renderHintLabel('Scr', 'Historical market score based on resolved research ideas only. This is the main market score, and the system only allows trades once it reaches at least ' + formatNumber(config.MIN_MARKET_SCORE_FOR_ENTRY, 2) + '.') + '</th><th>' + renderHintLabel('St', 'Market status. WRM = warming up, RSC = research only, TRD = tradable, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderWinningCombinations(summary) {
@@ -1962,8 +1956,7 @@ export class DashboardViewService {
           return '<tr>' +
             '<td><strong>' + prediction.marketKey.replace(':', ' ') + '</strong></td>' +
             '<td>' + renderCodeListGroup('strategy', prediction.selectedCombo.memberStrategyIds, 3) + '</td>' +
-            '<td>' + formatNumber(prediction.selectedCombo.researchComboScore, 2) + '</td>' +
-            '<td>' + formatNumber(prediction.selectedComboExecutionScore, 2) + '</td>' +
+            '<td>' + formatNumber(prediction.selectedCombo.comboScore, 2) + '</td>' +
             '<td>' + formatNumber(prediction.selectedCombo.affordabilityScore, 2) + '</td>' +
             '<td>' + formatNumber(prediction.confidence, 2) + '</td>' +
             '<td>' + renderRegimeCode(prediction.crossAssetRegime) + '</td>' +
@@ -1972,7 +1965,7 @@ export class DashboardViewService {
         }).join('');
         replacePanelContent('winning-combinations', summary.winningCombinations.length === 0
           ? '<div class="tiny">No combo selections yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Combo', 'Winning strategy combo for the prediction.') + '</th><th>' + renderHintLabel('Rsch', 'Research combo score. This is the combo ranking score before hard entry filters.') + '</th><th>' + renderHintLabel('Exec', 'Execution combo score. This is the research score after adding tradability checks such as quality and affordability. The execution layer expects at least ' + formatNumber(${config.MIN_COMBO_EXECUTION_SCORE}, 2) + '.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen combo. Real entry also needs at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Why', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Combo', 'Winning strategy combo for the prediction.') + '</th><th>' + renderHintLabel('Score', 'Main combo score for the selected combination. Real execution expects at least ' + formatNumber(config.MIN_COMBO_EXECUTION_SCORE, 2) + '.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen combo. Real entry also needs at least ' + formatNumber(config.MIN_ENTRY_CONFIDENCE, 2) + '.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Why', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderDiscoveryBoard(summary) {
@@ -1980,8 +1973,7 @@ export class DashboardViewService {
           return '<tr>' +
             '<td><span title="' + discoveryEntry.markets.join(', ') + '">' + renderCodeListGroup('strategy', discoveryEntry.comboKey.split('+'), 3) + '</span></td>' +
             '<td>' + formatNumber(discoveryEntry.hitRate, 2) + '</td>' +
-            '<td>' + formatNumber(discoveryEntry.averageResearchComboScore, 2) + '</td>' +
-            '<td>' + formatNumber(discoveryEntry.averageExecutionComboScore, 2) + '</td>' +
+            '<td>' + formatNumber(discoveryEntry.averageComboScore, 2) + '</td>' +
             '<td>' + formatNumber(discoveryEntry.averageAffordabilityScore, 2) + '</td>' +
             '<td>' + formatNumber(discoveryEntry.averageConfidence, 2) + '</td>' +
             '<td>' + discoveryEntry.sampleCount + '</td>' +
@@ -1990,7 +1982,7 @@ export class DashboardViewService {
         }).join('');
         replacePanelContent('discovery', summary.discoveryBoard.length === 0
           ? '<div class="tiny">No combo learning history yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Strategy combo being learned.') + '</th><th>' + renderHintLabel('Hit', 'Resolved hit rate for that combo.') + '</th><th>' + renderHintLabel('Rsch', 'Average research combo score for that combo. This captures idea quality before hard execution filters.') + '</th><th>' + renderHintLabel('Exec', 'Average execution combo score for that combo after quality and affordability. Useful to see whether a combo is usually tradable, not just intellectually appealing.') + '</th><th>' + renderHintLabel('Aff', 'Average affordability score for that combo.') + '</th><th>' + renderHintLabel('Avg conf', 'Average confidence for that combo.') + '</th><th>' + renderHintLabel('N', 'Number of resolved predictions inside the dashboard window.') + '</th><th>' + renderHintLabel('Markets', 'Markets where this combo has recently appeared.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Strategy combo being learned.') + '</th><th>' + renderHintLabel('Hit', 'Resolved hit rate for that combo.') + '</th><th>' + renderHintLabel('Score', 'Average combo score for that combo across recent resolved predictions.') + '</th><th>' + renderHintLabel('Aff', 'Average affordability score for that combo.') + '</th><th>' + renderHintLabel('Avg conf', 'Average confidence for that combo.') + '</th><th>' + renderHintLabel('N', 'Number of resolved predictions inside the dashboard window.') + '</th><th>' + renderHintLabel('Markets', 'Markets where this combo has recently appeared.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderPositions(summary) {

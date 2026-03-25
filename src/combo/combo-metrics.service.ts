@@ -337,15 +337,15 @@ export class ComboMetricsService {
     return historyReason;
   }
 
-  private buildExecutionReason(executionComboScore: number, marketQualityScore: number): string {
-    let readinessReason = "entry readiness is weak";
-    if (executionComboScore >= 0.45 && marketQualityScore >= 0.75) {
-      readinessReason = "entry conditions look tradable";
+  private buildEntryConditionReason(comboScore: number, marketQualityScore: number): string {
+    let entryConditionReason = "entry conditions are weak";
+    if (comboScore >= 0.45 && marketQualityScore >= 0.75) {
+      entryConditionReason = "entry conditions look tradable";
     }
-    if (executionComboScore >= 0.65 && marketQualityScore >= 0.82) {
-      readinessReason = "entry conditions look strong";
+    if (comboScore >= 0.65 && marketQualityScore >= 0.82) {
+      entryConditionReason = "entry conditions look strong";
     }
-    return readinessReason;
+    return entryConditionReason;
   }
 
   private buildSelectionReason(
@@ -353,7 +353,7 @@ export class ComboMetricsService {
     comboSummary: ComboSummary,
     agreementScore: number,
     anchorFitScore: number,
-    executionComboScore: number,
+    comboScore: number,
     marketQualityScore: number,
     affordabilityScore: number,
   ): string {
@@ -361,10 +361,10 @@ export class ComboMetricsService {
     const agreementReason = this.buildAgreementReason(agreementScore);
     const anchorFitReason = this.buildAnchorFitReason(anchorFitScore);
     const historyReason = this.buildHistoryReason(comboSummary);
-    const readinessReason = this.buildExecutionReason(executionComboScore, marketQualityScore);
+    const entryConditionReason = this.buildEntryConditionReason(comboScore, marketQualityScore);
     const affordabilityReason =
       affordabilityScore >= 0.75 ? "entry is not stretched" : affordabilityScore >= 0.45 ? "entry is getting stretched" : "entry looks late";
-    const selectionReason = `${sourceReason}, ${agreementReason}, ${anchorFitReason}, ${historyReason}, ${readinessReason}, ${affordabilityReason}`;
+    const selectionReason = `${sourceReason}, ${agreementReason}, ${anchorFitReason}, ${historyReason}, ${entryConditionReason}, ${affordabilityReason}`;
     return selectionReason;
   }
 
@@ -425,7 +425,7 @@ export class ComboMetricsService {
     const minimumAnchorFit = this.resolveMinimumAnchorFit(activeComboCandidate.comboDefinition.marketKey);
     const minimumComboConfidence = this.resolveMinimumComboConfidence(activeComboCandidate.comboDefinition.marketKey, anchorFitScore);
     const minimumResearchComboScore = this.resolveMinimumResearchComboScore(activeComboCandidate.comboDefinition.marketKey, anchorFitScore);
-    const researchComboScore =
+    const comboScore =
       agreementScore * 0.24 +
       historicalHitScore * 0.18 +
       historicalPnlScore * 0.18 +
@@ -435,7 +435,6 @@ export class ComboMetricsService {
       drawdownPenalty * 0.1 -
       familyRedundancyPenalty * 0.08 -
       semanticOverlapPenalty * 0.08;
-    const executionComboScore = researchComboScore * 0.82 + normalizedQualityScore * 0.12 + affordabilityScore * 0.06;
     const hasEnoughAgreement = activeComboCandidate.comboDefinition.size === 2 ? agreementScore >= 0.75 : agreementScore >= 0.67 && diversityScore >= 0.67;
     const hasContrarianStretchSignal = activeComboCandidate.memberSignals.some(
       (memberSignal) => memberSignal.strategyId === "s24" && memberSignal.direction !== direction,
@@ -444,10 +443,10 @@ export class ComboMetricsService {
       direction !== null &&
       hasEnoughAgreement &&
       activeComboCandidate.comboConfidence >= minimumComboConfidence &&
-      researchComboScore >= minimumResearchComboScore &&
+      comboScore >= minimumResearchComboScore &&
       anchorFitScore >= minimumAnchorFit &&
       !hasContrarianStretchSignal;
-    const isExecutionEligible = isResearchEligible && executionComboScore >= 0.58 && affordabilityScore >= 0.35;
+    const isExecutionEligible = isResearchEligible && comboScore >= 0.58 && affordabilityScore >= 0.35;
     let selectedStrategyCombo: SelectedStrategyCombo | null = null;
     if (direction !== null) {
       selectedStrategyCombo = {
@@ -457,9 +456,7 @@ export class ComboMetricsService {
         size: activeComboCandidate.comboDefinition.size,
         direction,
         comboConfidence: activeComboCandidate.comboConfidence,
-        comboScore: researchComboScore,
-        researchComboScore,
-        executionComboScore,
+        comboScore,
         agreementScore,
         historicalHitRate: comboSummary.hitRate,
         historicalPnlProxy: comboSummary.averagePnlProxy,
@@ -476,7 +473,7 @@ export class ComboMetricsService {
           comboSummary,
           agreementScore,
           anchorFitScore,
-          executionComboScore,
+          comboScore,
           normalizedQualityScore,
           affordabilityScore,
         ),
@@ -489,7 +486,7 @@ export class ComboMetricsService {
   }
 
   private compareSelectedCombos(leftCombo: SelectedStrategyCombo, rightCombo: SelectedStrategyCombo): number {
-    let comparatorResult = rightCombo.researchComboScore - leftCombo.researchComboScore;
+    let comparatorResult = rightCombo.comboScore - leftCombo.comboScore;
     if (comparatorResult === 0) {
       comparatorResult = rightCombo.anchorFitScore - leftCombo.anchorFitScore;
     }

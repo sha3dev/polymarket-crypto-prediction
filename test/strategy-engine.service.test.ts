@@ -52,10 +52,42 @@ test("StrategyEngineService detects BTC trend reversal confirmation through s23"
   assert.equal(trendReversalScore > 0.1, true);
 });
 
-test("StrategyEngineService penalizes expensive late entries through s24", () => {
+test("StrategyEngineService turns s24 into a continuous affordability curve", () => {
   const strategyDefinitions = buildStrategyDefinitions();
   const strategyMetricsService = new StrategyMetricsService(strategyDefinitions);
   const strategyEngineService = new StrategyEngineService(strategyMetricsService);
+  const cheapPredictionContext = {
+    ...buildPredictionContext(),
+    current: {
+      ...buildPredictionContext().current,
+      up: {
+        ...buildPredictionContext().current.up,
+        price: 0.2,
+        midpoint: 0.2,
+      },
+      down: {
+        ...buildPredictionContext().current.down,
+        price: 0.8,
+        midpoint: 0.8,
+      },
+    },
+  };
+  const mediumPredictionContext = {
+    ...buildPredictionContext(),
+    current: {
+      ...buildPredictionContext().current,
+      up: {
+        ...buildPredictionContext().current.up,
+        price: 0.5,
+        midpoint: 0.5,
+      },
+      down: {
+        ...buildPredictionContext().current.down,
+        price: 0.5,
+        midpoint: 0.5,
+      },
+    },
+  };
   const expensivePredictionContext = {
     ...buildPredictionContext(),
     current: {
@@ -78,9 +110,13 @@ test("StrategyEngineService penalizes expensive late entries through s24", () =>
     throw new Error("expected price stretch helper");
   }
 
-  const priceStretchScore = priceStretchFunction.call(strategyEngineService, expensivePredictionContext);
+  const cheapPriceStretchScore = priceStretchFunction.call(strategyEngineService, cheapPredictionContext);
+  const mediumPriceStretchScore = priceStretchFunction.call(strategyEngineService, mediumPredictionContext);
+  const expensivePriceStretchScore = priceStretchFunction.call(strategyEngineService, expensivePredictionContext);
 
-  assert.equal(priceStretchScore < -0.25, true);
+  assert.equal(cheapPriceStretchScore > mediumPriceStretchScore, true);
+  assert.equal(mediumPriceStretchScore > expensivePriceStretchScore, true);
+  assert.equal(expensivePriceStretchScore < -0.9, true);
 });
 
 function buildStrategyDefinitions(): StrategyDefinition[] {

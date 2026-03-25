@@ -105,8 +105,6 @@ The selected combo exposes:
 - `memberStrategyIds`
 - `direction`
 - `comboScore`
-- `researchComboScore`
-- `executionComboScore`
 - `comboConfidence`
 - `historicalHitRate`
 - `historicalPnlProxy`
@@ -164,10 +162,6 @@ The important score layers are:
   Signed contribution from one strategy.
 - `combo score`
   Final score for the selected pair or trio.
-- `researchComboScore`
-  Combo ranking score used to decide whether a combo is worth recording as research.
-- `executionComboScore`
-  Combo score after market quality and affordability are folded in.
 - `marketScore`
   Market-level predictive trust built only from resolved research predictions.
 
@@ -386,8 +380,7 @@ Each row shows:
 
 - action
 - selected combo
-- research combo score
-- execution combo score
+- combo score
 - affordability
 - regime
 - market score
@@ -410,8 +403,7 @@ Recent winning combos from the prediction layer.
 It tells you:
 
 - which combo won
-- research score
-- execution score
+- combo score
 - affordability
 - why it beat alternatives
 
@@ -435,8 +427,7 @@ Rolling learning surface for combos.
 It groups recent resolved predictions by combo and shows:
 
 - hit rate
-- average research combo score
-- average execution combo score
+- average combo score
 - average affordability
 - average confidence
 - sample count
@@ -738,7 +729,6 @@ Important fields:
 - `selectedComboKey`
 - `selectedComboStrategyIds`
 - `selectedComboScore`
-- `selectedComboExecutionScore`
 - `selectedComboAffordabilityScore`
 - `selectedComboConfidence`
 - `blockingReasons`
@@ -953,14 +943,14 @@ Check:
 - the selected combo is non-empty
 - `marketScore` is not below the trading threshold
 - `cross_asset_regime_conflict` is not blocking the market
-- the selected combo still has enough execution score and affordability
+- the selected combo still has enough score and affordability
 
 ### Predictions exist but no trades happen
 
 That is normal when:
 
 - combos are good enough for research
-- but anchor fit, affordability, market quality, or combo execution score are still below threshold
+- but anchor fit, affordability, market quality, or combo score are still below threshold
 
 Read:
 

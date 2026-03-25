@@ -63,8 +63,7 @@ export type DashboardSummaryPayload = {
   discoveryBoard: Array<{
     comboKey: string;
     hitRate: number;
-    averageResearchComboScore: number;
-    averageExecutionComboScore: number;
+    averageComboScore: number;
     averageAffordabilityScore: number;
     averageConfidence: number;
     sampleCount: number;
@@ -74,7 +73,7 @@ export type DashboardSummaryPayload = {
     marketKey: string;
     comboKey: string | null;
     marketScore: number | null;
-    executionComboScore: number | null;
+    comboScore: number | null;
     affordabilityScore: number | null;
     blockingReason: string | null;
     isEntryAllowed: boolean;
@@ -150,8 +149,7 @@ export class DashboardSummaryService {
         comboKey: string;
         hits: number;
         totalConfidence: number;
-        totalResearchComboScore: number;
-        totalExecutionComboScore: number;
+        totalComboScore: number;
         totalAffordabilityScore: number;
         sampleCount: number;
         markets: Set<string>;
@@ -165,8 +163,7 @@ export class DashboardSummaryService {
           comboKey: prediction.selectedCombo.comboKey,
           hits: 0,
           totalConfidence: 0,
-          totalResearchComboScore: 0,
-          totalExecutionComboScore: 0,
+          totalComboScore: 0,
           totalAffordabilityScore: 0,
           sampleCount: 0,
           markets: new Set<string>(),
@@ -177,8 +174,7 @@ export class DashboardSummaryService {
         discoveryEntry.hits += 1;
       }
       discoveryEntry.totalConfidence += prediction.confidence;
-      discoveryEntry.totalResearchComboScore += prediction.selectedCombo.researchComboScore;
-      discoveryEntry.totalExecutionComboScore += prediction.selectedCombo.executionComboScore;
+      discoveryEntry.totalComboScore += prediction.selectedCombo.comboScore;
       discoveryEntry.totalAffordabilityScore += prediction.selectedCombo.affordabilityScore;
       discoveryEntry.sampleCount += 1;
       discoveryEntry.markets.add(prediction.marketKey);
@@ -188,8 +184,7 @@ export class DashboardSummaryService {
         return {
           comboKey: discoveryEntry.comboKey,
           hitRate: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.hits / discoveryEntry.sampleCount,
-          averageResearchComboScore: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalResearchComboScore / discoveryEntry.sampleCount,
-          averageExecutionComboScore: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalExecutionComboScore / discoveryEntry.sampleCount,
+          averageComboScore: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalComboScore / discoveryEntry.sampleCount,
           averageAffordabilityScore: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalAffordabilityScore / discoveryEntry.sampleCount,
           averageConfidence: discoveryEntry.sampleCount === 0 ? 0 : discoveryEntry.totalConfidence / discoveryEntry.sampleCount,
           sampleCount: discoveryEntry.sampleCount,
@@ -208,7 +203,7 @@ export class DashboardSummaryService {
           marketKey: marketExecution.marketKey,
           comboKey: marketExecution.decision.selectedComboKey,
           marketScore: marketExecution.decision.marketScore,
-          executionComboScore: marketExecution.decision.selectedComboExecutionScore,
+          comboScore: marketExecution.decision.selectedComboScore,
           affordabilityScore: marketExecution.decision.selectedComboAffordabilityScore,
           blockingReason: marketExecution.decision.blockingReasons[0] ?? null,
           isEntryAllowed: marketExecution.decision.isEntryAllowed,
@@ -217,7 +212,7 @@ export class DashboardSummaryService {
       .sort((leftCandidate, rightCandidate) => {
         let comparison = Number(rightCandidate.isEntryAllowed) - Number(leftCandidate.isEntryAllowed);
         if (comparison === 0) {
-          comparison = (rightCandidate.executionComboScore ?? 0) - (leftCandidate.executionComboScore ?? 0);
+          comparison = (rightCandidate.comboScore ?? 0) - (leftCandidate.comboScore ?? 0);
         }
         if (comparison === 0) {
           comparison = (rightCandidate.affordabilityScore ?? 0) - (leftCandidate.affordabilityScore ?? 0);

@@ -583,7 +583,6 @@ export class PaperExecutionService {
           selectedComboSource: null,
           selectedComboDirection: null,
           selectedComboScore: null,
-          selectedComboExecutionScore: null,
           selectedComboConfidence: null,
           selectedComboStrategyIds: [],
           selectedComboAffordabilityScore: null,
