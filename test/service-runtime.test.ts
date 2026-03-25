@@ -26,6 +26,7 @@ test("ServiceRuntime serves the dashboard HTML", async () => {
   assert.match(html, /Polymarket 5m \/ 15m predictor/);
   assert.match(html, /Combo Board/);
   assert.match(html, /Trade Candidates/);
+  assert.match(html, /Direction chosen by the winning combo/);
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {

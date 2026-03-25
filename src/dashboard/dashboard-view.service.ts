@@ -1703,6 +1703,7 @@ export class DashboardViewService {
               ? 'no execution decision yet'
               : renderCrossAssetHover(latestPrediction.crossAssetRegime);
           const comboLabel = latestPrediction ? renderCodeListGroup('strategy', latestPrediction.selectedCombo.memberStrategyIds, 3) : '—';
+          const comboDirectionLabel = latestPrediction ? renderDirectionPill(latestPrediction.direction) : '—';
           return '<tr>' +
             '<td><strong>' + market.asset.toUpperCase() + '</strong> <span class="tiny">' + market.window + '</span></td>' +
             '<td>' + formatNumber(market.latestUpMidpoint) + '</td>' +
@@ -1710,7 +1711,7 @@ export class DashboardViewService {
             '<td>' + formatNumber(market.cooldownRemainingMs, 0) + '</td>' +
             '<td><span title="' + marketStatus + '">' + marketScore + '</span></td>' +
             '<td><span title="' + regimeHover + '">' + regimeLabel + '</span></td>' +
-            '<td>' + comboLabel + '</td>' +
+            '<td><div class="stack-cell">' + comboDirectionLabel + comboLabel + '</div></td>' +
             '<td><span class="quality-cell" title="' + qualityDetails + '"><span>' + formatNumber(market.quality.score, 2) + '</span><div class="quality-bar"><span style="width:' + qualityWidth + '%"></span></div></span></td>' +
             '</tr>';
         }).join("");
@@ -1892,6 +1893,7 @@ export class DashboardViewService {
           const market = marketSummaryMap[tradeCandidate.marketKey];
           const proximity = computeTradeProximity(decision, market);
           const proximityLabel = decision.isEntryAllowed ? 'RDY' : proximity.proximity >= 0.75 ? 'HOT' : proximity.proximity >= 0.5 ? 'MID' : 'COLD';
+          const comboDirectionLabel = decision.selectedComboDirection === null ? '<span class="tiny">no side</span>' : renderDirectionPill(decision.selectedComboDirection);
           const historyValues = pushTradeProximityHistory(tradeCandidate.marketKey, proximity.proximity);
           const trendCanvasId = buildTradeProximityDomId('trade-proximity-trend', tradeCandidate.marketKey);
           const factorEntries = [
@@ -1920,7 +1922,7 @@ export class DashboardViewService {
           });
           const meterWidth = Math.round(proximity.proximity * 100);
           return '<div class="proximity-row">' +
-            '<div><strong>' + tradeCandidate.marketKey.replace(':', ' ') + '</strong></div>' +
+            '<div class="proximity-market"><strong>' + tradeCandidate.marketKey.replace(':', ' ') + '</strong><span>' + comboDirectionLabel + '</span></div>' +
             '<div class="proximity-main">' +
               '<div class="proximity-meter"><span class="proximity-meter-fill" style="width:' + meterWidth + '%"></span></div>' +
               '<div class="proximity-meta">' +
@@ -1955,6 +1957,7 @@ export class DashboardViewService {
         const rows = summary.winningCombinations.map((prediction) => {
           return '<tr>' +
             '<td><strong>' + prediction.marketKey.replace(':', ' ') + '</strong></td>' +
+            '<td>' + renderDirectionPill(prediction.direction) + '</td>' +
             '<td>' + renderCodeListGroup('strategy', prediction.selectedCombo.memberStrategyIds, 3) + '</td>' +
             '<td>' + formatNumber(prediction.selectedCombo.comboScore, 2) + '</td>' +
             '<td>' + formatNumber(prediction.selectedCombo.affordabilityScore, 2) + '</td>' +
@@ -1965,7 +1968,7 @@ export class DashboardViewService {
         }).join('');
         replacePanelContent('winning-combinations', summary.winningCombinations.length === 0
           ? '<div class="tiny">No combo selections yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Combo', 'Winning strategy combo for the prediction.') + '</th><th>' + renderHintLabel('Score', 'Main combo score for the selected combination. Real execution expects at least ' + formatNumber(${config.MIN_COMBO_EXECUTION_SCORE}, 2) + '.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen combo. Real entry also needs at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Why', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Dir', 'Direction chosen by the winning combo for this prediction.') + '</th><th>' + renderHintLabel('Combo', 'Winning strategy combo for the prediction.') + '</th><th>' + renderHintLabel('Score', 'Main combo score for the selected combination. Real execution expects at least ' + formatNumber(${config.MIN_COMBO_EXECUTION_SCORE}, 2) + '.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen combo. Real entry also needs at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Why', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderDiscoveryBoard(summary) {
