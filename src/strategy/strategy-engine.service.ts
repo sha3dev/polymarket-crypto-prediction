@@ -346,12 +346,22 @@ export class StrategyEngineService {
     const directionSign = context.crossAssetRegime.breadthDirection === "UP" ? 1 : context.crossAssetRegime.breadthDirection === "DOWN" ? -1 : 0;
     let engineBias = 0;
     if (engineId === "breadth_engine") {
-      engineBias = directionSign * (context.crossAssetRegime.breadthStrength * 0.55 + context.crossAssetRegime.synchronyScore * 0.08);
+      // Synchrony + acceleration amplify breadth signal; exhaustion dampens it
+      const exhaustionDampen = Math.max(0.35, 1 - context.crossAssetRegime.exhaustionScore * 0.5);
+      engineBias =
+        directionSign *
+        (context.crossAssetRegime.breadthStrength * 0.45 +
+          context.crossAssetRegime.synchronyScore * 0.25 +
+          context.crossAssetRegime.accelerationScore * 0.15 +
+          context.crossAssetRegime.followerParticipation * 0.1) *
+        exhaustionDampen;
     }
     if (engineId === "propagation_engine") {
+      // Follower participation confirms the catch-up thesis
+      const followerConfirmation = 1 + context.crossAssetRegime.followerParticipation * 0.3;
       engineBias =
         context.crossAssetRegime.hasEthAlignment && context.crossAssetRegime.lagRatio >= config.CROSS_ASSET_LAGGARD_THRESHOLD && directionSign !== 0
-          ? directionSign * (context.crossAssetRegime.lagRatio * 0.8 + context.crossAssetRegime.breadthStrength * 0.4)
+          ? directionSign * (context.crossAssetRegime.lagRatio * 0.8 + context.crossAssetRegime.breadthStrength * 0.4) * followerConfirmation
           : 0;
     }
     if (engineId === "local_momentum_engine") {
@@ -378,7 +388,10 @@ export class StrategyEngineService {
     const isDirectionAligned = crossAssetRegime.breadthDirection === "NEUTRAL" ? true : crossAssetRegime.breadthDirection === direction;
     let regimeFit = 0.85;
     if (engineId === "breadth_engine") {
-      regimeFit = crossAssetRegime.isDirectional ? 0.92 + crossAssetRegime.breadthStrength * 0.22 : 0.4;
+      // High synchrony + follower participation make breadth more reliable
+      regimeFit = crossAssetRegime.isDirectional
+        ? 0.88 + crossAssetRegime.breadthStrength * 0.2 + crossAssetRegime.synchronyScore * 0.12 + crossAssetRegime.followerParticipation * 0.08
+        : 0.35;
     }
     if (engineId === "propagation_engine") {
       regimeFit =
@@ -389,7 +402,10 @@ export class StrategyEngineService {
             : 0.3;
     }
     if (engineId === "local_momentum_engine") {
-      regimeFit = crossAssetRegime.regimeClass === "reversal" ? 0.55 : isDirectionAligned ? 1 + crossAssetRegime.breadthStrength * 0.2 : 0.72;
+      // Exhaustion dampens momentum engine: fading breadth makes momentum less reliable
+      const exhaustionDampen = crossAssetRegime.exhaustionScore > 0.6 ? 0.85 : 1;
+      regimeFit =
+        crossAssetRegime.regimeClass === "reversal" ? 0.55 : isDirectionAligned ? (1 + crossAssetRegime.breadthStrength * 0.2) * exhaustionDampen : 0.72;
     }
     if (engineId === "local_microstructure_engine") {
       regimeFit = context.current.quality.score >= 0.75 ? 0.95 : 0.65;
@@ -915,11 +931,23 @@ export class StrategyEngineService {
   private scoreCrossAssetBreadthImpulse(context: PredictionContext): number {
     const crossAssetRegime = context.crossAssetRegime;
     let score = 0;
-    if (crossAssetRegime.hasStrongBreadth && crossAssetRegime.breadthDirection !== "NEUTRAL") {
+    if (crossAssetRegime.breadthDirection !== "NEUTRAL") {
       const breadthDirectionSign = crossAssetRegime.breadthDirection === "UP" ? 1 : -1;
       const alignmentBias =
         Math.sign(crossAssetRegime.targetSignedMove) === 0 ? 0.45 : Math.sign(crossAssetRegime.targetSignedMove) === breadthDirectionSign ? 0.55 : -0.2;
-      score = breadthDirectionSign * crossAssetRegime.breadthStrength * 0.28 * alignmentBias;
+      // Synchrony amplifies: synchronized markets give a stronger signal
+      const synchronyMultiplier = 1 + crossAssetRegime.synchronyScore * 0.35;
+      // Acceleration boosts: strengthening breadth is more actionable
+      const accelerationMultiplier = 1 + crossAssetRegime.accelerationScore * 0.2;
+      // Exhaustion dampens: fading breadth reduces the impulse
+      const exhaustionDampen = Math.max(0.4, 1 - crossAssetRegime.exhaustionScore * 0.45);
+      if (crossAssetRegime.hasStrongBreadth) {
+        // Strong breadth: full signal with enriched metrics
+        score = breadthDirectionSign * crossAssetRegime.breadthStrength * 0.3 * alignmentBias * synchronyMultiplier * accelerationMultiplier * exhaustionDampen;
+      } else {
+        // Weak but directional breadth: attenuated signal still provides a directional hint
+        score = breadthDirectionSign * crossAssetRegime.breadthStrength * 0.12 * Math.max(0, alignmentBias) * synchronyMultiplier * exhaustionDampen;
+      }
     }
     return score;
   }
@@ -1023,8 +1051,11 @@ export class StrategyEngineService {
     const affordability = this.computeNormalizedAffordability(context);
     const reversalPenalty = Math.max(0.3, 1 - context.crossAssetRegime.reversalRiskScore * 0.7);
     const moveExtensionPenalty = Math.max(0.3, 1 - this.computeTriggeredMoveExtension(context) * 0.5);
-    // Rebalanced: reversal risk and move extension matter most; affordability is secondary
-    let continuationValidityFactor = reversalPenalty * 0.4 + moveExtensionPenalty * 0.3 + affordability * 0.3;
+    // Exhaustion penalty: fading breadth means continuation is less reliable
+    const exhaustionPenalty = Math.max(0.4, 1 - context.crossAssetRegime.exhaustionScore * 0.55);
+    // Acceleration boost: accelerating breadth strengthens continuation signals
+    const accelerationBoost = 1 + context.crossAssetRegime.accelerationScore * 0.2;
+    let continuationValidityFactor = (reversalPenalty * 0.3 + moveExtensionPenalty * 0.25 + exhaustionPenalty * 0.2 + affordability * 0.25) * accelerationBoost;
     if (context.trigger.triggerType === "crossed_half") {
       continuationValidityFactor *= Math.max(0.3, 1 - context.crossAssetRegime.reversalRiskScore * 0.35);
     }

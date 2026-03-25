@@ -169,6 +169,18 @@ export class DashboardViewService {
         gap: 6px;
         margin: 10px 0 12px;
       }
+      .combo-search-table {
+        max-height: 340px;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+      .combo-search-table::-webkit-scrollbar {
+        width: 10px;
+      }
+      .combo-search-table::-webkit-scrollbar-thumb {
+        background: rgba(13, 27, 42, 0.16);
+        border-radius: 999px;
+      }
       .combo-search-chip {
         display: inline-flex;
         align-items: center;
@@ -740,9 +752,9 @@ export class DashboardViewService {
             <div id="winning-combinations" class="loading panel-scroll">Loading combo board…</div>
           </article>
           <article class="panel panel-tall">
-            <h2><span class="panel-title"><span>Resolved Predictions</span><button type="button" class="panel-info-button" data-full-label="Resolved Predictions" data-description="Recent predictions that already finished. Use this panel to judge whether the system's ideas were right or wrong once they were forced to resolve through TP or SL outcomes, including which strategy combo created the idea." aria-label="Resolved Predictions. Recent predictions that already finished. Use this panel to judge whether the system's ideas were right or wrong once they were forced to resolve through TP or SL outcomes, including which strategy combo created the idea.">i</button></span></h2>
-            <p class="tiny panel-intro">Recent predictions that already finished their lifecycle. It shows which strategy combo produced each idea, so you can judge the mechanism, not just the final direction.</p>
-            <div id="predictions" class="loading panel-scroll">Loading resolved predictions…</div>
+            <h2><span class="panel-title"><span>Recent Predictions</span><button type="button" class="panel-info-button" data-full-label="Recent Predictions" data-description="Recent predictions from newest to oldest, including ideas still pending and ideas already resolved. Use this panel to follow the lifecycle from creation through TP or SL resolution, including which strategy combo created the idea." aria-label="Recent Predictions. Recent predictions from newest to oldest, including ideas still pending and ideas already resolved. Use this panel to follow the lifecycle from creation through TP or SL resolution, including which strategy combo created the idea.">i</button></span></h2>
+            <p class="tiny panel-intro">Recent predictions from creation onward, including pending ideas and resolved outcomes.</p>
+            <div id="predictions" class="loading panel-scroll">Loading recent predictions…</div>
           </article>
           <article class="panel panel-medium">
             <h2><span class="panel-title"><span>Recent Trades</span><button type="button" class="panel-info-button" data-full-label="Recent Trades" data-description="Most recent closed trades from the active execution backend. This is the panel that tells you what the system actually executed, not just what it predicted." aria-label="Recent Trades. Most recent closed trades from the active execution backend. This is the panel that tells you what the system actually executed, not just what it predicted.">i</button></span></h2>
@@ -2148,7 +2160,6 @@ export class DashboardViewService {
                     : 'candidate';
             return '<tr>' +
               '<td>' + comboLabel + '</td>' +
-              '<td>' + comboUsage.size + '</td>' +
               '<td>' + (comboUsage.direction === null ? '—' : renderDirectionPill(comboUsage.direction, "combo-direction-pill")) + '</td>' +
               '<td>' + formatNumber(comboUsage.effectiveComboScore, 2) + '</td>' +
               '<td>' + formatNumber(comboUsage.agreementScore, 2) + '</td>' +
@@ -2184,7 +2195,7 @@ export class DashboardViewService {
           '</div>';
         const tableMarkup = candidateRows.length === 0
           ? '<div class="tiny">No active combo candidates for this market right now.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Candidate combo generated from the current active strategies for this market.') + '</th><th>' + renderHintLabel('Sz', 'Combo size: pair or trio.') + '</th><th>' + renderHintLabel('Dir', 'Dominant direction of the combo candidate.') + '</th><th>' + renderHintLabel('Eff scr', 'Effective combo score used for ranking candidates.') + '</th><th>' + renderHintLabel('Agr', 'Agreement share across member strategies.') + '</th><th>' + renderHintLabel('N', 'Rolling sample count already accumulated for this combo.') + '</th><th>' + renderHintLabel('St', 'Current combo status based on rolling performance.') + '</th><th>' + renderHintLabel('Role', 'Whether the combo is selected, execution-candidate, merely applied as an adjustment, or just a background candidate.') + '</th><th>' + renderHintLabel('Why', 'Current status or application reason attached to the combo.') + '</th></tr></thead><tbody>' + candidateRows + '</tbody></table>');
+          : '<div class="combo-search-table">' + renderTableShell('<table><thead><tr><th>' + renderHintLabel('Combo', 'Candidate combo generated from the current active strategies for this market.') + '</th><th>' + renderHintLabel('Dir', 'Dominant direction of the combo candidate.') + '</th><th>' + renderHintLabel('Eff scr', 'Effective combo score used for ranking candidates.') + '</th><th>' + renderHintLabel('Agr', 'Agreement share across member strategies.') + '</th><th>' + renderHintLabel('N', 'Rolling sample count already accumulated for this combo.') + '</th><th>' + renderHintLabel('St', 'Current combo status based on rolling performance.') + '</th><th>' + renderHintLabel('Role', 'Whether the combo is selected, execution-candidate, merely applied as an adjustment, or just a background candidate.') + '</th><th>' + renderHintLabel('Why', 'Current status or application reason attached to the combo.') + '</th></tr></thead><tbody>' + candidateRows + '</tbody></table>') + '</div>';
         replacePanelContent('combo-search', '<div class="tab-strip">' + tabMarkup + '</div>' + summaryMarkup + inlineMarkup + tableMarkup);
         document.querySelectorAll('#combo-search .tab-button[data-market-key]').forEach((tabButton) => {
           tabButton.addEventListener('click', () => {

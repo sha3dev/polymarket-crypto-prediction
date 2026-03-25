@@ -241,13 +241,26 @@ export class PredictionEngineService {
     return hasMomentumConfirmation;
   }
 
-  private hasBreadthConfirmation(marketKey: MarketKey): boolean {
+  private hasBreadthConfirmation(marketKey: MarketKey, positionSide: PositionSide): boolean {
     const predictionContext = this.marketStateService.getPredictionContext(marketKey);
     let hasBreadthConfirmation = false;
     if (predictionContext !== null) {
       const crossAssetRegime = predictionContext.crossAssetRegime;
-      hasBreadthConfirmation =
-        crossAssetRegime.breadthDirection === "NEUTRAL" || crossAssetRegime.breadthStrength >= config.MIN_WEAK_BREADTH_STRENGTH_FOR_PREDICTION;
+      const expectedDirection: PredictionDirection = positionSide === "up" ? "UP" : "DOWN";
+      // Neutral breadth → no directional conflict, always passes
+      if (crossAssetRegime.breadthDirection === "NEUTRAL") {
+        hasBreadthConfirmation = true;
+      } else {
+        const isDirectionAligned = crossAssetRegime.breadthDirection === expectedDirection;
+        // Strong breadth MUST align with prediction direction
+        if (crossAssetRegime.hasStrongBreadth) {
+          // Even aligned strong breadth fails if exhaustion is very high (fading move)
+          hasBreadthConfirmation = isDirectionAligned && crossAssetRegime.exhaustionScore < 0.85;
+        } else {
+          // Weak breadth: allow aligned predictions, and also allow counter-breadth if breadth is very weak
+          hasBreadthConfirmation = isDirectionAligned || crossAssetRegime.breadthStrength < config.MIN_WEAK_BREADTH_STRENGTH_FOR_PREDICTION;
+        }
+      }
     }
     return hasBreadthConfirmation;
   }
@@ -442,19 +455,21 @@ export class PredictionEngineService {
         const hasMovedAwayFromHalf = distanceFromHalf >= config.MIN_TRIGGER_DISTANCE_FROM_HALF;
         const hasMomentumConfirmation = this.hasMomentumConfirmation(marketTrigger.marketKey, marketSlice, positionSide);
         const hasQualityConfirmation = this.hasResearchQualityConfirmation(marketSlice.quality.score);
-        const hasBreadthConfirmation = this.hasBreadthConfirmation(marketTrigger.marketKey);
+        const hasBreadthConfirmation = this.hasBreadthConfirmation(marketTrigger.marketKey, positionSide);
         const hasAnchorConfirmation = this.hasAnchorConfirmation(marketTrigger.marketKey, positionSide);
         const modelEvaluationSnapshot = this.evaluateCurrentModel(marketTrigger.marketKey);
         const selectedCombo = modelEvaluationSnapshot?.comboApplicationResult.selectedCombo ?? null;
         const expectedDirection: PredictionDirection = positionSide === "up" ? "UP" : "DOWN";
         const hasComboDirectionMatch = selectedCombo?.direction === expectedDirection;
         const hasComboScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= RESEARCH_TRIGGER_MIN_SCORE;
+        // Breadth confirmation is now required (AND) — no more bypassing breadth with anchor alone
         hasPendingTriggerConfirmed =
           isPastDelay &&
           hasMovedAwayFromHalf &&
           hasMomentumConfirmation &&
           hasQualityConfirmation &&
-          (hasBreadthConfirmation || hasAnchorConfirmation) &&
+          hasBreadthConfirmation &&
+          hasAnchorConfirmation &&
           hasComboDirectionMatch &&
           hasComboScoreConfirmation;
       }
@@ -534,6 +549,13 @@ export class PredictionEngineService {
         const comboApplicationResult = modelEvaluationSnapshot.comboApplicationResult;
         const selectedCombo = comboApplicationResult.selectedCombo;
         if (selectedCombo !== null) {
+          // In untradable global context (neutral/fragmented regime), require stronger conviction
+          const isTradableContext = predictionContext.crossAssetRegime.isTradableGlobalContext;
+          const contextMinComboScore = isTradableContext ? RESEARCH_TRIGGER_MIN_SCORE : RESEARCH_TRIGGER_MIN_SCORE + 0.08;
+          const hasContextualConviction = selectedCombo.comboScore >= contextMinComboScore;
+          if (!hasContextualConviction) {
+            return false;
+          }
           const winningDirection = selectedCombo.direction;
           const positionSide = this.resolvePositionSide(winningDirection);
           const baselineSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);

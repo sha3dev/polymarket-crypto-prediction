@@ -315,20 +315,29 @@ export class ComboMetricsService {
     const hasEthDirectionAligned = !hasEthHardConflict && (crossAssetRegime.ethDirection === predictedDirection || ethSupport >= 0.35);
     let anchorFitScore = 0.75;
     if (asset === "btc") {
-      anchorFitScore = 0.9 + crossAssetRegime.breadthStrength * 0.1;
+      // BTC is the anchor itself; synchrony indicates broad market alignment
+      anchorFitScore = 0.88 + crossAssetRegime.breadthStrength * 0.06 + crossAssetRegime.synchronyScore * 0.06;
     }
     if (asset === "eth") {
+      // ETH needs BTC alignment; breadth participation and follower activity confirm the thesis
       anchorFitScore = hasBtcDirectionAligned
-        ? 0.42 + btcSupport * 0.4 + crossAssetRegime.breadthParticipation * 0.08 + crossAssetRegime.breadthStrength * 0.04
+        ? 0.38 +
+          btcSupport * 0.3 +
+          crossAssetRegime.breadthParticipation * 0.12 +
+          crossAssetRegime.synchronyScore * 0.08 +
+          crossAssetRegime.followerParticipation * 0.06 +
+          crossAssetRegime.breadthStrength * 0.04
         : 0.15;
     }
     if (asset === "sol" || asset === "xrp") {
+      // Followers need full anchor chain; follower participation and synchrony are critical
       anchorFitScore =
         hasBtcDirectionAligned && hasEthDirectionAligned
-          ? 0.42 +
-            ((btcSupport + ethSupport) / 2) * 0.28 +
+          ? 0.36 +
+            ((btcSupport + ethSupport) / 2) * 0.22 +
             (crossAssetRegime.hasEthAlignment ? 0.1 : 0) +
-            crossAssetRegime.followerParticipation * 0.04 +
+            crossAssetRegime.followerParticipation * 0.12 +
+            crossAssetRegime.synchronyScore * 0.1 +
             crossAssetRegime.breadthStrength * 0.04
           : 0.05;
     }

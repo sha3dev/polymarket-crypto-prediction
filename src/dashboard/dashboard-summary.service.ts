@@ -186,7 +186,7 @@ export class DashboardSummaryService {
     const markets = this.marketStateService.getMarketSummaries(nowTimestamp);
     const globalRegime = this.selectGlobalRegime(markets);
     const globalRegimes = this.buildGlobalRegimes();
-    const latestPredictions = this.predictionEngineService.getRecentResolvedPredictions(20);
+    const latestPredictions = this.predictionEngineService.getRecentPredictions(20);
     const strategies = this.predictionEngineService.getStrategySummaries();
     const executionNow = this.executionService.getExecutionSummaries();
     const openPositions = this.executionService.getOpenPositions();

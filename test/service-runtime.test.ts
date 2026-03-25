@@ -35,6 +35,7 @@ test("ServiceRuntime serves the dashboard HTML", async () => {
   assert.match(html, /Polymarket 5m \/ 15m predictor/);
   assert.match(html, /Combo Board/);
   assert.match(html, /Combo Search/);
+  assert.match(html, /Recent Predictions/);
   assert.match(html, /Trade Candidates/);
   assert.match(html, /Direction chosen by the winning combo/);
   assert.match(html, /No-Arb Consistency/);
@@ -352,6 +353,13 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const cooldownPredictionsResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=10`);
   const cooldownPredictionsJson = await cooldownPredictionsResponse.json();
   assert.equal(cooldownPredictionsJson.length, 1);
+  const pendingSummaryResponse = await fetch(`http://127.0.0.1:${address.port}/v1/dashboard/summary`);
+  const pendingSummaryJson = await pendingSummaryResponse.json();
+  assert.equal(pendingSummaryResponse.status, 200);
+  assert.equal(
+    pendingSummaryJson.latestPredictions.some((prediction: { result: { status: string } }) => prediction.result.status === "pending"),
+    true,
+  );
   const warmupExecutionResponse = await fetch(`http://127.0.0.1:${address.port}/v1/execution`);
   const warmupExecutionJson = await warmupExecutionResponse.json();
   const btcWarmupDecision = warmupExecutionJson.executionNow.find((execution: { marketKey: string }) => execution.marketKey === "btc:5m");
@@ -475,10 +483,6 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(summaryJson.executionMode, "paper");
   assert.equal(summaryJson.account.mode, "paper");
   assert.equal(Array.isArray(summaryJson.latestPredictions), true);
-  assert.equal(
-    summaryJson.latestPredictions.every((prediction: { result: { status: string } }) => prediction.result.status !== "pending"),
-    true,
-  );
   assert.equal(summaryJson.health.pendingEvaluationCount, summaryJson.openPositions?.length ?? 0);
   assert.equal(summaryJson.markets.length, 8);
   assert.equal(summaryJson.globalRegime === null || typeof summaryJson.globalRegime.regimeId === "string", true);
