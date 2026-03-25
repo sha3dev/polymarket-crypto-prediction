@@ -313,7 +313,7 @@ export class DashboardViewService {
       .global-regime-equalizer {
         display: grid;
         grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 10px;
+        gap: 18px;
         margin-top: 10px;
       }
       .global-regime-equalizer-card {
@@ -324,6 +324,11 @@ export class DashboardViewService {
         border-right: 0;
         border-radius: 0;
         background: transparent;
+        min-width: 0;
+      }
+      .global-regime-equalizer-card + .global-regime-equalizer-card {
+        box-shadow: inset 1px 0 0 rgba(13, 27, 42, 0.06);
+        padding-left: 12px;
       }
       .global-regime-equalizer-head {
         display: flex;
@@ -334,6 +339,11 @@ export class DashboardViewService {
       }
       .global-regime-equalizer-head strong {
         font-size: 12px;
+      }
+      .global-regime-equalizer-head > span:last-child {
+        flex: 0 0 auto;
+        min-width: 34px;
+        text-align: right;
       }
       .global-regime-equalizer-track {
         position: relative;
