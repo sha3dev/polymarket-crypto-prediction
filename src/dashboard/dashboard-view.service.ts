@@ -317,10 +317,13 @@ export class DashboardViewService {
         margin-top: 10px;
       }
       .global-regime-equalizer-card {
-        padding: 10px 10px 8px;
-        border: 1px solid rgba(13, 27, 42, 0.08);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.6);
+        padding: 8px 0 6px;
+        border-top: 1px solid rgba(13, 27, 42, 0.08);
+        border-bottom: 1px solid rgba(13, 27, 42, 0.08);
+        border-left: 0;
+        border-right: 0;
+        border-radius: 0;
+        background: transparent;
       }
       .global-regime-equalizer-head {
         display: flex;
@@ -334,8 +337,8 @@ export class DashboardViewService {
       }
       .global-regime-equalizer-track {
         position: relative;
-        height: 40px;
-        border-radius: 999px;
+        height: 34px;
+        border-radius: 0;
         background:
           linear-gradient(90deg, rgba(192, 57, 43, 0.08) 0%, rgba(192, 57, 43, 0.03) 48%, rgba(13, 27, 42, 0.07) 50%, rgba(15, 157, 88, 0.03) 52%, rgba(15, 157, 88, 0.08) 100%);
         overflow: hidden;
@@ -343,16 +346,16 @@ export class DashboardViewService {
       .global-regime-equalizer-zero {
         position: absolute;
         left: 50%;
-        top: 5px;
-        bottom: 5px;
+        top: 0;
+        bottom: 0;
         width: 1px;
-        background: rgba(13, 27, 42, 0.22);
+        background: rgba(13, 27, 42, 0.28);
       }
       .global-regime-equalizer-fill {
         position: absolute;
-        top: 9px;
-        bottom: 9px;
-        border-radius: 999px;
+        top: 6px;
+        bottom: 6px;
+        border-radius: 0;
       }
       .global-regime-equalizer-fill.positive {
         background: linear-gradient(90deg, rgba(31, 162, 255, 0.85), rgba(15, 157, 88, 0.85));
