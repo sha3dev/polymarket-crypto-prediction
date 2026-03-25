@@ -513,11 +513,75 @@ export class MarketStateService {
     return referencePrice;
   }
 
+  private resolveHistoryReferencePrice(historyEntry: MarketHistoryEntry | null): number | null {
+    const referencePrice = historyEntry?.spotConsensusPrice ?? historyEntry?.upMidpoint ?? historyEntry?.upPrice ?? null;
+    return referencePrice;
+  }
+
+  private resolveHistoryTriggerPrice(historyEntry: MarketHistoryEntry | null, tokenSide: TriggeredToken): number | null {
+    let triggerPrice: number | null = null;
+    if (tokenSide === "up") {
+      triggerPrice = historyEntry?.upMidpoint ?? historyEntry?.upPrice ?? null;
+    }
+    if (tokenSide === "down") {
+      triggerPrice = historyEntry?.downMidpoint ?? historyEntry?.downPrice ?? null;
+    }
+    return triggerPrice;
+  }
+
+  private findLookbackHistoryEntry(marketRecord: MarketRecord, latestGeneratedAt: number): MarketHistoryEntry | null {
+    const targetGeneratedAt = latestGeneratedAt - config.CROSS_ASSET_LOOKBACK_MS;
+    let lookbackHistoryEntry: MarketHistoryEntry | null = null;
+    for (let historyIndex = marketRecord.history.length - 1; historyIndex >= 0; historyIndex -= 1) {
+      const historyEntry = marketRecord.history[historyIndex] ?? null;
+      if (historyEntry !== null && historyEntry.generatedAt < latestGeneratedAt && historyEntry.generatedAt <= targetGeneratedAt) {
+        lookbackHistoryEntry = historyEntry;
+        break;
+      }
+    }
+    if (lookbackHistoryEntry === null) {
+      for (let historyIndex = marketRecord.history.length - 1; historyIndex >= 0; historyIndex -= 1) {
+        const historyEntry = marketRecord.history[historyIndex] ?? null;
+        if (historyEntry !== null && historyEntry.generatedAt < latestGeneratedAt) {
+          lookbackHistoryEntry = historyEntry;
+          break;
+        }
+      }
+    }
+    return lookbackHistoryEntry;
+  }
+
   private resolveSignedMove(currentSlice: MarketSnapshotSlice | null, previousSlice: MarketSnapshotSlice | null): number {
     const previousReferencePrice = this.resolveReferencePrice(previousSlice);
     const currentReferencePrice = this.resolveReferencePrice(currentSlice);
     const signedMove = this.computeSignedChange(previousReferencePrice, currentReferencePrice);
     return signedMove;
+  }
+
+  private resolveSignedMoveFromLookback(marketRecord: MarketRecord): number {
+    const latestSlice = marketRecord.latest;
+    const latestGeneratedAt = latestSlice?.generatedAt ?? null;
+    const lookbackHistoryEntry = latestGeneratedAt === null ? null : this.findLookbackHistoryEntry(marketRecord, latestGeneratedAt);
+    const previousReferencePrice =
+      lookbackHistoryEntry === null ? this.resolveReferencePrice(marketRecord.previous) : this.resolveHistoryReferencePrice(lookbackHistoryEntry);
+    const currentReferencePrice = this.resolveReferencePrice(latestSlice);
+    const signedMove = this.computeSignedChange(previousReferencePrice, currentReferencePrice);
+    return signedMove;
+  }
+
+  private resolveTokenMomentumFromLookback(marketRecord: MarketRecord, tokenSide: TriggeredToken): number {
+    const latestSlice = marketRecord.latest;
+    const latestGeneratedAt = latestSlice?.generatedAt ?? null;
+    const lookbackHistoryEntry = latestGeneratedAt === null ? null : this.findLookbackHistoryEntry(marketRecord, latestGeneratedAt);
+    const previousTokenPrice =
+      lookbackHistoryEntry === null
+        ? marketRecord.previous === null
+          ? null
+          : this.resolveTriggerPrice(marketRecord.previous, tokenSide)
+        : this.resolveHistoryTriggerPrice(lookbackHistoryEntry, tokenSide);
+    const currentTokenPrice = latestSlice === null ? null : this.resolveTriggerPrice(latestSlice, tokenSide);
+    const tokenMomentum = this.computeSignedChange(previousTokenPrice, currentTokenPrice);
+    return tokenMomentum;
   }
 
   private buildWindowMarketKeys(window: MarketWindow): MarketKey[] {
@@ -606,7 +670,7 @@ export class MarketStateService {
 
   private resolveDirectionalMove(window: MarketWindow, asset: AssetSymbol): CrossAssetRegime["btcDirection"] {
     const marketRecord = this.requireMarketRecord(this.buildMarketKey(asset, window));
-    const signedMove = this.resolveSignedMove(marketRecord.latest, marketRecord.previous);
+    const signedMove = this.resolveSignedMoveFromLookback(marketRecord);
     let directionalMove: CrossAssetRegime["btcDirection"] = "NEUTRAL";
     if (marketRecord.latest?.quality.hasLiveMarket && Math.abs(signedMove) >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD) {
       directionalMove = signedMove > 0 ? "UP" : "DOWN";
@@ -616,19 +680,17 @@ export class MarketStateService {
 
   private resolveTokenMomentum(window: MarketWindow, asset: AssetSymbol, tokenSide: TriggeredToken): number {
     const marketRecord = this.requireMarketRecord(this.buildMarketKey(asset, window));
-    const previousTokenPrice = marketRecord.previous === null ? null : this.resolveTriggerPrice(marketRecord.previous, tokenSide);
-    const currentTokenPrice = marketRecord.latest === null ? null : this.resolveTriggerPrice(marketRecord.latest, tokenSide);
-    const tokenMomentum = this.computeSignedChange(previousTokenPrice, currentTokenPrice);
+    const tokenMomentum = this.resolveTokenMomentumFromLookback(marketRecord, tokenSide);
     return tokenMomentum;
   }
 
   private buildCrossAssetRegime(marketKey: MarketKey, window: MarketWindow): CrossAssetRegime {
     const qualifyingMoves: Array<{ marketKey: MarketKey; signedMove: number }> = [];
     const targetMarketRecord = this.requireMarketRecord(marketKey);
-    const targetSignedMove = this.resolveSignedMove(targetMarketRecord.latest, targetMarketRecord.previous);
+    const targetSignedMove = this.resolveSignedMoveFromLookback(targetMarketRecord);
     for (const peerMarketKey of this.buildWindowMarketKeys(window)) {
       const peerMarketRecord = this.requireMarketRecord(peerMarketKey);
-      const signedMove = this.resolveSignedMove(peerMarketRecord.latest, peerMarketRecord.previous);
+      const signedMove = this.resolveSignedMoveFromLookback(peerMarketRecord);
       if (peerMarketRecord.latest?.quality.hasLiveMarket && Math.abs(signedMove) >= config.CROSS_ASSET_BREADTH_MOVE_THRESHOLD) {
         qualifyingMoves.push({ marketKey: peerMarketKey, signedMove });
       }

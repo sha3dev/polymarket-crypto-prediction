@@ -823,8 +823,29 @@ export class DashboardViewService {
         if (reasonCode === 'quality_too_low') {
           humanReason = 'data quality too low';
         }
+        if (reasonCode === 'no_prediction') {
+          humanReason = 'no valid prediction';
+        }
+        if (reasonCode === 'position_already_open') {
+          humanReason = 'position already open';
+        }
+        if (reasonCode === 'invalid_direction') {
+          humanReason = 'invalid direction';
+        }
+        if (reasonCode === 'no_reference_price') {
+          humanReason = 'missing reference price';
+        }
         if (reasonCode === 'confidence_too_low') {
           humanReason = 'prediction too weak';
+        }
+        if (reasonCode === 'combo_score_too_low') {
+          humanReason = 'combo score too low';
+        }
+        if (reasonCode === 'anchor_fit_too_low') {
+          humanReason = 'anchor fit too low';
+        }
+        if (reasonCode === 'readiness_too_low') {
+          humanReason = 'readiness too low';
         }
         if (reasonCode === 'combo_gate_failed') {
           humanReason = 'combo gate failed';
@@ -1010,6 +1031,15 @@ export class DashboardViewService {
         }
         if (reasonCode === 'prediction too weak') {
           reasonShortCode = 'CNF';
+        }
+        if (reasonCode === 'combo score too low') {
+          reasonShortCode = 'CMB';
+        }
+        if (reasonCode === 'anchor fit too low') {
+          reasonShortCode = 'FIT';
+        }
+        if (reasonCode === 'readiness too low') {
+          reasonShortCode = 'RDN';
         }
         if (reasonCode === 'combo gate failed') {
           reasonShortCode = 'CMB';
@@ -1281,6 +1311,21 @@ export class DashboardViewService {
         globalRegimeCharts.clear();
       }
 
+      function computeGlobalRegimeScale(history) {
+        const values = history.flatMap((entry) => [entry.breadthStrength, entry.accelerationScore, entry.reversalRiskScore]);
+        const minimumValue = values.length === 0 ? 0 : Math.min(...values);
+        const maximumValue = values.length === 0 ? 1 : Math.max(...values);
+        const centerValue = (minimumValue + maximumValue) / 2;
+        const spreadValue = Math.max(0.04, maximumValue - minimumValue);
+        const paddingValue = Math.max(0.02, spreadValue * 0.35);
+        const minimumScale = Math.max(0, centerValue - spreadValue / 2 - paddingValue);
+        const maximumScale = Math.min(1, centerValue + spreadValue / 2 + paddingValue);
+        return {
+          min: minimumScale,
+          max: maximumScale,
+        };
+      }
+
       function hydrateGlobalRegimeCharts(chartConfigs) {
         if (typeof Chart === 'undefined') {
           return;
@@ -1291,6 +1336,7 @@ export class DashboardViewService {
           if (!(chartCanvas instanceof HTMLCanvasElement)) {
             continue;
           }
+          const chartScale = computeGlobalRegimeScale(chartConfig.history);
           const regimeChart = new Chart(chartCanvas, {
             type: 'line',
             data: {
@@ -1333,8 +1379,8 @@ export class DashboardViewService {
               scales: {
                 x: { display: false },
                 y: {
-                  min: 0,
-                  max: 1,
+                  min: chartScale.min,
+                  max: chartScale.max,
                   display: false,
                 },
               },
@@ -1463,7 +1509,7 @@ export class DashboardViewService {
             '<td>' + marketScoreLabel + '</td>' +
             '<td>' + formatNumber(marketExecution.decision.readinessScore, 2) + '</td>' +
             '<td>' + renderConvictionLabel(marketExecution.decision.positionSizeSuggestion) + '</td>' +
-            '<td><span class="truncate-cell" title="' + whyNot + '">' + reasonCodes + '</span></td>' +
+            '<td><span class="truncate-cell">' + reasonCodes + '</span></td>' +
             '</tr>';
         }).join("");
         replacePanelContent("execution", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the execution decision.') + '</th><th>' + renderHintLabel('Act', 'BU = buy UP, BD = buy DOWN, NO = no trade.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for the market.') + '</th><th>' + renderHintLabel('Cmb scr', 'Selected combo score for the market.') + '</th><th>' + renderHintLabel('Scores', 'Research / execution / effective execution score for this market.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset breadth regime for this window.') + '</th><th>' + renderHintLabel('Mkt score', 'Effective execution score followed by recent trade count.') + '</th><th>' + renderHintLabel('Ready', 'Overall readiness score for entry.') + '</th><th>' + renderHintLabel('Cnv', 'HI/MD/LO conviction from confidence, quality, and book risk.') + '</th><th>' + renderHintLabel('Why', 'Compact reason code. Hover each cell for the full explanation.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));

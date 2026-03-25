@@ -310,6 +310,8 @@ Typical blocking reasons:
 
 The dashboard is now meant for operators, not model archaeology.
 
+The `Global Regime` panel uses a short rolling lookback, not a single-snapshot delta. With a `500 ms` feed, one-snapshot momentum is too flat and too noisy to explain what BTC and ETH are really doing. The regime therefore measures anchor motion and breadth over a configurable time window.
+
 ### Global Regime
 
 Shows the broad cross-asset context for `5m` and `15m`:
@@ -823,6 +825,7 @@ These still affect the underlying strategy layer even though the final decision 
 ### Dashboard
 
 - `DASHBOARD_POLL_INTERVAL_MS`: dashboard polling interval
+- `CROSS_ASSET_LOOKBACK_MS`: rolling lookback used by the cross-asset regime so BTC/ETH momentum and breadth are measured over a short interval instead of one snapshot
 
 ### Market scoring and bootstrap
 
