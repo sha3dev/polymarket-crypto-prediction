@@ -553,52 +553,51 @@ export class PredictionEngineService {
           const isTradableContext = predictionContext.crossAssetRegime.isTradableGlobalContext;
           const contextMinComboScore = isTradableContext ? RESEARCH_TRIGGER_MIN_SCORE : RESEARCH_TRIGGER_MIN_SCORE + 0.08;
           const hasContextualConviction = selectedCombo.comboScore >= contextMinComboScore;
-          if (!hasContextualConviction) {
-            return false;
+          if (hasContextualConviction) {
+            const winningDirection = selectedCombo.direction;
+            const positionSide = this.resolvePositionSide(winningDirection);
+            const baselineSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
+            const entryReferencePrice = this.resolveEntryReferencePrice(baselineSlice, positionSide);
+            const regimeClass = predictionContext.crossAssetRegime.regimeClass;
+            const takeProfitDelta = this.computeAdaptiveTakeProfitDelta(comboApplicationResult.adjustedConfidence, selectedCombo.comboScore, regimeClass);
+            const stopLossDelta = this.computeAdaptiveStopLossDelta(comboApplicationResult.adjustedConfidence, selectedCombo.comboScore, regimeClass);
+            const takeProfitPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice + takeProfitDelta);
+            const stopLossPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice - stopLossDelta);
+            const predictionRecord = this.buildPredictionRecord(
+              marketTrigger.marketKey,
+              winningDirection,
+              comboApplicationResult.adjustedConfidence,
+              selectedCombo.direction === "UP" ? selectedCombo.comboScore : selectedCombo.comboScore * -1,
+              evaluationResult.baseWeightedScore,
+              evaluationResult.baseConfidence,
+              marketTrigger,
+              evaluationResult.strategyBreakdown,
+              selectedCombo,
+              comboApplicationResult.comboBreakdown,
+              comboApplicationResult.comboGate,
+              predictionContext.crossAssetRegime,
+              createdAt,
+              positionSide,
+              entryReferencePrice,
+              takeProfitPrice,
+              stopLossPrice,
+              baselineSlice?.up.price ?? null,
+              baselineSlice?.up.midpoint ?? null,
+            );
+            this.predictionStoreService.addPrediction(predictionRecord);
+            this.marketStateService.markPredictionCreated(marketTrigger.marketKey, createdAt);
+            this.strategyMetricsService.markParticipated(predictionRecord.marketKey, evaluationResult.strategyBreakdown, predictionRecord.createdAt);
+            this.comboMetricsService.recordPredictionMoment(
+              predictionRecord.marketKey,
+              predictionRecord.predictionId,
+              predictionRecord.strategyBreakdown,
+              predictionRecord.createdAt,
+            );
+            if (this.llmLogService !== null) {
+              this.llmLogService.recordPredictionCreated(this.buildPredictionResponse(predictionRecord));
+            }
+            hasCreatedPrediction = true;
           }
-          const winningDirection = selectedCombo.direction;
-          const positionSide = this.resolvePositionSide(winningDirection);
-          const baselineSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
-          const entryReferencePrice = this.resolveEntryReferencePrice(baselineSlice, positionSide);
-          const regimeClass = predictionContext.crossAssetRegime.regimeClass;
-          const takeProfitDelta = this.computeAdaptiveTakeProfitDelta(comboApplicationResult.adjustedConfidence, selectedCombo.comboScore, regimeClass);
-          const stopLossDelta = this.computeAdaptiveStopLossDelta(comboApplicationResult.adjustedConfidence, selectedCombo.comboScore, regimeClass);
-          const takeProfitPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice + takeProfitDelta);
-          const stopLossPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice - stopLossDelta);
-          const predictionRecord = this.buildPredictionRecord(
-            marketTrigger.marketKey,
-            winningDirection,
-            comboApplicationResult.adjustedConfidence,
-            selectedCombo.direction === "UP" ? selectedCombo.comboScore : selectedCombo.comboScore * -1,
-            evaluationResult.baseWeightedScore,
-            evaluationResult.baseConfidence,
-            marketTrigger,
-            evaluationResult.strategyBreakdown,
-            selectedCombo,
-            comboApplicationResult.comboBreakdown,
-            comboApplicationResult.comboGate,
-            predictionContext.crossAssetRegime,
-            createdAt,
-            positionSide,
-            entryReferencePrice,
-            takeProfitPrice,
-            stopLossPrice,
-            baselineSlice?.up.price ?? null,
-            baselineSlice?.up.midpoint ?? null,
-          );
-          this.predictionStoreService.addPrediction(predictionRecord);
-          this.marketStateService.markPredictionCreated(marketTrigger.marketKey, createdAt);
-          this.strategyMetricsService.markParticipated(predictionRecord.marketKey, evaluationResult.strategyBreakdown, predictionRecord.createdAt);
-          this.comboMetricsService.recordPredictionMoment(
-            predictionRecord.marketKey,
-            predictionRecord.predictionId,
-            predictionRecord.strategyBreakdown,
-            predictionRecord.createdAt,
-          );
-          if (this.llmLogService !== null) {
-            this.llmLogService.recordPredictionCreated(this.buildPredictionResponse(predictionRecord));
-          }
-          hasCreatedPrediction = true;
         }
       }
     }
