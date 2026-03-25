@@ -26,6 +26,7 @@ import { PredictionStoreService } from "../prediction/prediction-store.service.t
 import { StrategyEngineService } from "../strategy/strategy-engine.service.ts";
 import { StrategyMetricsService } from "../strategy/strategy-metrics.service.ts";
 import type { StrategyDefinition } from "../strategy/strategy.types.ts";
+import { UpdateService } from "../update/update.service.ts";
 
 /**
  * @section class
@@ -95,6 +96,7 @@ export class ServiceRuntime {
       marketStateService,
       new DashboardSummaryService(marketStateService, predictionEngineService, executionService, startedAt),
       new DashboardViewService(),
+      new UpdateService(process.cwd(), "@sha3/polymarket-crypto-prediction"),
     );
     return new ServiceRuntime(
       new SnapshotService(config.SNAPSHOT_INTERVAL_MS),

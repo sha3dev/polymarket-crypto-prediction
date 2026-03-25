@@ -14,10 +14,12 @@ import config from "../config.ts";
 import type { DashboardSummaryService } from "../dashboard/dashboard-summary.service.ts";
 import type { DashboardViewService } from "../dashboard/dashboard-view.service.ts";
 import type { ExecutionService } from "../execution/execution.types.ts";
+import logger from "../logger.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketWindow } from "../market/market.types.ts";
 import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
 import type { PredictionEngineService } from "../prediction/prediction-engine.service.ts";
+import type { UpdateService } from "../update/update.service.ts";
 
 /**
  * @section class
@@ -33,6 +35,7 @@ export class HttpServerService {
   private readonly marketStateService: MarketStateService;
   private readonly dashboardSummaryService: DashboardSummaryService;
   private readonly dashboardViewService: DashboardViewService;
+  private readonly updateService: UpdateService;
 
   /**
    * @section constructor
@@ -44,12 +47,14 @@ export class HttpServerService {
     marketStateService: MarketStateService,
     dashboardSummaryService: DashboardSummaryService,
     dashboardViewService: DashboardViewService,
+    updateService: UpdateService,
   ) {
     this.predictionEngineService = predictionEngineService;
     this.executionService = executionService;
     this.marketStateService = marketStateService;
     this.dashboardSummaryService = dashboardSummaryService;
     this.dashboardViewService = dashboardViewService;
+    this.updateService = updateService;
   }
 
   /**
@@ -178,6 +183,17 @@ export class HttpServerService {
       }
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
       return context.json(this.predictionEngineService.getPredictions(asset, window, limit), 200);
+    });
+    app.post("/v1/update", async (context) => {
+      try {
+        const updateResult = await this.updateService.runUpdate();
+        context.header("content-type", config.RESPONSE_CONTENT_TYPE);
+        return context.json(updateResult, 200);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Update failed.";
+        logger.error(`update endpoint failed: ${message}`);
+        return context.json({ code: "update_failed", message }, 500);
+      }
     });
     return createAdaptorServer({ fetch: app.fetch });
   }

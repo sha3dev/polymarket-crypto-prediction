@@ -1,8 +1,15 @@
 import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { DashboardSummaryService } from "../src/dashboard/dashboard-summary.service.ts";
+import type { DashboardViewService } from "../src/dashboard/dashboard-view.service.ts";
+import type { ExecutionService } from "../src/execution/execution.types.ts";
+import { HttpServerService } from "../src/http/http-server.service.ts";
 import { ServiceRuntime } from "../src/index.ts";
 import type { StrategySummary } from "../src/index.ts";
+import type { MarketStateService } from "../src/market/market-state.service.ts";
+import type { PredictionEngineService } from "../src/prediction/prediction-engine.service.ts";
+import type { UpdateService } from "../src/update/update.service.ts";
 
 test("ServiceRuntime serves the dashboard HTML", async () => {
   const serviceRuntime = ServiceRuntime.createDefault();
@@ -72,6 +79,99 @@ test("ServiceRuntime validates predict queries and exposes health and markets", 
   const marketsJson = await marketsResponse.json();
   assert.equal(marketsResponse.status, 200);
   assert.equal(marketsJson.length, 8);
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+});
+
+test("HttpServerService exposes an update endpoint that delegates to the update service", async () => {
+  let hasUpdateRun = false;
+  const httpServerService = new HttpServerService(
+    {
+      getStrategySummaries: (): [] => [],
+      getComboSummaries: (): [] => [],
+      getLatestPrediction: (): null => null,
+      getPredictions: (): [] => [],
+    } as unknown as PredictionEngineService,
+    {
+      getPortfolioSummary: () => {
+        return {};
+      },
+      getExecutionMode: () => {
+        return "paper";
+      },
+      getAccountSummary: async () => {
+        return {};
+      },
+      getExecutionSummaries: () => [],
+      getOpenPositions: () => [],
+      getRecentTrades: () => [],
+    } as unknown as ExecutionService,
+    {
+      getMarketSummaries: () => [],
+    } as unknown as MarketStateService,
+    {
+      buildHealthPayload: () => {
+        return { ok: true };
+      },
+      buildDashboardSummary: async () => {
+        return {};
+      },
+    } as unknown as DashboardSummaryService,
+    {
+      buildHtml: () => {
+        return "<html></html>";
+      },
+    } as unknown as DashboardViewService,
+    {
+      runUpdate: async () => {
+        hasUpdateRun = true;
+        return {
+          ok: true,
+          repositoryRoot: "/repo",
+          pm2AppName: "@sha3/polymarket-crypto-prediction",
+          gitStdout: "Already up to date.\n",
+          gitStderr: "",
+          message: "Update started. PM2 restart has been requested.",
+        };
+      },
+    } as unknown as UpdateService,
+  );
+
+  const server = httpServerService.buildServer();
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, () => {
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("failed to bind test server");
+  }
+
+  const response = await fetch(`http://127.0.0.1:${address.port}/v1/update`, {
+    method: "POST",
+  });
+  const payload = (await response.json()) as {
+    ok: boolean;
+    gitStdout: string;
+    pm2AppName: string;
+  };
+
+  assert.equal(response.status, 200);
+  assert.equal(hasUpdateRun, true);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.gitStdout.includes("Already up to date."), true);
+  assert.equal(payload.pm2AppName, "@sha3/polymarket-crypto-prediction");
 
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {

@@ -650,6 +650,12 @@ Key fields:
 
 Returns recent closed trades from the active backend.
 
+### `POST /v1/update`
+
+Runs `git pull` in the repository root and then requests `pm2 restart @sha3/polymarket-crypto-prediction`.
+
+Use this only in trusted environments because it mutates the running deployment.
+
 ### Error Shape
 
 HTTP validation errors use a stable JSON error format.
