@@ -45,6 +45,14 @@ type ActiveComboCandidate = {
   memberSignals: StrategySignal[];
 };
 
+type ReplayMoment = {
+  predictionId: string;
+  createdAt: number;
+  strategySignals: StrategySignal[];
+  resolvedDirection: PredictionDirection | null;
+  resolvedAt: number | null;
+};
+
 /**
  * @section class
  */
@@ -56,6 +64,7 @@ export class ComboMetricsService {
 
   private readonly researchComboOutcomes: Map<string, ComboOutcomeEntry[]>;
   private readonly executionComboOutcomes: Map<string, ComboOutcomeEntry[]>;
+  private readonly replayMoments: Map<MarketKey, ReplayMoment[]>;
   private readonly latestActiveCombos: Map<MarketKey, ComboUsage[]>;
   private readonly latestAppliedCombos: Map<MarketKey, ComboUsage[]>;
   private readonly latestExecutionComboDecision: Map<MarketKey, ComboGateDecision>;
@@ -71,6 +80,7 @@ export class ComboMetricsService {
   public constructor() {
     this.researchComboOutcomes = new Map<string, ComboOutcomeEntry[]>();
     this.executionComboOutcomes = new Map<string, ComboOutcomeEntry[]>();
+    this.replayMoments = new Map<MarketKey, ReplayMoment[]>();
     this.latestActiveCombos = new Map<MarketKey, ComboUsage[]>();
     this.latestAppliedCombos = new Map<MarketKey, ComboUsage[]>();
     this.latestExecutionComboDecision = new Map<MarketKey, ComboGateDecision>();
@@ -126,6 +136,15 @@ export class ComboMetricsService {
       outcomeStore.set(comboStorageKey, comboOutcomeEntries);
     }
     return comboOutcomeEntries;
+  }
+
+  private requireReplayMoments(marketKey: MarketKey): ReplayMoment[] {
+    let replayMoments = this.replayMoments.get(marketKey);
+    if (!replayMoments) {
+      replayMoments = [];
+      this.replayMoments.set(marketKey, replayMoments);
+    }
+    return replayMoments;
   }
 
   private resolveMinimumStrategyScoreForCombo(_marketKey: MarketKey): number {
@@ -212,6 +231,21 @@ export class ComboMetricsService {
       direction,
       memberSignals,
     };
+  }
+
+  private selectReplayMemberSignals(marketKey: MarketKey, comboDefinition: ComboDefinition, strategySignals: StrategySignal[]): StrategySignal[] {
+    const minimumStrategyScoreForCombo = this.resolveMinimumStrategyScoreForCombo(marketKey);
+    const minimumStrategyConfidenceForCombo = this.resolveMinimumStrategyConfidenceForCombo(marketKey);
+    const replayMemberSignals = strategySignals.filter((strategySignal) => {
+      return (
+        comboDefinition.memberStrategyIds.includes(strategySignal.strategyId) &&
+        strategySignal.didParticipate &&
+        strategySignal.isComboEligible &&
+        Math.abs(strategySignal.score) >= minimumStrategyScoreForCombo &&
+        strategySignal.confidence >= minimumStrategyConfidenceForCombo
+      );
+    });
+    return replayMemberSignals;
   }
 
   private computeCandidateDiversityScore(activeComboCandidate: ActiveComboCandidate): number {
@@ -613,6 +647,53 @@ export class ComboMetricsService {
     return normalizedComboHit;
   }
 
+  private computeReplayComboScore(
+    hitRate: number,
+    averagePnlProxy: number,
+    sampleCount: number,
+    minimumSampleCount: number,
+    agreementPurity: number,
+    maxDrawdownProxy: number,
+  ): number {
+    const stabilityAdjusted = 1 - Math.max(0, Math.min(1, maxDrawdownProxy / 1));
+    const sampleTrust = Math.min(1, sampleCount / Math.max(1, minimumSampleCount * 2));
+    const replayComboScore =
+      0.35 * this.normalizeComboPnl(averagePnlProxy) +
+      0.35 * this.normalizeComboHit(hitRate) +
+      0.15 * sampleTrust +
+      0.1 * agreementPurity +
+      0.05 * stabilityAdjusted;
+    return replayComboScore;
+  }
+
+  private buildReplayOutcomeEntries(comboDefinition: ComboDefinition): ComboOutcomeEntry[] {
+    const replayMoments = this.requireReplayMoments(comboDefinition.marketKey);
+    const replayOutcomeEntries: ComboOutcomeEntry[] = [];
+    for (const replayMoment of replayMoments) {
+      const replayMemberSignals = this.selectReplayMemberSignals(comboDefinition.marketKey, comboDefinition, replayMoment.strategySignals);
+      if (replayMemberSignals.length === comboDefinition.size) {
+        const replayCandidate = this.buildCandidateFromMembers(comboDefinition.marketKey, replayMemberSignals);
+        const wasCorrect =
+          replayCandidate.direction === null || replayMoment.resolvedDirection === null ? null : replayCandidate.direction === replayMoment.resolvedDirection;
+        const comboPnlProxy = wasCorrect === null ? 0 : wasCorrect ? replayCandidate.comboConfidence : replayCandidate.comboConfidence * -1;
+        const targetConfidence = wasCorrect === null ? replayCandidate.comboConfidence : wasCorrect ? 1 : 0;
+        replayOutcomeEntries.push({
+          predictionId: replayMoment.predictionId,
+          resolvedAt: replayMoment.resolvedAt,
+          isAgreement: replayCandidate.isAgreement,
+          direction: replayCandidate.direction,
+          wasCorrect,
+          comboConfidence: replayCandidate.comboConfidence,
+          comboPnlProxy,
+          calibrationError: Math.abs(replayCandidate.comboConfidence - targetConfidence),
+          bestMemberHitRate: 0.5,
+          bestMemberPnlProxy: 0,
+        });
+      }
+    }
+    return replayOutcomeEntries;
+  }
+
   private computeBootstrapDiscount(sampleCount: number, minimumSampleCount: number): number {
     const sampleProgress = Math.max(0, Math.min(1, sampleCount / Math.max(1, minimumSampleCount)));
     const bootstrapFloor = 0.45;
@@ -622,7 +703,11 @@ export class ComboMetricsService {
   }
 
   private buildSummaryFromDefinition(comboDefinition: ComboDefinition, source: MetricsSource): ComboSummary {
-    const comboOutcomeEntries = this.readWindowedOutcomes(this.requireComboOutcomes(comboDefinition.marketKey, comboDefinition.comboKey, source));
+    const replayOutcomeEntries = this.readWindowedOutcomes(this.buildReplayOutcomeEntries(comboDefinition));
+    const hasReplayHistory = replayOutcomeEntries.length > 0;
+    const comboOutcomeEntries = hasReplayHistory
+      ? replayOutcomeEntries
+      : this.readWindowedOutcomes(this.requireComboOutcomes(comboDefinition.marketKey, comboDefinition.comboKey, source));
     const resolvedOutcomes = comboOutcomeEntries.filter((comboOutcomeEntry) => comboOutcomeEntry.wasCorrect !== null);
     const agreementCount = comboOutcomeEntries.filter((comboOutcomeEntry) => comboOutcomeEntry.isAgreement).length;
     const disagreementCount = comboOutcomeEntries.length - agreementCount;
@@ -650,16 +735,15 @@ export class ComboMetricsService {
     const liftVsBestMemberPnl = averagePnlProxy - averageBestMemberPnlProxy;
     const agreementPurity = sampleCount === 0 ? 0 : agreementCount / sampleCount;
     const maxDrawdownProxy = this.computeDrawdownProxy(resolvedOutcomes);
-    const stabilityAdjusted = 1 - Math.max(0, Math.min(1, maxDrawdownProxy / 1));
     const minimumSampleCount = comboDefinition.size === 2 ? config.MIN_COMBO_SAMPLES_PAIR : config.MIN_COMBO_SAMPLES_TRIO;
-    const sampleTrust = Math.min(1, sampleCount / Math.max(1, minimumSampleCount * 2));
-    const comboScore =
-      0.4 * this.normalizeLiftPnl(liftVsBestMemberPnl) +
-      0.2 * this.normalizeLiftHit(liftVsBestMemberHitRate) +
-      0.15 * this.normalizeComboPnl(averagePnlProxy) +
-      0.1 * this.normalizeComboHit(hitRate) +
-      0.1 * stabilityAdjusted +
-      0.05 * sampleTrust;
+    const comboScore = hasReplayHistory
+      ? this.computeReplayComboScore(hitRate, averagePnlProxy, sampleCount, minimumSampleCount, agreementPurity, maxDrawdownProxy)
+      : 0.4 * this.normalizeLiftPnl(liftVsBestMemberPnl) +
+        0.2 * this.normalizeLiftHit(liftVsBestMemberHitRate) +
+        0.15 * this.normalizeComboPnl(averagePnlProxy) +
+        0.1 * this.normalizeComboHit(hitRate) +
+        0.1 * (1 - Math.max(0, Math.min(1, maxDrawdownProxy / 1))) +
+        0.05 * Math.min(1, sampleCount / Math.max(1, minimumSampleCount * 2));
     let status: ComboSummary["status"] = "warming_up";
     if (sampleCount >= minimumSampleCount) {
       status = "neutral";
@@ -898,6 +982,30 @@ export class ComboMetricsService {
   /**
    * @section public:methods
    */
+
+  public recordPredictionMoment(marketKey: MarketKey, predictionId: string, strategySignals: StrategySignal[], createdAt: number): void {
+    const replayMoments = this.requireReplayMoments(marketKey);
+    replayMoments.push({
+      predictionId,
+      createdAt,
+      strategySignals,
+      resolvedDirection: null,
+      resolvedAt: null,
+    });
+    const latestCreatedAt = replayMoments[replayMoments.length - 1]?.createdAt ?? createdAt;
+    const rollingCutoff = latestCreatedAt - config.COMBO_ROLLING_WINDOW_SECONDS * 1_000;
+    const filteredReplayMoments = replayMoments.filter((replayMoment) => replayMoment.createdAt >= rollingCutoff);
+    replayMoments.splice(0, replayMoments.length, ...filteredReplayMoments);
+  }
+
+  public resolvePredictionMoment(marketKey: MarketKey, predictionId: string, resolvedDirection: PredictionDirection | null, resolvedAt: number | null): void {
+    const replayMoments = this.requireReplayMoments(marketKey);
+    const replayMoment = replayMoments.find((currentReplayMoment) => currentReplayMoment.predictionId === predictionId) ?? null;
+    if (replayMoment !== null) {
+      replayMoment.resolvedDirection = resolvedDirection;
+      replayMoment.resolvedAt = resolvedAt;
+    }
+  }
 
   public applyComboEffects(
     marketKey: MarketKey,

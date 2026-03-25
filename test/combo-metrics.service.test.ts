@@ -84,6 +84,49 @@ test("ComboMetricsService uses affordability to weaken late-entry combos", () =>
   assert.equal(affordabilityScore < 0.2, true);
 });
 
+test("ComboMetricsService scores combos from replay across prior trigger moments", () => {
+  const comboMetricsService = new ComboMetricsService();
+
+  comboMetricsService.recordPredictionMoment(
+    "btc:5m",
+    "p-1",
+    [
+      buildStrategySignal("s01", "momentum", 0.84, 0.88, 0.9, true, "UP"),
+      buildStrategySignal("s14", "pricing", 0.72, 0.86, 0.84, true, "UP"),
+      buildStrategySignal("s18", "reversion", -0.3, 0.62, 0.5, true, "DOWN"),
+    ],
+    1_000,
+  );
+  comboMetricsService.resolvePredictionMoment("btc:5m", "p-1", "UP", 31_000);
+  comboMetricsService.recordPredictionMoment(
+    "btc:5m",
+    "p-2",
+    [
+      buildStrategySignal("s01", "momentum", 0.82, 0.87, 0.88, true, "UP"),
+      buildStrategySignal("s14", "pricing", 0.68, 0.84, 0.82, true, "UP"),
+      buildStrategySignal("s02", "microstructure", 0.55, 0.72, 0.7, true, "UP"),
+    ],
+    2_000,
+  );
+  comboMetricsService.resolvePredictionMoment("btc:5m", "p-2", "UP", 32_000);
+
+  const selectedStrategyCombo = comboMetricsService.selectBestComboForMarket({
+    marketKey: "btc:5m",
+    strategySignals: [
+      buildStrategySignal("s01", "momentum", 0.86, 0.89, 0.91, true, "UP"),
+      buildStrategySignal("s14", "pricing", 0.7, 0.86, 0.83, true, "UP"),
+      buildStrategySignal("s02", "microstructure", 0.52, 0.7, 0.72, true, "UP"),
+    ],
+    crossAssetRegime: buildCrossAssetRegime("UP"),
+    marketQualityScore: 0.8,
+  });
+
+  assert.notEqual(selectedStrategyCombo, null);
+  assert.equal(selectedStrategyCombo?.comboKey, "s01+s14");
+  assert.equal((selectedStrategyCombo?.sampleCount ?? 0) >= 2, true);
+  assert.equal((selectedStrategyCombo?.comboScore ?? 0) > 0.2, true);
+});
+
 function buildStrategySignal(
   strategyId: string,
   family: StrategySignal["family"],

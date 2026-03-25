@@ -203,6 +203,12 @@ export class PredictionEngineService {
           researchOutcome.resolvedAt,
           "research",
         );
+        this.comboMetricsService.resolvePredictionMoment(
+          predictionRecord.marketKey,
+          predictionRecord.predictionId,
+          researchOutcome.resolvedDirection,
+          researchOutcome.resolvedAt,
+        );
         if (this.llmLogService !== null) {
           this.llmLogService.recordPredictionResolved(this.buildPredictionResponse(predictionRecord));
         }
@@ -517,6 +523,12 @@ export class PredictionEngineService {
           this.predictionStoreService.addPrediction(predictionRecord);
           this.marketStateService.markPredictionCreated(marketTrigger.marketKey, createdAt);
           this.strategyMetricsService.markParticipated(predictionRecord.marketKey, evaluationResult.strategyBreakdown, predictionRecord.createdAt);
+          this.comboMetricsService.recordPredictionMoment(
+            predictionRecord.marketKey,
+            predictionRecord.predictionId,
+            predictionRecord.strategyBreakdown,
+            predictionRecord.createdAt,
+          );
           if (this.llmLogService !== null) {
             this.llmLogService.recordPredictionCreated(this.buildPredictionResponse(predictionRecord));
           }
@@ -738,6 +750,7 @@ export class PredictionEngineService {
         resolvedAt,
         "execution",
       );
+      this.comboMetricsService.resolvePredictionMoment(predictionRecord.marketKey, predictionRecord.predictionId, outcome.resolvedDirection, resolvedAt);
       if (!predictionRecord.isResolved) {
         predictionRecord.isResolved = true;
         predictionRecord.outcome = outcome;
