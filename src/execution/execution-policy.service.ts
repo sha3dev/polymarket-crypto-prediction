@@ -26,8 +26,8 @@ export class ExecutionPolicyService {
     const referencePrice = positionSide === null ? null : this.resolveTokenPrice(marketSlice, positionSide);
     const orderShareCount = referencePrice === null ? 0 : this.computeMinimumShareCount(referencePrice);
     const orderNotionalUsd = referencePrice === null ? null : this.computeOrderNotionalUsd(referencePrice, orderShareCount);
-    const takeProfitPrice = referencePrice === null ? null : this.clampTokenPrice(referencePrice + config.TAKE_PROFIT_DELTA);
-    const stopLossPrice = referencePrice === null ? null : this.clampTokenPrice(referencePrice - config.STOP_LOSS_DELTA);
+    const takeProfitPrice = this.resolveTakeProfitPrice(referencePrice, prediction);
+    const stopLossPrice = this.resolveStopLossPrice(referencePrice, prediction);
     return {
       marketKey: marketSlice.marketKey,
       asset: marketSlice.asset,
@@ -138,6 +138,16 @@ export class ExecutionPolicyService {
     const tokenMetrics = positionSide === "up" ? marketSlice.up : marketSlice.down;
     const tokenPrice = tokenMetrics.midpoint ?? tokenMetrics.price;
     return tokenPrice;
+  }
+
+  private resolveTakeProfitPrice(referencePrice: number | null, prediction: PredictionResponse | null): number | null {
+    const takeProfitPrice = prediction?.takeProfitPrice ?? (referencePrice === null ? null : this.clampTokenPrice(referencePrice + config.TAKE_PROFIT_DELTA));
+    return takeProfitPrice;
+  }
+
+  private resolveStopLossPrice(referencePrice: number | null, prediction: PredictionResponse | null): number | null {
+    const stopLossPrice = prediction?.stopLossPrice ?? (referencePrice === null ? null : this.clampTokenPrice(referencePrice - config.STOP_LOSS_DELTA));
+    return stopLossPrice;
   }
 
   private resolveExecutableExitTriggerPrice(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number | null {
@@ -356,8 +366,8 @@ export class ExecutionPolicyService {
               entryReferencePrice: referencePrice,
               orderShareCount,
               orderNotionalUsd,
-              takeProfitPrice: this.clampTokenPrice(referencePrice + config.TAKE_PROFIT_DELTA),
-              stopLossPrice: this.clampTokenPrice(referencePrice - config.STOP_LOSS_DELTA),
+              takeProfitPrice: this.resolveTakeProfitPrice(referencePrice, prediction),
+              stopLossPrice: this.resolveStopLossPrice(referencePrice, prediction),
               executionStyle,
               executionReason: this.buildExecutionReason(executionStyle, spread, makerFillProbability, urgencyScore),
               urgencyScore,

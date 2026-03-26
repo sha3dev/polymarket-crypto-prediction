@@ -162,6 +162,20 @@ test("ExecutionPolicyService blocks entries when the entry token price is below 
   assert.equal(executionDecision.blockingReasons.includes("entry_token_price_too_low"), true);
 });
 
+test("ExecutionPolicyService uses the prediction take profit and stop loss levels instead of recomputing fixed execution levels", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "btc", "UP", "UP");
+  prediction.takeProfitPrice = 0.69;
+  prediction.stopLossPrice = 0.46;
+  const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("btc"), prediction, null, buildMarketPerformanceSummary("btc"));
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
+  assert.equal(executionDecision.takeProfitPrice, 0.69);
+  assert.equal(executionDecision.stopLossPrice, 0.46);
+});
+
 test("ExecutionPolicyService keeps the position open at take profit when continuation still looks healthy", () => {
   const executionPolicyService = new ExecutionPolicyService();
   const marketSlice = buildMarketSnapshotSlice("btc");
