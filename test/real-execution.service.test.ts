@@ -127,6 +127,125 @@ test("RealExecutionService opens and closes confirmed real trades", async () => 
   assert.equal(realExecutionService.getRecentTrades(10).length >= 4, true);
 });
 
+test("RealExecutionService rebases take profit and stop loss around the actual entry fill", async () => {
+  const orderService = {
+    async init(): Promise<void> {
+      return;
+    },
+    async getMyBalance(): Promise<number> {
+      return 500;
+    },
+    async postOrder(options: {
+      op: Operation;
+      executionType?: "maker" | "taker";
+      price: number;
+      size: number;
+      paperMode?: boolean;
+    }): Promise<PostedOrder | null> {
+      return {
+        op: options.op,
+        price: options.price,
+        size: options.size,
+        direction: "up",
+        executionType: options.executionType ?? "taker",
+        market: buildPolymarketMarket(),
+        id: "ord-fill",
+        date: new Date("2025-01-01T00:00:00.000Z"),
+      };
+    },
+    async waitForOrderConfirmation(options: { order: PostedOrder }): Promise<PostedOrderWithStatus> {
+      return {
+        ...options.order,
+        ok: true,
+        status: "confirmed",
+        latency: 10,
+        price: 0.56,
+      };
+    },
+    async disconnect(): Promise<void> {
+      return;
+    },
+  };
+  const executionPolicyService = {
+    buildEntryDecision(
+      marketSlice: MarketSnapshotSlice | null,
+      prediction: PredictionResponse | null,
+      openPosition: PaperPosition | null,
+      _marketPerformanceSummary: MarketPerformanceSummary | null,
+    ): ExecutionDecision | null {
+      let executionDecision: ExecutionDecision | null = null;
+      if (marketSlice !== null && prediction !== null && openPosition === null) {
+        executionDecision = {
+          marketKey: marketSlice.marketKey,
+          asset: marketSlice.asset,
+          window: marketSlice.window,
+          isEntryAllowed: true,
+          marketScore: 0.82,
+          marketTradeCount: 12,
+          hasSufficientMarketHistory: true,
+          positionSide: "up",
+          predictionDirection: prediction.direction,
+          entryReferencePrice: 0.5,
+          orderShareCount: 5,
+          orderNotionalUsd: 2.5,
+          takeProfitPrice: 0.62,
+          stopLossPrice: 0.42,
+          executionStyle: "taker",
+          executionReason: "test_entry",
+          urgencyScore: 1,
+          makerFillProbability: 0,
+          bookRiskScore: 0.1,
+          positionSizeSuggestion: 1,
+          breadthDirection: "UP",
+          breadthStrength: 0.8,
+          hasStrongBreadth: true,
+          hasBreadthAlignment: true,
+          selectedComboKey: "s01+s02",
+          selectedComboSize: 2,
+          selectedComboSource: "research",
+          selectedComboDirection: "UP",
+          selectedComboScore: 0.82,
+          predictionConfidence: 0.9,
+          selectedComboStrategyIds: ["s01", "s02"],
+          selectedComboAffordabilityScore: 0.84,
+          regimeId: "btc_eth_up",
+          blockingReasons: [],
+          generatedAt: marketSlice.generatedAt,
+        };
+      }
+      return executionDecision;
+    },
+    buildExitDecision(): {
+      exitReason: TradeExitReason | null;
+      executionStyle: ExecutionStyle | null;
+      exitPrice: number | null;
+      nextStopLossPrice: number | null;
+    } {
+      return {
+        exitReason: null,
+        executionStyle: null,
+        exitPrice: null,
+        nextStopLossPrice: null,
+      };
+    },
+  } as unknown as ExecutionPolicyService;
+  const realExecutionService = new RealExecutionService(
+    buildMarketStateServiceMock(buildMarketSnapshotSlice(40_000, 0.5)),
+    buildPredictionEngineMock(buildLivePredictionResponse(), []),
+    executionPolicyService,
+    orderService,
+    buildMarketCatalogServiceMock(),
+  );
+
+  await realExecutionService.handleSnapshot(40_000);
+
+  const openPositions = realExecutionService.getOpenPositions();
+  assert.equal(openPositions.length, 1);
+  assert.equal(openPositions[0]?.entryFillPrice, 0.56);
+  assert.equal(openPositions[0]?.takeProfitPrice, 0.68);
+  assert.equal(Math.abs((openPositions[0]?.stopLossPrice ?? 0) - 0.48) < 0.000001, true);
+});
+
 test("RealExecutionService keeps neutral market score at baseline during bootstrap", () => {
   const realExecutionService = new RealExecutionService(
     buildMarketStateServiceMock(buildMarketSnapshotSlice(2_000, 0.52)),

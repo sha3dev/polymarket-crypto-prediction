@@ -168,6 +168,19 @@ export class PaperExecutionService {
     return takerExitFillPrice;
   }
 
+  private clampTokenPrice(rawPrice: number): number {
+    const clampedPrice = Math.max(0.01, Math.min(0.99, rawPrice));
+    return clampedPrice;
+  }
+
+  private rebaseRiskLevelsAfterEntryFill(paperPosition: PaperPosition, entryFillPrice: number): void {
+    const entryReferencePrice = paperPosition.entryPostedPrice ?? entryFillPrice;
+    const takeProfitOffset = Math.max(0, paperPosition.takeProfitPrice - entryReferencePrice);
+    const stopLossOffset = Math.max(0, entryReferencePrice - paperPosition.stopLossPrice);
+    paperPosition.takeProfitPrice = this.clampTokenPrice(entryFillPrice + takeProfitOffset);
+    paperPosition.stopLossPrice = this.clampTokenPrice(entryFillPrice - stopLossOffset);
+  }
+
   private buildPosition(marketSlice: MarketSnapshotSlice, executionDecision: ExecutionDecision, signalTimestamp: number): PaperPosition {
     return {
       positionId: randomUUID(),
@@ -178,7 +191,7 @@ export class PaperExecutionService {
       entryDecisionAt: marketSlice.generatedAt,
       entryExecutionStyle: executionDecision.executionStyle as ExecutionStyle,
       shareCount: executionDecision.orderShareCount,
-      entryPostedPrice: executionDecision.executionStyle === "maker" ? executionDecision.entryReferencePrice : null,
+      entryPostedPrice: executionDecision.entryReferencePrice,
       entryFillPrice: null,
       entryFilledAt: null,
       takeProfitPrice: executionDecision.takeProfitPrice as number,
@@ -209,6 +222,7 @@ export class PaperExecutionService {
         if (takerFillPrice !== null) {
           paperPosition.entryFillPrice = takerFillPrice;
           paperPosition.entryFilledAt = marketSlice.generatedAt;
+          this.rebaseRiskLevelsAfterEntryFill(paperPosition, takerFillPrice);
         }
       }
       this.openPositions.set(marketSlice.marketKey, paperPosition);
@@ -227,6 +241,7 @@ export class PaperExecutionService {
     if (hasCrossedPrice && makerEntryPrice !== null) {
       paperPosition.entryFillPrice = makerEntryPrice;
       paperPosition.entryFilledAt = marketSlice.generatedAt;
+      this.rebaseRiskLevelsAfterEntryFill(paperPosition, makerEntryPrice);
       paperPosition.status = "open";
     }
     if (!hasCrossedPrice && hasTimedOut) {
@@ -234,6 +249,7 @@ export class PaperExecutionService {
       if (takerFillPrice !== null) {
         paperPosition.entryFillPrice = takerFillPrice;
         paperPosition.entryFilledAt = marketSlice.generatedAt;
+        this.rebaseRiskLevelsAfterEntryFill(paperPosition, takerFillPrice);
         paperPosition.status = "open";
         paperPosition.hasTakerFallbackUsed = true;
       } else {

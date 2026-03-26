@@ -147,6 +147,19 @@ export class RealExecutionService {
     return bestAsk;
   }
 
+  private clampTokenPrice(rawPrice: number): number {
+    const clampedPrice = Math.max(0.01, Math.min(0.99, rawPrice));
+    return clampedPrice;
+  }
+
+  private rebaseRiskLevelsAfterEntryFill(positionRecord: RealPositionRecord, entryFillPrice: number): void {
+    const entryReferencePrice = positionRecord.entryPostedPrice ?? entryFillPrice;
+    const takeProfitOffset = Math.max(0, positionRecord.takeProfitPrice - entryReferencePrice);
+    const stopLossOffset = Math.max(0, entryReferencePrice - positionRecord.stopLossPrice);
+    positionRecord.takeProfitPrice = this.clampTokenPrice(entryFillPrice + takeProfitOffset);
+    positionRecord.stopLossPrice = this.clampTokenPrice(entryFillPrice - stopLossOffset);
+  }
+
   private roundPolymarketFeePrecision(rawFee: number): number {
     const roundedFee = Math.round(rawFee * 10_000) / 10_000;
     const normalizedFee = roundedFee < 0.0001 ? 0 : roundedFee;
@@ -583,7 +596,7 @@ export class RealExecutionService {
       entryDecisionAt: marketSlice.generatedAt,
       entryExecutionStyle: executionDecision.executionStyle as ExecutionStyle,
       shareCount: executionDecision.orderShareCount,
-      entryPostedPrice: executionDecision.executionStyle === "maker" ? executionDecision.entryReferencePrice : null,
+      entryPostedPrice: executionDecision.entryReferencePrice,
       entryFillPrice: null,
       entryFilledAt: null,
       takeProfitPrice: executionDecision.takeProfitPrice as number,
@@ -633,6 +646,7 @@ export class RealExecutionService {
         positionRecord.entryExecutionStyle = orderExecutionResult.executionStyle;
         positionRecord.entryFillPrice = confirmation.price;
         positionRecord.entryFilledAt = marketSlice.generatedAt;
+        this.rebaseRiskLevelsAfterEntryFill(positionRecord, confirmation.price);
         positionRecord.status = "open";
         positionRecord.hasTakerFallbackUsed = orderExecutionResult.hasTakerFallbackUsed;
         this.consumedSignalTimestamps.set(marketSlice.marketKey, signalTimestamp);
