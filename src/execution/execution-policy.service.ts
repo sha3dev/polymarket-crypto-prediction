@@ -140,6 +140,28 @@ export class ExecutionPolicyService {
     return tokenPrice;
   }
 
+  private resolveExecutableExitTriggerPrice(marketSlice: MarketSnapshotSlice, positionSide: PositionSide): number | null {
+    const tokenMetrics = positionSide === "up" ? marketSlice.up : marketSlice.down;
+    const executableExitTriggerPrice = tokenMetrics.bestBid ?? tokenMetrics.midpoint ?? tokenMetrics.price;
+    return executableExitTriggerPrice;
+  }
+
+  private resolveExitPostedPrice(
+    marketSlice: MarketSnapshotSlice,
+    positionSide: PositionSide,
+    executionStyle: ExecutionStyle,
+    executableExitTriggerPrice: number | null,
+  ): number | null {
+    let exitPostedPrice = executableExitTriggerPrice;
+    if (executionStyle === "maker") {
+      const tokenPrice = this.resolveTokenPrice(marketSlice, positionSide);
+      if (tokenPrice !== null) {
+        exitPostedPrice = tokenPrice;
+      }
+    }
+    return exitPostedPrice;
+  }
+
   private computeMinimumShareCount(referencePrice: number): number {
     const shareCountFromUsd = Math.ceil(config.MIN_ORDER_USD / Math.max(referencePrice, 0.0001));
     const minimumShareCount = Math.max(config.MIN_ORDER_SHARES, shareCountFromUsd);
@@ -370,21 +392,21 @@ export class ExecutionPolicyService {
     paperPosition: PaperPosition,
     prediction: PredictionResponse | null,
   ): { exitReason: TradeExitReason | null; executionStyle: ExecutionStyle | null; exitPrice: number | null; nextStopLossPrice: number | null } {
-    const liveTokenPrice = this.resolveTokenPrice(marketSlice, paperPosition.positionSide);
+    const executableExitTriggerPrice = this.resolveExecutableExitTriggerPrice(marketSlice, paperPosition.positionSide);
     const spread = this.resolveSpread(marketSlice, paperPosition.positionSide);
     const depth = this.resolveDepth(marketSlice, paperPosition.positionSide);
     const imbalance = this.resolveImbalance(marketSlice, paperPosition.positionSide);
     const bookRiskScore = this.computeBookRiskScore(spread, depth, imbalance);
     let exitReason: TradeExitReason | null = null;
     let nextStopLossPrice: number | null = null;
-    if (liveTokenPrice !== null && liveTokenPrice >= paperPosition.takeProfitPrice) {
+    if (executableExitTriggerPrice !== null && executableExitTriggerPrice >= paperPosition.takeProfitPrice) {
       if (this.shouldHoldAfterTakeProfit(marketSlice, paperPosition, prediction)) {
         nextStopLossPrice = Math.max(paperPosition.stopLossPrice, paperPosition.entryFillPrice ?? paperPosition.stopLossPrice);
       } else {
         exitReason = "take_profit_hit";
       }
     }
-    if (liveTokenPrice !== null && liveTokenPrice <= paperPosition.stopLossPrice) {
+    if (executableExitTriggerPrice !== null && executableExitTriggerPrice <= paperPosition.stopLossPrice) {
       exitReason = "stop_loss_hit";
     }
     const urgencyScore = exitReason === "stop_loss_hit" ? 1 : Math.max(0, Math.min(1, bookRiskScore + spread * 8));
@@ -392,7 +414,8 @@ export class ExecutionPolicyService {
     if (exitReason !== null) {
       executionStyle = urgencyScore >= config.TAKER_URGENCY_THRESHOLD || spread <= 0.01 ? "taker" : "maker";
     }
-    const exitPrice = liveTokenPrice;
+    const exitPrice =
+      executionStyle === null ? null : this.resolveExitPostedPrice(marketSlice, paperPosition.positionSide, executionStyle, executableExitTriggerPrice);
     return { exitReason, executionStyle, exitPrice, nextStopLossPrice };
   }
 }

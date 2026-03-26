@@ -194,6 +194,24 @@ test("ExecutionPolicyService exits at take profit when continuation has degraded
   assert.notEqual(exitDecision.executionStyle, null);
 });
 
+test("ExecutionPolicyService does not mark take profit when only the midpoint crosses but the executable bid stays below target", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const marketSlice = buildMarketSnapshotSlice("btc");
+  marketSlice.up.price = 0.64;
+  marketSlice.up.midpoint = 0.64;
+  marketSlice.up.bestBid = 0.6;
+  marketSlice.up.bestAsk = 0.645;
+  const openPosition = buildOpenPosition("up");
+  const degradedPrediction = buildPredictionResponse("UP", "btc", "UP", "UP");
+  degradedPrediction.selectedCombo.comboScore = 0.54;
+  degradedPrediction.selectedCombo.affordabilityScore = 0.1;
+  const exitDecision = executionPolicyService.buildExitDecision(marketSlice, openPosition, degradedPrediction);
+
+  assert.equal(exitDecision.exitReason, null);
+  assert.equal(exitDecision.executionStyle, null);
+  assert.equal(exitDecision.exitPrice, null);
+});
+
 function buildMarketSnapshotSlice(asset: "btc" | "eth" | "sol" | "xrp" = "btc", barrierState: MarketBarrierState = buildBarrierState()): MarketSnapshotSlice {
   const tokenMetrics = buildTokenMetrics(0.5);
   const marketQuality: MarketQuality = {
