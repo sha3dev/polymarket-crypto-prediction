@@ -64,6 +64,7 @@ export type SelectedStrategyCombo = {
   familyRedundancyPenalty: number;
   semanticOverlapPenalty: number;
   anchorFitScore: number;
+  barrierAlignmentScore: number;
   marketQualityScore: number;
   affordabilityScore: number;
   selectionReason: string;

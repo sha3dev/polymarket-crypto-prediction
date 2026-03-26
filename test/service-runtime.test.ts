@@ -33,11 +33,11 @@ test("ServiceRuntime serves the dashboard HTML", async () => {
 
   assert.equal(response.status, 200);
   assert.match(html, /Polymarket 5m \/ 15m predictor/);
-  assert.match(html, /Combo Board/);
+  assert.match(html, /Live Opportunities/);
   assert.match(html, /Combo Search/);
-  assert.match(html, /Recent Predictions/);
+  assert.match(html, /Recent Opportunities/);
   assert.match(html, /Trade Candidates/);
-  assert.match(html, /Direction chosen by the winning combo/);
+  assert.match(html, /Current token-first edge score/);
   assert.match(html, /No-Arb Consistency/);
   assert.match(html, /Spot-Token Divergence/);
 
@@ -100,6 +100,10 @@ test("ServiceRuntime validates predict queries and exposes health and markets", 
 test("HttpServerService exposes an update endpoint that delegates to the update service", async () => {
   let hasUpdateRun = false;
   const httpServerService = new HttpServerService(
+    {
+      getLatestOpportunity: (): null => null,
+      getOpportunities: (): [] => [],
+    } as unknown as import("../src/opportunity/opportunity-engine.service.ts").OpportunityEngineService,
     {
       getStrategySummaries: (): [] => [],
       getComboSummaries: (): [] => [],
@@ -197,6 +201,10 @@ test("HttpServerService exposes an update endpoint that delegates to the update 
 
 test("HttpServerService exposes the prompt endpoint", async () => {
   const httpServerService = new HttpServerService(
+    {
+      getLatestOpportunity: (): null => null,
+      getOpportunities: (): [] => [],
+    } as unknown as import("../src/opportunity/opportunity-engine.service.ts").OpportunityEngineService,
     {
       getStrategySummaries: (): [] => [],
       getComboSummaries: (): [] => [],
@@ -338,17 +346,14 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(latestPredictionResponse.status, 200);
   assert.equal(latestPredictionJson.asset, "btc");
   assert.equal(latestPredictionJson.window, "5m");
-  assert.ok(latestPredictionJson.strategyBreakdown.length >= 8);
-  assert.equal(typeof latestPredictionJson.baseWeightedScore, "number");
-  assert.equal(typeof latestPredictionJson.adjustedWeightedScore, "number");
-  assert.equal(typeof latestPredictionJson.baseConfidence, "number");
-  assert.equal(typeof latestPredictionJson.adjustedConfidence, "number");
-  assert.equal(typeof latestPredictionJson.crossAssetRegime.breadthDirection, "string");
-  assert.equal(typeof latestPredictionJson.crossAssetRegime.breadthStrength, "number");
-  assert.equal(typeof latestPredictionJson.crossAssetRegime.regimeId, "string");
-  assert.equal(Array.isArray(latestPredictionJson.comboBreakdown.activeCombos), true);
-  assert.equal(typeof latestPredictionJson.selectedCombo.comboKey, "string");
-  assert.equal(Array.isArray(latestPredictionJson.selectedCombo.memberStrategyIds), true);
+  assert.ok(latestPredictionJson.factors.length >= 8);
+  assert.equal(typeof latestPredictionJson.tpBeforeSlScore, "number");
+  assert.equal(typeof latestPredictionJson.entryQualityScore, "number");
+  assert.equal(typeof latestPredictionJson.windowState.phase, "string");
+  assert.equal(typeof latestPredictionJson.barrierReachability.contestabilityScore, "number");
+  assert.equal(typeof latestPredictionJson.anchorContext.anchorStrength, "number");
+  assert.equal(typeof latestPredictionJson.selectedOpportunityCombo.comboKey, "string");
+  assert.equal(Array.isArray(latestPredictionJson.selectedOpportunityCombo.memberFactorIds), true);
 
   const cooldownPredictionsResponse = await fetch(`http://127.0.0.1:${address.port}/v1/predictions?asset=btc&window=5m&limit=10`);
   const cooldownPredictionsJson = await cooldownPredictionsResponse.json();
@@ -357,14 +362,14 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   const pendingSummaryJson = await pendingSummaryResponse.json();
   assert.equal(pendingSummaryResponse.status, 200);
   assert.equal(
-    pendingSummaryJson.latestPredictions.some((prediction: { result: { status: string } }) => prediction.result.status === "pending"),
+    pendingSummaryJson.latestOpportunities.some((opportunity: { result: { status: string } }) => opportunity.result.status === "pending"),
     true,
   );
   const warmupExecutionResponse = await fetch(`http://127.0.0.1:${address.port}/v1/execution`);
   const warmupExecutionJson = await warmupExecutionResponse.json();
   const btcWarmupDecision = warmupExecutionJson.executionNow.find((execution: { marketKey: string }) => execution.marketKey === "btc:5m");
   assert.equal(warmupExecutionResponse.status, 200);
-  assert.equal(btcWarmupDecision.decision.blockingReasons.includes("market_warming_up"), true);
+  assert.equal(btcWarmupDecision.decision.blockingReasons.includes("market_warming_up"), false);
 
   serviceRuntime.ingestSnapshot(
     buildSnapshot(33_000, {
@@ -482,7 +487,9 @@ test("ServiceRuntime creates predictions, enforces cooldown, resolves TP/SL outc
   assert.equal(summaryResponse.status, 200);
   assert.equal(summaryJson.executionMode, "paper");
   assert.equal(summaryJson.account.mode, "paper");
-  assert.equal(Array.isArray(summaryJson.latestPredictions), true);
+  assert.equal(Array.isArray(summaryJson.latestOpportunities), true);
+  assert.equal(Array.isArray(summaryJson.liveOpportunities), true);
+  assert.equal(Array.isArray(summaryJson.factorBoards), true);
   assert.equal(summaryJson.health.pendingEvaluationCount, summaryJson.openPositions?.length ?? 0);
   assert.equal(summaryJson.markets.length, 8);
   assert.equal(summaryJson.globalRegime === null || typeof summaryJson.globalRegime.regimeId === "string", true);

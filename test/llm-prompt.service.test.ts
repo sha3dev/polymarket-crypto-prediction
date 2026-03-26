@@ -28,7 +28,7 @@ test("LlmPromptService returns an empty-state prompt with task and repo context"
   rmSync(llmDirectory, { recursive: true, force: true });
 });
 
-test("LlmLogService appends prediction and trade events and updates the rolling summary", () => {
+test("LlmLogService appends opportunity and trade events and updates the rolling summary", () => {
   const llmDirectory = mkdtempSync(path.join(os.tmpdir(), "llm-prompt-summary-"));
   const llmLogService = new LlmLogService(llmDirectory);
 
@@ -42,25 +42,25 @@ test("LlmLogService appends prediction and trade events and updates the rolling 
     .filter((line) => line.length > 0);
   const summary = JSON.parse(readFileSync(llmLogService.getSummaryFilePath(), "utf8")) as {
     counts: {
-      predictionsCreated: number;
-      predictionsResolved: number;
+      opportunitiesCreated: number;
+      opportunitiesResolved: number;
       wins: number;
       tradesClosed: number;
     };
     quality: {
       resolvedAccuracy: number | null;
     };
-    markets: Record<string, { predictionCount: number; tradeCount: number; cumulativePnl: number }>;
+    markets: Record<string, { opportunityCount: number; tradeCount: number; cumulativePnl: number }>;
     combos: Record<string, { resolvedCount: number; hitRate: number | null }>;
   };
 
   assert.equal(eventLines.length, 3);
-  assert.equal(summary.counts.predictionsCreated, 1);
-  assert.equal(summary.counts.predictionsResolved, 1);
+  assert.equal(summary.counts.opportunitiesCreated, 1);
+  assert.equal(summary.counts.opportunitiesResolved, 1);
   assert.equal(summary.counts.wins, 1);
   assert.equal(summary.counts.tradesClosed, 1);
   assert.equal(summary.quality.resolvedAccuracy, 1);
-  assert.equal(summary.markets["btc:5m"]?.predictionCount, 1);
+  assert.equal(summary.markets["btc:5m"]?.opportunityCount, 1);
   assert.equal(summary.markets["btc:5m"]?.tradeCount, 1);
   assert.equal(summary.markets["btc:5m"]?.cumulativePnl, 0.18);
   assert.equal(summary.combos["combo-alpha"]?.resolvedCount, 1);
@@ -77,8 +77,8 @@ test("LlmPromptService keeps the prompt under the configured character cap", () 
   const longStrategyId = `s99-${"y".repeat(1_000)}`;
   const summary = {
     counts: {
-      predictionsCreated: 99,
-      predictionsResolved: 80,
+      opportunitiesCreated: 99,
+      opportunitiesResolved: 80,
       wins: 45,
       losses: 35,
       tradesClosed: 40,
@@ -92,7 +92,7 @@ test("LlmPromptService keeps the prompt under the configured character cap", () 
     markets: {
       "btc:5m": {
         marketKey: "btc:5m",
-        predictionCount: 99,
+        opportunityCount: 99,
         resolvedCount: 80,
         winCount: 45,
         lossCount: 35,
@@ -134,19 +134,25 @@ test("LlmPromptService keeps the prompt under the configured character cap", () 
   };
   const eventLines = Array.from({ length: 30 }, (_, index) => {
     return JSON.stringify({
-      eventType: "prediction_resolved",
+      eventType: "opportunity_resolved",
       timestamp: 1_000 + index,
-      predictionId: `btc:5m:${index}`,
+      opportunityId: `btc:5m:${index}`,
       marketKey: "btc:5m",
-      direction: "UP",
-      confidence: 0.75,
+      targetSide: "up",
+      windowPhase: "late",
+      remainingMs: 15_000,
+      priceToBeat: 60_000,
+      referencePrice: 60_020,
+      barrierDistanceRatio: 0.0003,
+      contestabilityScore: 0.88,
+      tpBeforeSlScore: 0.75,
+      entryQualityScore: 0.72,
       selectedComboKey: longComboKey,
       selectedStrategyIds: [longStrategyId],
       outcomeStatus: "ok",
       outcomeReason: "take_profit_hit",
-      resolvedDirection: "UP",
-      evaluationPrice: 0.61,
-      baselinePrice: 0.51,
+      closeTokenPrice: 0.61,
+      entryTokenPrice: 0.51,
       wasExecuted: true,
       strategies: [{ strategyId: longStrategyId, name: "Long Strategy Name", tier: "high", weight: 0.8 }],
     });
@@ -238,6 +244,20 @@ function buildPredictionResponse(predictionResponseOptions: PredictionResponseOp
       isTradableGlobalContext: true,
       hasStrongBreadth: true,
     },
+    barrierState: {
+      priceToBeat: 60_000,
+      chainlinkPrice: 60_005,
+      spotConsensusPrice: 60_004,
+      marketEnd: "2025-01-01T00:05:00.000Z",
+      timeRemainingMs: 180_000,
+      chainlinkDistanceRatio: 0.00008,
+      spotDistanceRatio: 0.00006,
+      dominantSide: "UP",
+      isNearBarrier: true,
+      isEffectivelyDecided: false,
+      isBarrierDataUsable: true,
+      decisionReason: "near barrier",
+    },
     isExecutionEligible: false,
     executionBlockingReasons: ["market_warming_up"],
     wasExecuted: predictionResponseOptions.wasExecuted ?? false,
@@ -286,6 +306,7 @@ function buildPredictionResponse(predictionResponseOptions: PredictionResponseOp
       familyRedundancyPenalty: 0.1,
       semanticOverlapPenalty: 0.05,
       anchorFitScore: 0.7,
+      barrierAlignmentScore: 0.8,
       marketQualityScore: 0.88,
       affordabilityScore: 0.55,
       selectionReason: "test combo",

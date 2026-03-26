@@ -8,6 +8,7 @@ import type {
   AssetSymbol,
   CrossAssetRegime,
   InputSnapshot,
+  MarketBarrierState,
   MarketEvaluationPrice,
   MarketHistoryEntry,
   MarketKey,
@@ -19,6 +20,7 @@ import type {
   MarketWindow,
   ParsedOrderBook,
   PredictionContext,
+  PredictionDirection,
   SpotVenueMetrics,
   TokenMetrics,
   TriggerType,
@@ -110,6 +112,113 @@ export class MarketStateService {
     return marketRecord;
   }
 
+  private buildEmptyBarrierState(
+    marketEnd: string | null,
+    priceToBeat: number | null,
+    chainlinkPrice: number | null,
+    spotConsensusPrice: number | null,
+  ): MarketBarrierState {
+    const barrierState: MarketBarrierState = {
+      priceToBeat,
+      chainlinkPrice,
+      spotConsensusPrice,
+      marketEnd,
+      timeRemainingMs: null,
+      chainlinkDistanceRatio: null,
+      spotDistanceRatio: null,
+      dominantSide: null,
+      isNearBarrier: false,
+      isEffectivelyDecided: false,
+      isBarrierDataUsable: false,
+      decisionReason: "missing_barrier_inputs",
+    };
+    return barrierState;
+  }
+
+  private parseMarketEndTimestamp(marketEnd: string | null): number | null {
+    const parsedMarketEnd = marketEnd === null ? Number.NaN : Date.parse(marketEnd);
+    const marketEndTimestamp = Number.isFinite(parsedMarketEnd) ? parsedMarketEnd : null;
+    return marketEndTimestamp;
+  }
+
+  private resolveBarrierDistanceRatio(referencePrice: number | null, priceToBeat: number | null): number | null {
+    const barrierDistanceRatio =
+      referencePrice === null || priceToBeat === null || priceToBeat === 0 ? null : Math.abs(referencePrice - priceToBeat) / priceToBeat;
+    return barrierDistanceRatio;
+  }
+
+  private resolveBarrierDominantSide(referencePrice: number | null, priceToBeat: number | null): PredictionDirection | null {
+    let dominantSide: PredictionDirection | null = null;
+    if (referencePrice !== null && priceToBeat !== null) {
+      if (referencePrice > priceToBeat) {
+        dominantSide = "UP";
+      }
+      if (referencePrice < priceToBeat) {
+        dominantSide = "DOWN";
+      }
+    }
+    return dominantSide;
+  }
+
+  private buildBarrierState(
+    generatedAt: number,
+    marketEnd: string | null,
+    priceToBeat: number | null,
+    chainlinkPrice: number | null,
+    spotConsensusPrice: number | null,
+  ): MarketBarrierState {
+    const emptyBarrierState = this.buildEmptyBarrierState(marketEnd, priceToBeat, chainlinkPrice, spotConsensusPrice);
+    const barrierReferencePrice = chainlinkPrice ?? spotConsensusPrice;
+    const marketEndTimestamp = this.parseMarketEndTimestamp(marketEnd);
+    const timeRemainingMs = marketEndTimestamp === null ? null : Math.max(0, marketEndTimestamp - generatedAt);
+    const chainlinkDistanceRatio = this.resolveBarrierDistanceRatio(chainlinkPrice, priceToBeat);
+    const spotDistanceRatio = this.resolveBarrierDistanceRatio(spotConsensusPrice, priceToBeat);
+    const referenceDistanceRatio = this.resolveBarrierDistanceRatio(barrierReferencePrice, priceToBeat);
+    const dominantSide = this.resolveBarrierDominantSide(barrierReferencePrice, priceToBeat);
+    const isBarrierDataUsable = priceToBeat !== null && barrierReferencePrice !== null;
+    const isNearBarrier = isBarrierDataUsable && referenceDistanceRatio !== null && referenceDistanceRatio <= config.BARRIER_NEAR_RATIO;
+    const hasLateBarrierLead =
+      isBarrierDataUsable &&
+      timeRemainingMs !== null &&
+      referenceDistanceRatio !== null &&
+      timeRemainingMs <= config.BARRIER_MIN_TIME_REMAINING_MS &&
+      referenceDistanceRatio >= config.BARRIER_DECIDED_RATIO;
+    const hasForcedLateDecision =
+      isBarrierDataUsable &&
+      timeRemainingMs !== null &&
+      referenceDistanceRatio !== null &&
+      timeRemainingMs <= config.BARRIER_FORCE_DECIDED_TIME_MS &&
+      referenceDistanceRatio >= config.BARRIER_NEAR_RATIO;
+    const isEffectivelyDecided = hasLateBarrierLead || hasForcedLateDecision;
+    let decisionReason = emptyBarrierState.decisionReason;
+    if (isBarrierDataUsable) {
+      decisionReason = isEffectivelyDecided
+        ? hasForcedLateDecision
+          ? "late_window_clear_barrier_lead"
+          : "late_window_barrier_gap"
+        : isNearBarrier
+          ? "near_barrier"
+          : dominantSide === null
+            ? "flat_barrier_state"
+            : "contestable_barrier_state";
+    }
+    const barrierState: MarketBarrierState = {
+      priceToBeat,
+      chainlinkPrice,
+      spotConsensusPrice,
+      marketEnd,
+      timeRemainingMs,
+      chainlinkDistanceRatio,
+      spotDistanceRatio,
+      dominantSide,
+      isNearBarrier,
+      isEffectivelyDecided,
+      isBarrierDataUsable,
+      decisionReason,
+    };
+    return barrierState;
+  }
+
   private buildSlice(snapshot: InputSnapshot, asset: AssetSymbol, window: MarketWindow): MarketSnapshotSlice {
     const prefix = `${asset}_${window}`;
     const generatedAt = snapshot.generated_at;
@@ -125,15 +234,19 @@ export class MarketStateService {
     const previousSpotConsensus = this.requireMarketRecord(this.buildMarketKey(asset, window)).latest?.spotConsensusPrice ?? null;
     const spotMomentum = this.computeSignedChange(previousSpotConsensus, spotConsensusPrice);
     const spotDispersion = this.computeSpotDispersion(spotVenues, spotConsensusPrice);
+    const marketStart = this.readString(snapshot, `${prefix}_market_start`);
+    const marketEnd = this.readString(snapshot, `${prefix}_market_end`);
+    const priceToBeat = this.readNumber(snapshot, `${prefix}_price_to_beat`);
+    const barrierState = this.buildBarrierState(generatedAt, marketEnd, priceToBeat, chainlinkPrice, spotConsensusPrice);
     return {
       asset,
       window,
       marketKey: this.buildMarketKey(asset, window),
       generatedAt,
       slug,
-      marketStart: this.readString(snapshot, `${prefix}_market_start`),
-      marketEnd: this.readString(snapshot, `${prefix}_market_end`),
-      priceToBeat: this.readNumber(snapshot, `${prefix}_price_to_beat`),
+      marketStart,
+      marketEnd,
+      priceToBeat,
       up,
       down,
       spotVenues,
@@ -142,6 +255,7 @@ export class MarketStateService {
       spotDispersion,
       chainlinkPrice,
       chainlinkAgeMs,
+      barrierState,
       quality,
     };
   }
@@ -323,7 +437,7 @@ export class MarketStateService {
     const currentPrice = this.resolveTriggerPrice(currentSlice, tokenSide);
     const crossAssetRegime = this.buildCrossAssetRegime(currentSlice.marketKey, currentSlice.window);
     const triggerType = this.detectTriggerType(marketRecord, currentSlice, tokenSide, previousPrice, currentPrice, crossAssetRegime);
-    if (triggerType && currentPrice !== null) {
+    if (triggerType && currentPrice !== null && !currentSlice.barrierState.isEffectivelyDecided) {
       const trigger: MarketTrigger = {
         marketKey: currentSlice.marketKey,
         asset: currentSlice.asset,
@@ -556,6 +670,7 @@ export class MarketStateService {
       lastPredictionTimestamp,
       cooldownRemainingMs,
       snapshotAgeMs: latestSlice === null ? null : Math.max(0, nowTimestamp - latestSlice.generatedAt),
+      barrierState: latestSlice?.barrierState ?? this.buildEmptyBarrierState(null, null, null, null),
       quality: latestSlice?.quality ?? {
         score: 0,
         hasLiveMarket: false,
@@ -1136,6 +1251,7 @@ export class MarketStateService {
         current: latestSlice,
         previous: marketRecord.previous,
         history: [...marketRecord.history],
+        barrierState: latestSlice.barrierState,
         crossAssetRegime: this.buildCrossAssetRegime(marketKey, latestSlice.window),
       };
     }
@@ -1156,6 +1272,7 @@ export class MarketStateService {
         current: latestSlice,
         previous: marketRecord.previous,
         history: [...marketRecord.history],
+        barrierState: latestSlice.barrierState,
         crossAssetRegime: this.buildCrossAssetRegime(marketKey, latestSlice.window),
       };
     }

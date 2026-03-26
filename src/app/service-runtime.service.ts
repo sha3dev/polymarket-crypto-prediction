@@ -23,6 +23,9 @@ import { LlmPromptService } from "../llm/llm-prompt.service.ts";
 import logger from "../logger.ts";
 import { MarketStateService } from "../market/market-state.service.ts";
 import type { InputSnapshot } from "../market/market.types.ts";
+import { OpportunityEngineService } from "../opportunity/opportunity-engine.service.ts";
+import { OpportunityStateService } from "../opportunity/opportunity-state.service.ts";
+import { OpportunityStoreService } from "../opportunity/opportunity-store.service.ts";
 import { PredictionEngineService } from "../prediction/prediction-engine.service.ts";
 import { PredictionStoreService } from "../prediction/prediction-store.service.ts";
 import { StrategyEngineService } from "../strategy/strategy-engine.service.ts";
@@ -42,6 +45,7 @@ export class ServiceRuntime {
   private readonly snapshotService: SnapshotService | null;
   private readonly marketStateService: MarketStateService;
   private readonly predictionEngineService: PredictionEngineService;
+  private readonly opportunityEngineService: OpportunityEngineService;
   private readonly executionService: ExecutionService;
   private readonly httpServerService: HttpServerService;
   private readonly startedAt: number;
@@ -56,6 +60,7 @@ export class ServiceRuntime {
     snapshotService: SnapshotService | null,
     marketStateService: MarketStateService,
     predictionEngineService: PredictionEngineService,
+    opportunityEngineService: OpportunityEngineService,
     executionService: ExecutionService,
     httpServerService: HttpServerService,
     startedAt: number,
@@ -63,6 +68,7 @@ export class ServiceRuntime {
     this.snapshotService = snapshotService;
     this.marketStateService = marketStateService;
     this.predictionEngineService = predictionEngineService;
+    this.opportunityEngineService = opportunityEngineService;
     this.executionService = executionService;
     this.httpServerService = httpServerService;
     this.startedAt = startedAt;
@@ -82,6 +88,8 @@ export class ServiceRuntime {
     const comboMetricsService = new ComboMetricsService();
     const executionPolicyService = new ExecutionPolicyService();
     const llmLogService = new LlmLogService();
+    const opportunityStateService = new OpportunityStateService();
+    const opportunityStoreService = new OpportunityStoreService();
     const predictionEngineService = new PredictionEngineService(
       marketStateService,
       strategyEngineService,
@@ -89,6 +97,13 @@ export class ServiceRuntime {
       new PredictionStoreService(),
       comboMetricsService,
       llmLogService,
+    );
+    const opportunityEngineService = new OpportunityEngineService(
+      marketStateService,
+      predictionEngineService,
+      strategyEngineService,
+      opportunityStateService,
+      opportunityStoreService,
     );
     const executionService =
       config.EXECUTION_MODE === "real"
@@ -101,10 +116,11 @@ export class ServiceRuntime {
       config.EXECUTION_MODE,
     );
     const httpServerService = new HttpServerService(
+      opportunityEngineService,
       predictionEngineService,
       executionService,
       marketStateService,
-      new DashboardSummaryService(marketStateService, predictionEngineService, executionService, startedAt),
+      new DashboardSummaryService(marketStateService, opportunityEngineService, predictionEngineService, executionService, startedAt),
       new DashboardViewService(),
       new UpdateService(process.cwd(), "@sha3/polymarket-crypto-prediction"),
       llmPromptService,
@@ -113,6 +129,7 @@ export class ServiceRuntime {
       new SnapshotService(config.SNAPSHOT_INTERVAL_MS),
       marketStateService,
       predictionEngineService,
+      opportunityEngineService,
       executionService,
       httpServerService,
       startedAt,
@@ -176,6 +193,7 @@ export class ServiceRuntime {
   public ingestSnapshot(snapshot: InputSnapshot): void {
     const marketUpdateResult = this.marketStateService.ingestSnapshot(snapshot);
     this.predictionEngineService.handleSnapshot(marketUpdateResult.generatedAt, marketUpdateResult.triggeredMarkets);
+    this.opportunityEngineService.handleSnapshot();
     void this.executionService.handleSnapshot(marketUpdateResult.generatedAt);
   }
 

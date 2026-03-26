@@ -79,7 +79,22 @@ export type MarketSnapshotSlice = {
   spotDispersion: number;
   chainlinkPrice: number | null;
   chainlinkAgeMs: number | null;
+  barrierState: MarketBarrierState;
   quality: MarketQuality;
+};
+export type MarketBarrierState = {
+  priceToBeat: number | null;
+  chainlinkPrice: number | null;
+  spotConsensusPrice: number | null;
+  marketEnd: string | null;
+  timeRemainingMs: number | null;
+  chainlinkDistanceRatio: number | null;
+  spotDistanceRatio: number | null;
+  dominantSide: PredictionDirection | null;
+  isNearBarrier: boolean;
+  isEffectivelyDecided: boolean;
+  isBarrierDataUsable: boolean;
+  decisionReason: string | null;
 };
 export type MarketHistoryEntry = {
   generatedAt: number;
@@ -157,6 +172,7 @@ export type MarketSummary = {
   lastPredictionTimestamp: number | null;
   cooldownRemainingMs: number;
   snapshotAgeMs: number | null;
+  barrierState: MarketBarrierState;
   quality: MarketQuality;
 };
 export type PredictionContext = {
@@ -168,5 +184,6 @@ export type PredictionContext = {
   current: MarketSnapshotSlice;
   previous: MarketSnapshotSlice | null;
   history: MarketHistoryEntry[];
+  barrierState: MarketBarrierState;
   crossAssetRegime: CrossAssetRegime;
 };

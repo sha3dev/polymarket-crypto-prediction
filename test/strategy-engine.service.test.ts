@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { PredictionContext } from "../src/market/market.types.ts";
+import type { MarketBarrierState } from "../src/market/market.types.ts";
 import { StrategyEngineService } from "../src/strategy/strategy-engine.service.ts";
 import { StrategyMetricsService } from "../src/strategy/strategy-metrics.service.ts";
 import type { StrategyDefinition } from "../src/strategy/strategy.types.ts";
@@ -292,6 +293,7 @@ function buildPredictionContext(): PredictionContext {
       spotDispersion: 0.001,
       chainlinkPrice: 102.8,
       chainlinkAgeMs: 0,
+      barrierState: buildBarrierState("UP"),
       quality: {
         score: 0.92,
         hasLiveMarket: true,
@@ -342,6 +344,7 @@ function buildPredictionContext(): PredictionContext {
       spotDispersion: 0.001,
       chainlinkPrice: 101.4,
       chainlinkAgeMs: 0,
+      barrierState: buildBarrierState("UP"),
       quality: {
         score: 0.92,
         hasLiveMarket: true,
@@ -414,6 +417,7 @@ function buildPredictionContext(): PredictionContext {
         qualityScore: 0.92,
       },
     ],
+    barrierState: buildBarrierState("UP"),
     crossAssetRegime: {
       regimeId: "btc_eth_up",
       regimeClass: "aligned",
@@ -443,5 +447,22 @@ function buildPredictionContext(): PredictionContext {
       isTradableGlobalContext: true,
       hasStrongBreadth: true,
     },
+  };
+}
+
+function buildBarrierState(dominantSide: "UP" | "DOWN" | null): MarketBarrierState {
+  return {
+    priceToBeat: 96,
+    chainlinkPrice: 102.8,
+    spotConsensusPrice: 103.5,
+    marketEnd: "2025-01-01T00:05:00.000Z",
+    timeRemainingMs: 290_000,
+    chainlinkDistanceRatio: 0.0708,
+    spotDistanceRatio: 0.0781,
+    dominantSide,
+    isNearBarrier: false,
+    isEffectivelyDecided: false,
+    isBarrierDataUsable: true,
+    decisionReason: "contestable but biased",
   };
 }

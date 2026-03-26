@@ -552,10 +552,11 @@ await runtime.stop();
 
 ## Examples
 
-### Inspect the latest BTC 5m prediction
+### Inspect the latest BTC 5m opportunity
 
 ```bash
 curl "http://127.0.0.1:3300/v1/predict?asset=btc&window=5m"
+curl "http://127.0.0.1:3300/v1/opportunities?asset=btc&window=5m&limit=10"
 ```
 
 ### Inspect execution decisions for all markets
@@ -595,21 +596,26 @@ This route is fixed and non-versioned on purpose.
 
 ### `GET /v1/predict?asset={btc|eth|sol|xrp}&window={5m|15m}`
 
-Returns the latest prediction for one market.
+Returns the latest token-first opportunity for one market.
 
 Important fields:
 
-- `direction`
-- `confidence`
-- `crossAssetRegime`
-- `selectedCombo`
-- `comboBreakdown`
-- `strategyBreakdown`
-- `isExecutionEligible`
+- `targetSide`
+- `windowState`
+- `barrierReachability`
+- `anchorContext`
+- `tokenOpportunity`
+- `selectedOpportunityCombo`
+- `factors`
+- `hasExecutionOpportunity`
 
 ### `GET /v1/predictions?asset={btc|eth|sol|xrp}&window={5m|15m}&limit=N`
 
-Returns recent predictions for one market.
+Returns recent token-first opportunities for one market.
+
+### `GET /v1/opportunities?asset={btc|eth|sol|xrp}&window={5m|15m}&limit=N`
+
+Explicit opportunity-history route with the same token-first payload as `/v1/predictions`.
 
 ### `GET /v1/strategies`
 
@@ -632,7 +638,9 @@ Key fields:
 - `globalRegime`
 - `globalRegimes`
 - `markets`
-- `latestPredictions`
+- `liveOpportunities`
+- `latestOpportunities`
+- `factorBoards`
 - `winningCombinations`
 - `comboSearchBoards`
 - `executionNow`
@@ -806,9 +814,64 @@ Portfolio-level execution statistics:
 
 Current market snapshot summary for one monitored market.
 
+### `OpportunityResponse`
+
+Token-first opportunity payload returned by `/v1/predict`, `/v1/predictions`, and `/v1/opportunities`.
+
+Important fields:
+
+- `targetSide`
+- `windowState`
+- `barrierReachability`
+- `anchorContext`
+- `tokenOpportunity`
+- `selectedOpportunityCombo`
+- `factors`
+- `result`
+
+### `MarketOpportunitySummary`
+
+Current live token-first summary for one market.
+
+Important fields:
+
+- `recommendedSide`
+- `recommendedSideScore`
+- `windowState`
+- `barrierReachability`
+- `anchorContext`
+- `tpBeforeSlScore`
+- `selectedOpportunityCombo`
+
+### `OpportunityFactorSummary`
+
+One normalized factor contribution inside the opportunity engine.
+
+Important fields:
+
+- `scope`
+- `targetSide`
+- `edgeScore`
+- `confidence`
+- `weight`
+
+### `SelectedOpportunityCombo`
+
+Selected combo shape exposed by token-first opportunity payloads.
+
+Important fields:
+
+- `targetSide`
+- `edgeScore`
+- `tpBeforeSlScore`
+- `contestabilityScore`
+- `anchorAlignmentScore`
+- `microstructureScore`
+- `selectionReason`
+
 ### `PredictionResponse`
 
-Prediction payload returned by prediction endpoints.
+Legacy internal prediction record still used inside the runtime while the public API is now token-first.
 
 Important fields:
 
@@ -849,6 +912,12 @@ Every top-level key from `src/config.ts` is documented below.
 - `MIN_RESEARCH_MARKET_QUALITY`: minimum quality for research predictions
 - `MIN_WEAK_BREADTH_STRENGTH_FOR_PREDICTION`: minimum weak breadth support for prediction creation
 - `PREDICTION_HORIZON_MS`: prediction resolution horizon
+- `BARRIER_NEAR_RATIO`: barrier-distance threshold below which the market is still considered contestable
+- `BARRIER_DECIDED_RATIO`: late-window barrier-distance threshold that marks a market as effectively decided
+- `BARRIER_MIN_TIME_REMAINING_MS`: late-window threshold where dominant barrier side starts gating ideas
+- `BARRIER_FORCE_DECIDED_TIME_MS`: very-late threshold where even modest barrier leads can force a decided market state
+
+Barrier awareness now runs through market state, prediction gating, combo scoring, execution, and the dashboard. If the underlying market is already effectively decided versus `priceToBeat`, the engine stops treating token microstructure as actionable.
 
 ### History and query limits
 
@@ -898,6 +967,24 @@ These still affect the underlying strategy layer even though the final decision 
 ### Dashboard
 
 - `DASHBOARD_POLL_INTERVAL_MS`: dashboard polling interval
+
+### Execution and risk
+
+- `MIN_ENTRY_CONFIDENCE`: minimum prediction confidence for execution
+- `MIN_MARKET_QUALITY_FOR_ENTRY`: minimum live market quality for execution
+- `MIN_MARKET_SCORE_FOR_ENTRY`: minimum historical market score for execution
+- `ENTRY_TARGET_PRICE`: preferred token entry center
+- `ENTRY_BAND_HALF_WIDTH`: allowed distance from the preferred entry center
+- `MAX_SPREAD_FOR_ENTRY`: max spread accepted for entries
+- `MIN_SPREAD_FOR_MAKER`: minimum spread that still justifies maker posting
+- `MIN_DEPTH_FOR_MAKER`: minimum top-book depth for maker preference
+- `MAKER_DRIFT_LIMIT`: drift limit before maker posting becomes too risky
+- `TAKER_URGENCY_THRESHOLD`: urgency score threshold for taker execution
+- `TAKE_PROFIT_DELTA`: token delta used for take profit targets
+- `STOP_LOSS_DELTA`: token delta used for stop loss targets
+- `MIN_ORDER_USD`: minimum notional per order
+- `MIN_ORDER_SHARES`: minimum share count per order
+- `MIN_ENTRY_TOKEN_PRICE`: hard execution-only floor for the selected token price
 - `CROSS_ASSET_LOOKBACK_MS`: rolling lookback used by the cross-asset regime so BTC/ETH momentum and breadth are measured over a short interval instead of one snapshot
 
 ### Market scoring and bootstrap

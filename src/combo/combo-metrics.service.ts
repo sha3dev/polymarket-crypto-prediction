@@ -4,7 +4,7 @@
 
 import config from "../config.ts";
 import type { ComboSource } from "../execution/execution.types.ts";
-import type { CrossAssetRegime, MarketKey, PredictionDirection } from "../market/market.types.ts";
+import type { CrossAssetRegime, MarketBarrierState, MarketKey, PredictionDirection } from "../market/market.types.ts";
 import type { StrategySignal, StrategySummary } from "../strategy/strategy.types.ts";
 import type {
   ComboBreakdown,
@@ -383,6 +383,17 @@ export class ComboMetricsService {
     return anchorFitReason;
   }
 
+  private buildBarrierAlignmentReason(barrierAlignmentScore: number): string {
+    let barrierAlignmentReason = "barrier context is mixed";
+    if (barrierAlignmentScore >= 0.75) {
+      barrierAlignmentReason = "barrier context is aligned";
+    }
+    if (barrierAlignmentScore <= 0.25) {
+      barrierAlignmentReason = "barrier context is fighting the combo";
+    }
+    return barrierAlignmentReason;
+  }
+
   private buildHistoryReason(comboSummary: ComboSummary): string {
     let historyReason = "light combo history";
     if (comboSummary.sampleCount >= 12 && comboSummary.hitRate >= 0.55) {
@@ -410,6 +421,7 @@ export class ComboMetricsService {
     comboSummary: ComboSummary,
     agreementScore: number,
     anchorFitScore: number,
+    barrierAlignmentScore: number,
     comboScore: number,
     marketQualityScore: number,
     affordabilityScore: number,
@@ -417,12 +429,35 @@ export class ComboMetricsService {
     const sourceReason = selectionSource === "execution" ? "execution-backed combo" : "research-backed combo";
     const agreementReason = this.buildAgreementReason(agreementScore);
     const anchorFitReason = this.buildAnchorFitReason(anchorFitScore);
+    const barrierAlignmentReason = this.buildBarrierAlignmentReason(barrierAlignmentScore);
     const historyReason = this.buildHistoryReason(comboSummary);
     const entryConditionReason = this.buildEntryConditionReason(comboScore, marketQualityScore);
     const affordabilityReason =
       affordabilityScore >= 0.75 ? "entry is not stretched" : affordabilityScore >= 0.45 ? "entry is getting stretched" : "entry looks late";
-    const selectionReason = `${sourceReason}, ${agreementReason}, ${anchorFitReason}, ${historyReason}, ${entryConditionReason}, ${affordabilityReason}`;
+    const selectionReason = `${sourceReason}, ${agreementReason}, ${anchorFitReason}, ${barrierAlignmentReason}, ${historyReason}, ${entryConditionReason}, ${affordabilityReason}`;
     return selectionReason;
+  }
+
+  private computeBarrierAlignmentScore(barrierState: MarketBarrierState, direction: PredictionDirection | null): number {
+    let barrierAlignmentScore = 0.5;
+    if (!barrierState.isBarrierDataUsable || direction === null) {
+      barrierAlignmentScore = 0.5;
+    } else {
+      if (barrierState.isEffectivelyDecided) {
+        barrierAlignmentScore = barrierState.dominantSide === direction ? 1 : 0;
+      } else {
+        if (barrierState.isNearBarrier) {
+          barrierAlignmentScore = 0.55;
+        } else {
+          if (barrierState.dominantSide === null) {
+            barrierAlignmentScore = 0.5;
+          } else {
+            barrierAlignmentScore = barrierState.dominantSide === direction ? 0.8 : 0.2;
+          }
+        }
+      }
+    }
+    return barrierAlignmentScore;
   }
 
   private resolveMinimumAnchorFit(marketKey: MarketKey): number {
@@ -451,6 +486,7 @@ export class ComboMetricsService {
     activeComboCandidate: ActiveComboCandidate,
     comboSummary: ComboSummary,
     crossAssetRegime: CrossAssetRegime,
+    barrierState: MarketBarrierState,
     marketQualityScore: number,
     selectionSource: ComboSource,
     strategySignals: StrategySignal[],
@@ -461,6 +497,7 @@ export class ComboMetricsService {
     const familyRedundancyPenalty = this.computeFamilyRedundancyPenalty(activeComboCandidate);
     const semanticOverlapPenalty = this.computeSemanticOverlapPenalty(activeComboCandidate);
     const anchorFitScore = this.computeAnchorFitScore(activeComboCandidate.comboDefinition.marketKey, crossAssetRegime, direction);
+    const barrierAlignmentScore = this.computeBarrierAlignmentScore(barrierState, direction);
     const normalizedQualityScore = this.computeMarketQualityScore(marketQualityScore);
     const affordabilityScore = this.computeAffordabilityScore(strategySignals);
     const sampleFloor = activeComboCandidate.comboDefinition.size === 2 ? config.MIN_COMBO_SAMPLES_PAIR : config.MIN_COMBO_SAMPLES_TRIO;
@@ -480,13 +517,19 @@ export class ComboMetricsService {
       sampleScore * 0.08 +
       diversityScore * 0.14 +
       anchorFitScore * 0.12 +
+      barrierAlignmentScore * 0.08 +
       normalizedQualityScore * 0.04 * (1 - historicalTrust) -
       drawdownPenalty * 0.1 * historicalTrust -
       familyRedundancyPenalty * 0.14 -
       semanticOverlapPenalty * 0.14;
     const hasEnoughAgreement = activeComboCandidate.comboDefinition.size === 2 ? agreementScore >= 0.75 : agreementScore >= 0.67 && diversityScore >= 0.67;
     const isResearchEligible =
-      direction !== null && hasEnoughAgreement && hasSanityCheckMember && comboScore >= minimumResearchComboScore && anchorFitScore >= minimumAnchorFit;
+      direction !== null &&
+      hasEnoughAgreement &&
+      hasSanityCheckMember &&
+      comboScore >= minimumResearchComboScore &&
+      anchorFitScore >= minimumAnchorFit &&
+      !barrierState.isEffectivelyDecided;
     const isExecutionEligible = isResearchEligible && comboScore >= 0.58 && affordabilityScore >= 0.35;
     let selectedStrategyCombo: SelectedStrategyCombo | null = null;
     if (direction !== null) {
@@ -506,6 +549,7 @@ export class ComboMetricsService {
         familyRedundancyPenalty,
         semanticOverlapPenalty,
         anchorFitScore,
+        barrierAlignmentScore,
         marketQualityScore: normalizedQualityScore,
         affordabilityScore,
         selectionReason: this.buildSelectionReason(
@@ -513,6 +557,7 @@ export class ComboMetricsService {
           comboSummary,
           agreementScore,
           anchorFitScore,
+          barrierAlignmentScore,
           comboScore,
           normalizedQualityScore,
           affordabilityScore,
@@ -543,6 +588,7 @@ export class ComboMetricsService {
     _marketKey: MarketKey,
     activeComboCandidates: ActiveComboCandidate[],
     crossAssetRegime: CrossAssetRegime,
+    barrierState: MarketBarrierState,
     marketQualityScore: number,
     strategySignals: StrategySignal[],
   ): SelectedStrategyCombo | null {
@@ -556,6 +602,7 @@ export class ComboMetricsService {
         activeComboCandidate,
         comboSummary,
         crossAssetRegime,
+        barrierState,
         marketQualityScore,
         source,
         strategySignals,
@@ -1018,6 +1065,7 @@ export class ComboMetricsService {
     baseWeightedScore: number,
     baseConfidence: number,
     crossAssetRegime: CrossAssetRegime,
+    barrierState: MarketBarrierState,
     marketQualityScore: number,
   ): {
     adjustedWeightedScore: number;
@@ -1098,7 +1146,14 @@ export class ComboMetricsService {
       }
     }
     const comboGate = this.chooseBestExecutionCombo(marketKey, activeComboCandidates);
-    const selectedCombo = this.selectBestComboForMarketInternal(marketKey, activeComboCandidates, crossAssetRegime, marketQualityScore, strategySignals);
+    const selectedCombo = this.selectBestComboForMarketInternal(
+      marketKey,
+      activeComboCandidates,
+      crossAssetRegime,
+      barrierState,
+      marketQualityScore,
+      strategySignals,
+    );
     this.latestExecutionComboDecision.set(marketKey, comboGate);
     const adjustedWeightedScore = baseWeightedScore + totalBoostApplied;
     const adjustedConfidence = this.clampConfidence(baseConfidence + Math.min(Math.abs(totalBoostApplied) * 0.5, 0.08) - totalConfidencePenaltyApplied);
@@ -1123,6 +1178,7 @@ export class ComboMetricsService {
     marketKey: MarketKey;
     strategySignals: StrategySignal[];
     crossAssetRegime: CrossAssetRegime;
+    barrierState: MarketBarrierState;
     marketQualityScore: number;
   }): SelectedStrategyCombo | null {
     const activeComboCandidates = this.buildActiveComboCandidates(input.marketKey, input.strategySignals);
@@ -1130,6 +1186,7 @@ export class ComboMetricsService {
       input.marketKey,
       activeComboCandidates,
       input.crossAssetRegime,
+      input.barrierState,
       input.marketQualityScore,
       input.strategySignals,
     );

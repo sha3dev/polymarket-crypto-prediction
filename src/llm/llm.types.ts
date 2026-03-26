@@ -3,7 +3,8 @@
  */
 
 import type { ExecutionStyle, PositionSide, TradeExitReason } from "../execution/execution.types.ts";
-import type { AssetSymbol, MarketKey, MarketWindow, PredictionDirection, TriggerType, TriggeredToken } from "../market/market.types.ts";
+import type { AssetSymbol, MarketKey, MarketWindow, TriggerType, TriggeredToken } from "../market/market.types.ts";
+import type { OpportunitySide, WindowPhase } from "../opportunity/opportunity.types.ts";
 import type { PredictionOutcomeStatus } from "../prediction/prediction.types.ts";
 import type { StrategyTier } from "../strategy/strategy.types.ts";
 
@@ -11,41 +12,53 @@ import type { StrategyTier } from "../strategy/strategy.types.ts";
  * @section types
  */
 
-export type LlmEventType = "prediction_created" | "prediction_resolved" | "trade_closed";
-export type LlmPredictionCreatedEvent = {
-  eventType: "prediction_created";
+export type LlmEventType = "opportunity_created" | "opportunity_resolved" | "trade_closed";
+export type LlmOpportunityCreatedEvent = {
+  eventType: "opportunity_created";
   timestamp: number;
-  predictionId: string;
+  opportunityId: string;
   marketKey: MarketKey;
   asset: AssetSymbol;
   window: MarketWindow;
   triggerType: TriggerType;
   triggeredToken: TriggeredToken;
-  direction: PredictionDirection;
-  confidence: number;
-  weightedScore: number;
+  targetSide: OpportunitySide;
+  windowPhase: WindowPhase;
+  remainingMs: number | null;
+  priceToBeat: number | null;
+  referencePrice: number | null;
+  barrierDistanceRatio: number | null;
+  contestabilityScore: number;
+  tpBeforeSlScore: number;
+  entryQualityScore: number;
   selectedComboKey: string;
-  selectedComboScore: number;
+  selectedComboEdgeScore: number;
   selectedStrategyIds: string[];
-  marketQualityScore: number;
-  regimeId: string;
+  marketQualityScore: number | null;
+  anchorConflictReason: string | null;
   isExecutionEligible: boolean;
   blockingReason: string | null;
 };
-export type LlmPredictionResolvedEvent = {
-  eventType: "prediction_resolved";
+export type LlmOpportunityResolvedEvent = {
+  eventType: "opportunity_resolved";
   timestamp: number;
-  predictionId: string;
+  opportunityId: string;
   marketKey: MarketKey;
-  direction: PredictionDirection;
-  confidence: number;
+  targetSide: OpportunitySide;
+  windowPhase: WindowPhase;
+  remainingMs: number | null;
+  priceToBeat: number | null;
+  referencePrice: number | null;
+  barrierDistanceRatio: number | null;
+  contestabilityScore: number;
+  tpBeforeSlScore: number;
+  entryQualityScore: number;
   selectedComboKey: string;
   selectedStrategyIds: string[];
   outcomeStatus: PredictionOutcomeStatus;
   outcomeReason: string | null;
-  resolvedDirection: PredictionDirection | null;
-  evaluationPrice: number | null;
-  baselinePrice: number | null;
+  closeTokenPrice: number | null;
+  entryTokenPrice: number | null;
   wasExecuted: boolean;
   strategies: {
     strategyId: string;
@@ -69,10 +82,10 @@ export type LlmTradeClosedEvent = {
   realizedPnlAfterCosts: number;
   hasTakerFallbackUsed: boolean;
 };
-export type LlmEvent = LlmPredictionCreatedEvent | LlmPredictionResolvedEvent | LlmTradeClosedEvent;
+export type LlmEvent = LlmOpportunityCreatedEvent | LlmOpportunityResolvedEvent | LlmTradeClosedEvent;
 export type LlmSummaryCounts = {
-  predictionsCreated: number;
-  predictionsResolved: number;
+  opportunitiesCreated: number;
+  opportunitiesResolved: number;
   wins: number;
   losses: number;
   tradesClosed: number;
@@ -85,7 +98,7 @@ export type LlmSummaryQuality = {
 };
 export type LlmMarketSummary = {
   marketKey: MarketKey;
-  predictionCount: number;
+  opportunityCount: number;
   resolvedCount: number;
   winCount: number;
   lossCount: number;

@@ -788,11 +788,12 @@ export class StrategyEngineService {
   }
 
   private scoreBarrierTiming(context: PredictionContext): number {
-    const chainlinkPrice = context.current.chainlinkPrice;
-    const priceToBeat = context.current.priceToBeat;
+    const barrierState = context.barrierState;
     let score = 0;
-    if (chainlinkPrice !== null && priceToBeat !== null && priceToBeat !== 0) {
-      score = (chainlinkPrice - priceToBeat) / priceToBeat;
+    if (barrierState.isBarrierDataUsable) {
+      const dominantDirection = barrierState.dominantSide === "UP" ? 1 : barrierState.dominantSide === "DOWN" ? -1 : 0;
+      const distanceRatio = barrierState.chainlinkDistanceRatio ?? barrierState.spotDistanceRatio ?? 0;
+      score = dominantDirection * distanceRatio;
     }
     return score;
   }
@@ -859,11 +860,24 @@ export class StrategyEngineService {
 
   private scoreTheoreticalProbabilityGap(context: PredictionContext): number {
     let theoreticalProbability = 0.5;
-    if (context.current.chainlinkPrice !== null && context.current.priceToBeat !== null) {
-      theoreticalProbability = context.current.chainlinkPrice >= context.current.priceToBeat ? 0.55 : 0.45;
+    if (context.barrierState.isBarrierDataUsable) {
+      theoreticalProbability = context.barrierState.dominantSide === "UP" ? 0.55 : context.barrierState.dominantSide === "DOWN" ? 0.45 : 0.5;
     }
     const observedProbability = context.current.up.midpoint ?? context.current.up.price ?? 0.5;
     return theoreticalProbability - observedProbability;
+  }
+
+  private computeBarrierDampener(context: PredictionContext): number {
+    const barrierState = context.barrierState;
+    let barrierDampener = 1;
+    if (barrierState.isEffectivelyDecided) {
+      barrierDampener = 0.15;
+    } else {
+      if (barrierState.isBarrierDataUsable && !barrierState.isNearBarrier) {
+        barrierDampener = barrierState.timeRemainingMs !== null && barrierState.timeRemainingMs <= config.BARRIER_MIN_TIME_REMAINING_MS ? 0.55 : 0.85;
+      }
+    }
+    return barrierDampener;
   }
 
   private scoreFreshnessGap(context: PredictionContext): number {
@@ -901,6 +915,7 @@ export class StrategyEngineService {
     if (hasCrossedHalfTrigger) {
       score *= 1.3 + affordabilityPenalty * 0.6 + reversalBoost * 0.45 + Math.min(0.35, recentRange + moveExtension);
     }
+    score *= this.computeBarrierDampener(context);
     return score;
   }
 
@@ -1059,6 +1074,7 @@ export class StrategyEngineService {
     if (context.trigger.triggerType === "crossed_half") {
       continuationValidityFactor *= Math.max(0.3, 1 - context.crossAssetRegime.reversalRiskScore * 0.35);
     }
+    continuationValidityFactor *= this.computeBarrierDampener(context);
     continuationValidityFactor = Math.max(0.15, Math.min(1, continuationValidityFactor));
     return continuationValidityFactor;
   }

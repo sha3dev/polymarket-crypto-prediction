@@ -2,7 +2,7 @@ import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ComboMetricsService } from "../src/combo/combo-metrics.service.ts";
-import type { CrossAssetRegime, MarketKey, PredictionDirection } from "../src/market/market.types.ts";
+import type { CrossAssetRegime, MarketBarrierState, MarketKey, PredictionDirection } from "../src/market/market.types.ts";
 import type { StrategySignal } from "../src/strategy/strategy.types.ts";
 
 test("ComboMetricsService ignores strategies removed from combo search", () => {
@@ -38,6 +38,7 @@ test("ComboMetricsService penalizes semantic overlap and keeps a usable combo sc
       buildStrategySignal("s16", "pricing", 0.72, 0.85, 0.83, true),
     ],
     crossAssetRegime: buildCrossAssetRegime("UP"),
+    barrierState: buildBarrierState(),
     marketQualityScore: 0.58,
   });
 
@@ -58,6 +59,7 @@ test("ComboMetricsService rejects pure continuation combos without a sanity-chec
       buildStrategySignal("s05", "microstructure", 0.78, 0.88, 0.86, true),
     ],
     crossAssetRegime: buildCrossAssetRegime("UP"),
+    barrierState: buildBarrierState(),
     marketQualityScore: 0.9,
   });
 
@@ -118,6 +120,7 @@ test("ComboMetricsService scores combos from replay across prior trigger moments
       buildStrategySignal("s02", "microstructure", 0.52, 0.7, 0.72, true, "UP"),
     ],
     crossAssetRegime: buildCrossAssetRegime("UP"),
+    barrierState: buildBarrierState(),
     marketQualityScore: 0.8,
   });
 
@@ -186,5 +189,23 @@ function buildCrossAssetRegime(direction: PredictionDirection): CrossAssetRegime
     isDirectional: true,
     isTradableGlobalContext: true,
     hasStrongBreadth: true,
+  };
+}
+
+function buildBarrierState(overrides: Partial<MarketBarrierState> = {}): MarketBarrierState {
+  return {
+    priceToBeat: 60_000,
+    chainlinkPrice: 60_010,
+    spotConsensusPrice: 60_008,
+    marketEnd: "2025-01-01T00:05:00.000Z",
+    timeRemainingMs: 180_000,
+    chainlinkDistanceRatio: 0.00016,
+    spotDistanceRatio: 0.00013,
+    dominantSide: "UP",
+    isNearBarrier: true,
+    isEffectivelyDecided: false,
+    isBarrierDataUsable: true,
+    decisionReason: "near barrier",
+    ...overrides,
   };
 }

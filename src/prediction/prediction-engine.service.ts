@@ -9,7 +9,16 @@ import config from "../config.ts";
 import type { ComboSource, PositionSide, TradeExitReason } from "../execution/execution.types.ts";
 import type { LlmLogService } from "../llm/llm-log.service.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
-import type { AssetSymbol, MarketKey, MarketSnapshotSlice, MarketTrigger, MarketWindow, PredictionDirection, TriggerType } from "../market/market.types.ts";
+import type {
+  AssetSymbol,
+  MarketBarrierState,
+  MarketKey,
+  MarketSnapshotSlice,
+  MarketTrigger,
+  MarketWindow,
+  PredictionDirection,
+  TriggerType,
+} from "../market/market.types.ts";
 import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
 import type { StrategyEngineService } from "../strategy/strategy-engine.service.ts";
 import type { StrategyMetricsService } from "../strategy/strategy-metrics.service.ts";
@@ -108,6 +117,37 @@ export class PredictionEngineService {
   private clampTokenPrice(rawPrice: number): number {
     const clampedPrice = Math.max(0.01, Math.min(0.99, rawPrice));
     return clampedPrice;
+  }
+
+  private parseMarketEndTimestamp(marketEnd: string | null): number | null {
+    const parsedMarketEnd = marketEnd === null ? Number.NaN : Date.parse(marketEnd);
+    const marketEndTimestamp = Number.isFinite(parsedMarketEnd) ? parsedMarketEnd : null;
+    return marketEndTimestamp;
+  }
+
+  private hasEnoughMarketTimeRemaining(marketSlice: MarketSnapshotSlice | null, createdAt: number): boolean {
+    const marketEndTimestamp = this.parseMarketEndTimestamp(marketSlice?.marketEnd ?? null);
+    const remainingMarketTimeMs = marketEndTimestamp === null ? null : marketEndTimestamp - createdAt;
+    const hasEnoughMarketTimeRemaining = remainingMarketTimeMs === null || remainingMarketTimeMs >= config.PREDICTION_HORIZON_MS;
+    return hasEnoughMarketTimeRemaining;
+  }
+
+  private isBarrierDirectionConflict(barrierState: MarketBarrierState, direction: PredictionDirection): boolean {
+    const isBarrierDirectionConflict =
+      barrierState.isBarrierDataUsable &&
+      barrierState.dominantSide !== null &&
+      barrierState.dominantSide !== direction &&
+      barrierState.timeRemainingMs !== null &&
+      barrierState.timeRemainingMs <= config.BARRIER_MIN_TIME_REMAINING_MS &&
+      !barrierState.isNearBarrier;
+    return isBarrierDirectionConflict;
+  }
+
+  private hasContestableBarrierState(marketSlice: MarketSnapshotSlice | null, direction: PredictionDirection): boolean {
+    const barrierState = marketSlice?.barrierState ?? null;
+    const hasContestableBarrierState =
+      barrierState === null || (!barrierState.isEffectivelyDecided && !this.isBarrierDirectionConflict(barrierState, direction));
+    return hasContestableBarrierState;
   }
 
   private resolveResearchOutcome(
@@ -332,6 +372,7 @@ export class PredictionEngineService {
           evaluationResult.weightedScore,
           evaluationResult.finalConfidence,
           predictionContext.crossAssetRegime,
+          predictionContext.barrierState,
           predictionContext.current.quality.score,
         );
         modelEvaluationSnapshot = {
@@ -420,7 +461,16 @@ export class PredictionEngineService {
       const hasScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= RESEARCH_TRIGGER_MIN_SCORE;
       const hasQualityConfirmation = this.hasResearchQualityConfirmation(modelEvaluationSnapshot.predictionContext.current.quality.score);
       const hasAnchorConfirmation = this.hasAnchorConfirmation(marketTrigger.marketKey, marketTrigger.triggeredToken);
-      hasModelTriggerConfirmed = isPastDelay && hasDirectionMatch && hasScoreConfirmation && hasQualityConfirmation && hasAnchorConfirmation;
+      const hasBarrierSupport = !modelEvaluationSnapshot.predictionContext.barrierState.isEffectivelyDecided;
+      const hasBarrierDirectionSupport = !this.isBarrierDirectionConflict(modelEvaluationSnapshot.predictionContext.barrierState, expectedDirection);
+      hasModelTriggerConfirmed =
+        isPastDelay &&
+        hasDirectionMatch &&
+        hasScoreConfirmation &&
+        hasQualityConfirmation &&
+        hasAnchorConfirmation &&
+        hasBarrierSupport &&
+        hasBarrierDirectionSupport;
     }
     return hasModelTriggerConfirmed;
   }
@@ -464,6 +514,8 @@ export class PredictionEngineService {
         const expectedDirection: PredictionDirection = positionSide === "up" ? "UP" : "DOWN";
         const hasComboDirectionMatch = selectedCombo?.direction === expectedDirection;
         const hasComboScoreConfirmation = (selectedCombo?.comboScore ?? 0) >= RESEARCH_TRIGGER_MIN_SCORE;
+        const hasBarrierSupport = !marketSlice.barrierState.isEffectivelyDecided;
+        const hasBarrierDirectionSupport = !this.isBarrierDirectionConflict(marketSlice.barrierState, expectedDirection);
         // Breadth confirmation is now required (AND) — no more bypassing breadth with anchor alone
         hasPendingTriggerConfirmed =
           isPastDelay &&
@@ -472,6 +524,8 @@ export class PredictionEngineService {
           hasQualityConfirmation &&
           hasBreadthConfirmation &&
           hasAnchorConfirmation &&
+          hasBarrierSupport &&
+          hasBarrierDirectionSupport &&
           hasComboDirectionMatch &&
           hasComboScoreConfirmation;
       }
@@ -559,46 +613,51 @@ export class PredictionEngineService {
             const winningDirection = selectedCombo.direction;
             const positionSide = this.resolvePositionSide(winningDirection);
             const baselineSlice = this.marketStateService.getLatestSlice(marketTrigger.marketKey);
-            const entryReferencePrice = this.resolveEntryReferencePrice(baselineSlice, positionSide);
-            const regimeClass = predictionContext.crossAssetRegime.regimeClass;
-            const takeProfitDelta = this.computeAdaptiveTakeProfitDelta(comboApplicationResult.adjustedConfidence, selectedCombo.comboScore, regimeClass);
-            const stopLossDelta = this.computeAdaptiveStopLossDelta(comboApplicationResult.adjustedConfidence, selectedCombo.comboScore, regimeClass);
-            const takeProfitPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice + takeProfitDelta);
-            const stopLossPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice - stopLossDelta);
-            const predictionRecord = this.buildPredictionRecord(
-              marketTrigger.marketKey,
-              winningDirection,
-              comboApplicationResult.adjustedConfidence,
-              selectedCombo.direction === "UP" ? selectedCombo.comboScore : selectedCombo.comboScore * -1,
-              evaluationResult.baseWeightedScore,
-              evaluationResult.baseConfidence,
-              marketTrigger,
-              evaluationResult.strategyBreakdown,
-              selectedCombo,
-              comboApplicationResult.comboBreakdown,
-              comboApplicationResult.comboGate,
-              predictionContext.crossAssetRegime,
-              createdAt,
-              positionSide,
-              entryReferencePrice,
-              takeProfitPrice,
-              stopLossPrice,
-              baselineSlice?.up.price ?? null,
-              baselineSlice?.up.midpoint ?? null,
-            );
-            this.predictionStoreService.addPrediction(predictionRecord);
-            this.marketStateService.markPredictionCreated(marketTrigger.marketKey, createdAt);
-            this.strategyMetricsService.markParticipated(predictionRecord.marketKey, evaluationResult.strategyBreakdown, predictionRecord.createdAt);
-            this.comboMetricsService.recordPredictionMoment(
-              predictionRecord.marketKey,
-              predictionRecord.predictionId,
-              predictionRecord.strategyBreakdown,
-              predictionRecord.createdAt,
-            );
-            if (this.llmLogService !== null) {
-              this.llmLogService.recordPredictionCreated(this.buildPredictionResponse(predictionRecord));
+            if (this.hasEnoughMarketTimeRemaining(baselineSlice, createdAt)) {
+              const entryReferencePrice = this.resolveEntryReferencePrice(baselineSlice, positionSide);
+              const regimeClass = predictionContext.crossAssetRegime.regimeClass;
+              const takeProfitDelta = this.computeAdaptiveTakeProfitDelta(comboApplicationResult.adjustedConfidence, selectedCombo.comboScore, regimeClass);
+              const stopLossDelta = this.computeAdaptiveStopLossDelta(comboApplicationResult.adjustedConfidence, selectedCombo.comboScore, regimeClass);
+              const takeProfitPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice + takeProfitDelta);
+              const stopLossPrice = entryReferencePrice === null ? null : this.clampTokenPrice(entryReferencePrice - stopLossDelta);
+              if (this.hasContestableBarrierState(baselineSlice, winningDirection)) {
+                const predictionRecord = this.buildPredictionRecord(
+                  marketTrigger.marketKey,
+                  winningDirection,
+                  comboApplicationResult.adjustedConfidence,
+                  selectedCombo.direction === "UP" ? selectedCombo.comboScore : selectedCombo.comboScore * -1,
+                  evaluationResult.baseWeightedScore,
+                  evaluationResult.baseConfidence,
+                  marketTrigger,
+                  evaluationResult.strategyBreakdown,
+                  selectedCombo,
+                  comboApplicationResult.comboBreakdown,
+                  comboApplicationResult.comboGate,
+                  predictionContext.crossAssetRegime,
+                  baselineSlice?.barrierState ?? predictionContext.barrierState,
+                  createdAt,
+                  positionSide,
+                  entryReferencePrice,
+                  takeProfitPrice,
+                  stopLossPrice,
+                  baselineSlice?.up.price ?? null,
+                  baselineSlice?.up.midpoint ?? null,
+                );
+                this.predictionStoreService.addPrediction(predictionRecord);
+                this.marketStateService.markPredictionCreated(marketTrigger.marketKey, createdAt);
+                this.strategyMetricsService.markParticipated(predictionRecord.marketKey, evaluationResult.strategyBreakdown, predictionRecord.createdAt);
+                this.comboMetricsService.recordPredictionMoment(
+                  predictionRecord.marketKey,
+                  predictionRecord.predictionId,
+                  predictionRecord.strategyBreakdown,
+                  predictionRecord.createdAt,
+                );
+                if (this.llmLogService !== null) {
+                  this.llmLogService.recordPredictionCreated(this.buildPredictionResponse(predictionRecord));
+                }
+                hasCreatedPrediction = true;
+              }
             }
-            hasCreatedPrediction = true;
           }
         }
       }
@@ -619,6 +678,7 @@ export class PredictionEngineService {
     comboBreakdown: PredictionRecord["comboBreakdown"],
     comboGate: PredictionRecord["comboGate"],
     crossAssetRegime: PredictionRecord["crossAssetRegime"],
+    barrierState: PredictionRecord["barrierState"],
     createdAt: number,
     positionSide: PositionSide,
     entryReferencePrice: number | null,
@@ -653,6 +713,7 @@ export class PredictionEngineService {
       comboBreakdown,
       comboGate,
       crossAssetRegime,
+      barrierState,
       isExecutionEligible: false,
       executionBlockingReasons: [],
       wasExecuted: false,
@@ -712,6 +773,7 @@ export class PredictionEngineService {
       isResolved: predictionRecord.isResolved,
       comboGate: predictionRecord.comboGate,
       crossAssetRegime: predictionRecord.crossAssetRegime,
+      barrierState: predictionRecord.barrierState,
       isExecutionEligible: predictionRecord.isExecutionEligible,
       executionBlockingReasons: predictionRecord.executionBlockingReasons,
       wasExecuted: predictionRecord.wasExecuted,

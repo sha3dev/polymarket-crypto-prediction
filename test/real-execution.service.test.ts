@@ -13,7 +13,7 @@ import type {
 } from "../src/execution/execution.types.ts";
 import { RealExecutionService } from "../src/execution/real-execution.service.ts";
 import type { MarketStateService } from "../src/market/market-state.service.ts";
-import type { MarketQuality, MarketSnapshotSlice, SpotVenueMetrics, TokenMetrics } from "../src/market/market.types.ts";
+import type { MarketBarrierState, MarketQuality, MarketSnapshotSlice, SpotVenueMetrics, TokenMetrics } from "../src/market/market.types.ts";
 import type { PredictionEngineService } from "../src/prediction/prediction-engine.service.ts";
 import type { PredictionResponse } from "../src/prediction/prediction.types.ts";
 
@@ -375,6 +375,7 @@ function buildMarketSnapshotSlice(generatedAt: number, upMidpoint: number): Mark
     spotDispersion: 0.001,
     chainlinkPrice: 60_001,
     chainlinkAgeMs: 0,
+    barrierState: buildBarrierState(),
     quality,
   };
 }
@@ -461,6 +462,7 @@ function buildLivePredictionResponse(): PredictionResponse {
       isTradableGlobalContext: true,
       hasStrongBreadth: true,
     },
+    barrierState: buildBarrierState(),
     isExecutionEligible: false,
     executionBlockingReasons: [],
     wasExecuted: false,
@@ -491,6 +493,7 @@ function buildLivePredictionResponse(): PredictionResponse {
       familyRedundancyPenalty: 0,
       semanticOverlapPenalty: 0,
       anchorFitScore: 1,
+      barrierAlignmentScore: 0.8,
       marketQualityScore: 0.95,
       affordabilityScore: 0.86,
       selectionReason: "execution good agr 1.00 fit 1.00",
@@ -527,6 +530,24 @@ function buildResolvedPredictionHistory(): PredictionResponse[] {
     });
   }
   return resolvedPredictions;
+}
+
+function buildBarrierState(overrides: Partial<MarketBarrierState> = {}): MarketBarrierState {
+  return {
+    priceToBeat: 100,
+    chainlinkPrice: 100.1,
+    spotConsensusPrice: 100,
+    marketEnd: "2025-01-01T00:05:00.000Z",
+    timeRemainingMs: 180_000,
+    chainlinkDistanceRatio: 0.001,
+    spotDistanceRatio: 0,
+    dominantSide: "UP",
+    isNearBarrier: true,
+    isEffectivelyDecided: false,
+    isBarrierDataUsable: true,
+    decisionReason: "near barrier",
+    ...overrides,
+  };
 }
 
 function buildSeedTrades(): ExecutionTrade[] {

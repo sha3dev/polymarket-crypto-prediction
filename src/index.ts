@@ -21,5 +21,10 @@ export type {
   PortfolioExecutionSummary,
 } from "./execution/execution.types.ts";
 export type { MarketSummary } from "./market/market.types.ts";
-export type { PredictionResponse } from "./prediction/prediction.types.ts";
+export type {
+  MarketOpportunitySummary,
+  OpportunityFactorSummary,
+  OpportunityResponse,
+  SelectedOpportunityCombo,
+} from "./opportunity/opportunity.types.ts";
 export type { StrategySummary } from "./strategy/strategy.types.ts";

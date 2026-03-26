@@ -62,10 +62,10 @@ export class LlmPromptService {
   private buildTaskSpecificationSection(): string {
     const lines = [
       "## Task Specification",
-      "You are improving this repository's prediction engine.",
-      "Primary objective: improve prediction accuracy.",
+      "You are improving this repository's token-first opportunity engine.",
+      "Primary objective: improve token TP-before-SL accuracy and execution quality.",
       "Use the README, the codebase, and the runtime evidence together before proposing changes.",
-      "Focus mainly on strategy logic, scoring, thresholds, weighting, trigger logic, and evidence interpretation.",
+      "Focus mainly on reachability logic, scoring, thresholds, weighting, trigger logic, token edge estimation, and evidence interpretation.",
       "Avoid unrelated architectural churn or cosmetic refactors.",
       "Keep current API and behavior stable unless a change is necessary for measurable model improvement.",
       "Preserve the repository standards and run project checks after modifying code.",
@@ -84,7 +84,7 @@ export class LlmPromptService {
       `Monitored windows: ${SUPPORTED_WINDOWS.join(", ")}`,
       `Prediction horizon ms: ${config.PREDICTION_HORIZON_MS}`,
       `Market cooldown ms: ${config.MARKET_COOLDOWN_MS}`,
-      "Current emphasis: combo-first model, trigger-based prediction flow, rolling metrics, in-memory state.",
+      "Current emphasis: token-first opportunity model, barrier reachability, window phase, combo-assisted factor scoring, in-memory state.",
     ];
     const contextSection = lines.join("\n");
     return contextSection;
@@ -94,8 +94,8 @@ export class LlmPromptService {
     const lines = [
       "## Curated Runtime Evidence",
       "### Global Metrics Snapshot",
-      `predictions_created=${llmSummary.counts.predictionsCreated}`,
-      `predictions_resolved=${llmSummary.counts.predictionsResolved}`,
+      `opportunities_created=${llmSummary.counts.opportunitiesCreated}`,
+      `opportunities_resolved=${llmSummary.counts.opportunitiesResolved}`,
       `wins=${llmSummary.counts.wins}`,
       `losses=${llmSummary.counts.losses}`,
       `trades_closed=${llmSummary.counts.tradesClosed}`,
@@ -110,7 +110,7 @@ export class LlmPromptService {
 
   private buildMarketSummarySection(llmSummary: LlmSummary): string {
     const marketEntries = Object.values(llmSummary.markets).sort((leftMarket, rightMarket) => {
-      return rightMarket.predictionCount - leftMarket.predictionCount;
+      return rightMarket.opportunityCount - leftMarket.opportunityCount;
     });
     const lines = ["### Per-Market Performance Summary"];
     if (marketEntries.length === 0) {
@@ -118,7 +118,7 @@ export class LlmPromptService {
     } else {
       for (const marketEntry of marketEntries) {
         lines.push(
-          `${marketEntry.marketKey}: predictions=${marketEntry.predictionCount}, resolved_accuracy=${marketEntry.resolvedAccuracy ?? "n/a"}, trades=${marketEntry.tradeCount}, cumulative_pnl=${marketEntry.cumulativePnl.toFixed(4)}`,
+          `${marketEntry.marketKey}: opportunities=${marketEntry.opportunityCount}, resolved_accuracy=${marketEntry.resolvedAccuracy ?? "n/a"}, trades=${marketEntry.tradeCount}, cumulative_pnl=${marketEntry.cumulativePnl.toFixed(4)}`,
         );
       }
     }
@@ -204,20 +204,20 @@ export class LlmPromptService {
     return blockerSection;
   }
 
-  private buildRecentPredictionSection(llmEvents: LlmEvent[]): string {
-    const resolvedPredictionEvents = llmEvents.filter((llmEvent) => llmEvent.eventType === "prediction_resolved").slice(0, 10);
-    const lines = ["### Recent Resolved Predictions"];
-    if (resolvedPredictionEvents.length === 0) {
+  private buildRecentOpportunitySection(llmEvents: LlmEvent[]): string {
+    const resolvedOpportunityEvents = llmEvents.filter((llmEvent) => llmEvent.eventType === "opportunity_resolved").slice(0, 10);
+    const lines = ["### Recent Resolved Opportunities"];
+    if (resolvedOpportunityEvents.length === 0) {
       lines.push("no runtime evidence yet");
     } else {
-      for (const llmEvent of resolvedPredictionEvents) {
+      for (const llmEvent of resolvedOpportunityEvents) {
         lines.push(
-          `${llmEvent.marketKey} prediction=${llmEvent.predictionId} direction=${llmEvent.direction} confidence=${llmEvent.confidence} outcome=${llmEvent.outcomeStatus} reason=${llmEvent.outcomeReason ?? "n/a"} combo=${llmEvent.selectedComboKey}`,
+          `${llmEvent.marketKey} opportunity=${llmEvent.opportunityId} side=${llmEvent.targetSide} phase=${llmEvent.windowPhase} contestability=${llmEvent.contestabilityScore} tp_before_sl=${llmEvent.tpBeforeSlScore} outcome=${llmEvent.outcomeStatus} reason=${llmEvent.outcomeReason ?? "n/a"} combo=${llmEvent.selectedComboKey}`,
         );
       }
     }
-    const recentPredictionSection = lines.join("\n");
-    return recentPredictionSection;
+    const recentOpportunitySection = lines.join("\n");
+    return recentOpportunitySection;
   }
 
   private buildRecentTradeSection(llmEvents: LlmEvent[], shouldSelectLosses: boolean): string {
@@ -252,7 +252,7 @@ export class LlmPromptService {
       this.buildStrategySection(llmSummary),
       this.buildComboSection(llmSummary),
       this.buildBlockerSection(llmSummary),
-      this.buildRecentPredictionSection(llmEvents),
+      this.buildRecentOpportunitySection(llmEvents),
       this.buildRecentTradeSection(llmEvents, true),
       this.buildRecentTradeSection(llmEvents, false),
     ];

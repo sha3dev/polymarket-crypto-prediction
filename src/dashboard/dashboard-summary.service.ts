@@ -16,8 +16,9 @@ import type {
 } from "../execution/execution.types.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { CrossAssetRegime, MarketSummary } from "../market/market.types.ts";
+import type { OpportunityEngineService } from "../opportunity/opportunity-engine.service.ts";
+import type { MarketOpportunitySummary, OpportunityFactorBoard, OpportunityResponse } from "../opportunity/opportunity.types.ts";
 import type { PredictionEngineService } from "../prediction/prediction-engine.service.ts";
-import type { PredictionResponse } from "../prediction/prediction.types.ts";
 import type { StrategySummary } from "../strategy/strategy.types.ts";
 
 /**
@@ -48,14 +49,16 @@ export type DashboardSummaryPayload = {
     averageConfidence: number;
   };
   markets: MarketSummary[];
+  liveOpportunities: MarketOpportunitySummary[];
   globalRegime: CrossAssetRegime | null;
   globalRegimes: {
     "5m": CrossAssetRegime | null;
     "15m": CrossAssetRegime | null;
   };
-  latestPredictions: PredictionResponse[];
+  latestOpportunities: OpportunityResponse[];
+  factorBoards: OpportunityFactorBoard[];
   strategies: StrategySummary[];
-  winningCombinations: PredictionResponse[];
+  winningCombinations: OpportunityResponse[];
   executionNow: MarketExecutionSummary[];
   openPositions: OpenPositionSummary[];
   recentTrades: ExecutionTrade[];
@@ -90,6 +93,7 @@ export class DashboardSummaryService {
    */
 
   private readonly marketStateService: MarketStateService;
+  private readonly opportunityEngineService: OpportunityEngineService;
   private readonly predictionEngineService: PredictionEngineService;
   private readonly executionService: ExecutionService;
   private readonly startedAt: number;
@@ -100,11 +104,13 @@ export class DashboardSummaryService {
 
   public constructor(
     marketStateService: MarketStateService,
+    opportunityEngineService: OpportunityEngineService,
     predictionEngineService: PredictionEngineService,
     executionService: ExecutionService,
     startedAt: number,
   ) {
     this.marketStateService = marketStateService;
+    this.opportunityEngineService = opportunityEngineService;
     this.predictionEngineService = predictionEngineService;
     this.executionService = executionService;
     this.startedAt = startedAt;
@@ -184,9 +190,11 @@ export class DashboardSummaryService {
 
   public async buildDashboardSummary(nowTimestamp: number): Promise<DashboardSummaryPayload> {
     const markets = this.marketStateService.getMarketSummaries(nowTimestamp);
+    const liveOpportunities = this.opportunityEngineService.getMarketOpportunitySummaries();
     const globalRegime = this.selectGlobalRegime(markets);
     const globalRegimes = this.buildGlobalRegimes();
-    const latestPredictions = this.predictionEngineService.getRecentPredictions(20);
+    const latestOpportunities = this.opportunityEngineService.getRecentOpportunities(20);
+    const factorBoards = this.opportunityEngineService.getFactorBoards();
     const strategies = this.predictionEngineService.getStrategySummaries();
     const executionNow = this.executionService.getExecutionSummaries();
     const openPositions = this.executionService.getOpenPositions();
@@ -196,18 +204,18 @@ export class DashboardSummaryService {
       return rightMarketPerformance.cumulativeNetPnl - leftMarketPerformance.cumulativeNetPnl;
     });
     const comboSearchBoards = this.predictionEngineService.getMarketComboBoards(markets.map((market) => market.marketKey));
-    const winningCombinations = latestPredictions.slice(0, 12);
+    const winningCombinations = latestOpportunities.slice(0, 12);
     const tradeCandidates = this.buildTradeCandidates(executionNow);
     const executionPerformance = this.executionService.getPortfolioSummary();
     const paperExecutionPerformance = executionPerformance;
     const account = await this.executionService.getAccountSummary(nowTimestamp);
-    const resolvedPredictions = latestPredictions.filter((prediction) => prediction.result.status !== "pending");
-    const okPredictions = resolvedPredictions.filter((prediction) => prediction.result.status === "ok");
-    const resolvedAccuracy = resolvedPredictions.length === 0 ? 0 : okPredictions.length / resolvedPredictions.length;
+    const resolvedOpportunities = latestOpportunities.filter((opportunity) => opportunity.result.status !== "pending");
+    const okOpportunities = resolvedOpportunities.filter((opportunity) => opportunity.result.status === "tp");
+    const resolvedAccuracy = resolvedOpportunities.length === 0 ? 0 : okOpportunities.length / resolvedOpportunities.length;
     const averageConfidence =
-      latestPredictions.length === 0
+      latestOpportunities.length === 0
         ? 0
-        : latestPredictions.reduce((aggregatedConfidence, prediction) => aggregatedConfidence + prediction.confidence, 0) / latestPredictions.length;
+        : latestOpportunities.reduce((aggregatedConfidence, opportunity) => aggregatedConfidence + opportunity.tpBeforeSlScore, 0) / latestOpportunities.length;
     return {
       generatedAt: nowTimestamp,
       pollIntervalMs: config.DASHBOARD_POLL_INTERVAL_MS,
@@ -217,14 +225,16 @@ export class DashboardSummaryService {
       kpis: {
         liveMarkets: markets.filter((market) => market.isLive).length,
         pendingEvaluations: this.executionService.getOpenPositionCount(),
-        totalPredictions: latestPredictions.length,
+        totalPredictions: latestOpportunities.length,
         resolvedAccuracy,
         averageConfidence,
       },
       markets,
+      liveOpportunities,
       globalRegime,
       globalRegimes,
-      latestPredictions,
+      latestOpportunities,
+      factorBoards,
       strategies,
       winningCombinations,
       executionNow,

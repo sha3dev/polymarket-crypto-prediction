@@ -19,6 +19,7 @@ import logger from "../logger.ts";
 import type { MarketStateService } from "../market/market-state.service.ts";
 import type { AssetSymbol, MarketWindow } from "../market/market.types.ts";
 import { SUPPORTED_ASSETS, SUPPORTED_WINDOWS } from "../market/market.types.ts";
+import type { OpportunityEngineService } from "../opportunity/opportunity-engine.service.ts";
 import type { PredictionEngineService } from "../prediction/prediction-engine.service.ts";
 import type { UpdateService } from "../update/update.service.ts";
 
@@ -32,6 +33,7 @@ export class HttpServerService {
    */
 
   private readonly predictionEngineService: PredictionEngineService;
+  private readonly opportunityEngineService: OpportunityEngineService;
   private readonly executionService: ExecutionService;
   private readonly marketStateService: MarketStateService;
   private readonly dashboardSummaryService: DashboardSummaryService;
@@ -44,6 +46,7 @@ export class HttpServerService {
    */
 
   public constructor(
+    opportunityEngineService: OpportunityEngineService,
     predictionEngineService: PredictionEngineService,
     executionService: ExecutionService,
     marketStateService: MarketStateService,
@@ -52,6 +55,7 @@ export class HttpServerService {
     updateService: UpdateService,
     llmPromptService: LlmPromptService,
   ) {
+    this.opportunityEngineService = opportunityEngineService;
     this.predictionEngineService = predictionEngineService;
     this.executionService = executionService;
     this.marketStateService = marketStateService;
@@ -174,18 +178,28 @@ export class HttpServerService {
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
       return context.json(this.marketStateService.getMarketSummaries(Date.now()), 200);
     });
+    app.get("/v1/opportunities", (context) => {
+      const asset = this.parseAsset(context.req.query("asset"));
+      const window = this.parseWindow(context.req.query("window"));
+      const limit = this.parseLimit(context.req.query("limit"));
+      if (!asset || !window || limit === null) {
+        return context.json({ code: "invalid_request", message: "asset, window, and a valid limit are required." }, 400);
+      }
+      context.header("content-type", config.RESPONSE_CONTENT_TYPE);
+      return context.json(this.opportunityEngineService.getOpportunities(asset, window, limit), 200);
+    });
     app.get("/v1/predict", (context) => {
       const asset = this.parseAsset(context.req.query("asset"));
       const window = this.parseWindow(context.req.query("window"));
       if (!asset || !window) {
         return context.json({ code: "invalid_request", message: "asset and window are required." }, 400);
       }
-      const prediction = this.predictionEngineService.getLatestPrediction(asset, window);
-      if (!prediction) {
-        return context.json({ code: "not_found", message: "No prediction available for that market." }, 404);
+      const opportunity = this.opportunityEngineService.getLatestOpportunity(asset, window);
+      if (!opportunity) {
+        return context.json({ code: "not_found", message: "No opportunity available for that market." }, 404);
       }
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
-      return context.json(prediction, 200);
+      return context.json(opportunity, 200);
     });
     app.get("/v1/predictions", (context) => {
       const asset = this.parseAsset(context.req.query("asset"));
@@ -195,7 +209,7 @@ export class HttpServerService {
         return context.json({ code: "invalid_request", message: "asset, window, and a valid limit are required." }, 400);
       }
       context.header("content-type", config.RESPONSE_CONTENT_TYPE);
-      return context.json(this.predictionEngineService.getPredictions(asset, window, limit), 200);
+      return context.json(this.opportunityEngineService.getOpportunities(asset, window, limit), 200);
     });
     app.post("/v1/update", async (context) => {
       try {

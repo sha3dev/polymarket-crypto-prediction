@@ -176,6 +176,42 @@ test("MarketStateService skips triggers when the token price is already too expe
   assert.equal(ethSummary?.lastTrigger, null);
 });
 
+test("MarketStateService computes a usable barrier state from chainlink and price-to-beat", () => {
+  const marketStateService = new MarketStateService();
+
+  marketStateService.ingestSnapshot(buildBarrierSnapshot(1_000, 60_060, 60_000, 40_000));
+
+  const latestSlice = marketStateService.getLatestSlice("btc:5m");
+
+  assert.notEqual(latestSlice, null);
+  assert.equal(latestSlice?.barrierState.isBarrierDataUsable, true);
+  assert.equal(latestSlice?.barrierState.dominantSide, "UP");
+  assert.equal((latestSlice?.barrierState.chainlinkDistanceRatio ?? 0) > 0, true);
+});
+
+test("MarketStateService marks a market as effectively decided when little time remains and the barrier lead is large", () => {
+  const marketStateService = new MarketStateService();
+
+  marketStateService.ingestSnapshot(buildBarrierSnapshot(1_000, 60_900, 60_000, 8_000));
+
+  const latestSlice = marketStateService.getLatestSlice("btc:5m");
+
+  assert.notEqual(latestSlice, null);
+  assert.equal(latestSlice?.barrierState.isEffectivelyDecided, true);
+});
+
+test("MarketStateService keeps near-barrier markets contestable even late in the window", () => {
+  const marketStateService = new MarketStateService();
+
+  marketStateService.ingestSnapshot(buildBarrierSnapshot(1_000, 60_090, 60_000, 8_000));
+
+  const latestSlice = marketStateService.getLatestSlice("btc:5m");
+
+  assert.notEqual(latestSlice, null);
+  assert.equal(latestSlice?.barrierState.isNearBarrier, true);
+  assert.equal(latestSlice?.barrierState.isEffectivelyDecided, false);
+});
+
 function buildSnapshot(generatedAt: number, driftMultiplier: number): Record<string, number | string | null> & { generated_at: number } {
   const snapshot: Record<string, number | string | null> & { generated_at: number } = {
     generated_at: generatedAt,
@@ -270,6 +306,9 @@ function appendMarketSnapshot(
   const downPrice = Math.max(0.01, 1 - upPrice);
 
   snapshot[`${prefix}_slug`] = slug;
+  snapshot[`${prefix}_market_start`] = new Date(Math.max(0, generatedAt - 60_000)).toISOString();
+  snapshot[`${prefix}_market_end`] = new Date(generatedAt + (window === "5m" ? 300_000 : 900_000)).toISOString();
+  snapshot[`${prefix}_price_to_beat`] = baseSpotPrice;
   snapshot[`${prefix}_up_price`] = upPrice;
   snapshot[`${prefix}_down_price`] = downPrice;
   snapshot[`${prefix}_up_event_ts`] = generatedAt;
@@ -307,6 +346,9 @@ function appendSelectiveMarketSnapshot(
   const driftMultiplier = upMidpoint / 0.5;
 
   snapshot[`${prefix}_slug`] = slug;
+  snapshot[`${prefix}_market_start`] = new Date(Math.max(0, generatedAt - 60_000)).toISOString();
+  snapshot[`${prefix}_market_end`] = new Date(generatedAt + (window === "5m" ? 300_000 : 900_000)).toISOString();
+  snapshot[`${prefix}_price_to_beat`] = baseSpotPrice;
   snapshot[`${prefix}_up_price`] = upMidpoint;
   snapshot[`${prefix}_down_price`] = downMidpoint;
   snapshot[`${prefix}_up_event_ts`] = generatedAt;
@@ -337,6 +379,9 @@ function appendCustomMarketSnapshot(
   const downMidpoint = Math.max(0.01, Math.min(0.99, 1 - upMidpoint));
 
   snapshot[`${prefix}_slug`] = slug;
+  snapshot[`${prefix}_market_start`] = new Date(Math.max(0, generatedAt - 60_000)).toISOString();
+  snapshot[`${prefix}_market_end`] = new Date(generatedAt + (window === "5m" ? 300_000 : 900_000)).toISOString();
+  snapshot[`${prefix}_price_to_beat`] = spotConsensusPrice;
   snapshot[`${prefix}_up_price`] = upMidpoint;
   snapshot[`${prefix}_down_price`] = downMidpoint;
   snapshot[`${prefix}_up_event_ts`] = generatedAt;
@@ -352,4 +397,19 @@ function appendCustomMarketSnapshot(
   snapshot[`${asset}_okx_event_ts`] = generatedAt;
   snapshot[`${asset}_chainlink_price`] = spotConsensusPrice;
   snapshot[`${asset}_chainlink_event_ts`] = generatedAt;
+}
+
+function buildBarrierSnapshot(generatedAt: number, chainlinkPrice: number, priceToBeat: number, timeRemainingMs: number): InputSnapshot {
+  const snapshot = buildSelectiveSnapshot(generatedAt, {
+    "btc:5m": chainlinkPrice >= priceToBeat ? 0.58 : 0.42,
+  });
+  snapshot.btc_5m_market_start = new Date(Math.max(0, generatedAt - 120_000)).toISOString();
+  snapshot.btc_5m_market_end = new Date(generatedAt + timeRemainingMs).toISOString();
+  snapshot.btc_5m_price_to_beat = priceToBeat;
+  snapshot.btc_chainlink_price = chainlinkPrice;
+  snapshot.btc_binance_price = chainlinkPrice;
+  snapshot.btc_coinbase_price = chainlinkPrice;
+  snapshot.btc_kraken_price = chainlinkPrice;
+  snapshot.btc_okx_price = chainlinkPrice;
+  return snapshot;
 }

@@ -6,7 +6,7 @@ import type { ComboGateDecision } from "../combo/combo.types.ts";
 import type { ComboBreakdown } from "../combo/combo.types.ts";
 import type { SelectedStrategyCombo } from "../combo/combo.types.ts";
 import type { ComboSource, PositionSide } from "../execution/execution.types.ts";
-import type { AssetSymbol, CrossAssetRegime, MarketKey, MarketTrigger, MarketWindow, PredictionDirection } from "../market/market.types.ts";
+import type { AssetSymbol, CrossAssetRegime, MarketBarrierState, MarketKey, MarketTrigger, MarketWindow, PredictionDirection } from "../market/market.types.ts";
 import type { StrategySignal } from "../strategy/strategy.types.ts";
 
 /**
@@ -49,6 +49,7 @@ export type PredictionRecord = {
   comboBreakdown: ComboBreakdown;
   comboGate: ComboGateDecision;
   crossAssetRegime: CrossAssetRegime;
+  barrierState: MarketBarrierState;
   isExecutionEligible: boolean;
   executionBlockingReasons: string[];
   wasExecuted: boolean;
@@ -77,6 +78,7 @@ export type PredictionResponse = {
   isResolved: boolean;
   comboGate: ComboGateDecision;
   crossAssetRegime: CrossAssetRegime;
+  barrierState: MarketBarrierState;
   isExecutionEligible: boolean;
   executionBlockingReasons: string[];
   wasExecuted: boolean;

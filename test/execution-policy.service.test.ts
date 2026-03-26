@@ -3,10 +3,17 @@ import { test } from "node:test";
 
 import { ExecutionPolicyService } from "../src/execution/execution-policy.service.ts";
 import type { MarketPerformanceSummary, PaperPosition, PositionSide } from "../src/execution/execution.types.ts";
-import type { MarketQuality, MarketSnapshotSlice, PredictionDirection, SpotVenueMetrics, TokenMetrics } from "../src/market/market.types.ts";
+import type {
+  MarketBarrierState,
+  MarketQuality,
+  MarketSnapshotSlice,
+  PredictionDirection,
+  SpotVenueMetrics,
+  TokenMetrics,
+} from "../src/market/market.types.ts";
 import type { PredictionResponse } from "../src/prediction/prediction.types.ts";
 
-test("ExecutionPolicyService blocks entries that fight a strong cross-asset breadth regime", () => {
+test("ExecutionPolicyService no longer re-blocks entries that fight a strong cross-asset breadth regime", () => {
   const executionPolicyService = new ExecutionPolicyService();
   const prediction = buildPredictionResponse("DOWN");
   const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice(), prediction, null, buildMarketPerformanceSummary());
@@ -14,13 +21,13 @@ test("ExecutionPolicyService blocks entries that fight a strong cross-asset brea
   if (executionDecision === null) {
     throw new Error("expected execution decision");
   }
-  assert.equal(executionDecision.isEntryAllowed, false);
+  assert.equal(executionDecision.isEntryAllowed, true);
   assert.equal(executionDecision.breadthDirection, "UP");
-  assert.equal(executionDecision.hasBreadthAlignment, false);
-  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.hasBreadthAlignment, true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), false);
 });
 
-test("ExecutionPolicyService blocks alt longs when the BTC anchor is clearly down", () => {
+test("ExecutionPolicyService does not re-block alt longs when the BTC anchor is clearly down", () => {
   const executionPolicyService = new ExecutionPolicyService();
   const prediction = buildPredictionResponse("UP", "xrp", "DOWN", "NEUTRAL");
   const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("xrp"), prediction, null, buildMarketPerformanceSummary("xrp"));
@@ -28,11 +35,11 @@ test("ExecutionPolicyService blocks alt longs when the BTC anchor is clearly dow
   if (executionDecision === null) {
     throw new Error("expected execution decision");
   }
-  assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.isEntryAllowed, true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), false);
 });
 
-test("ExecutionPolicyService blocks ETH when BTC is clearly moving the other way", () => {
+test("ExecutionPolicyService does not re-block ETH when BTC is clearly moving the other way", () => {
   const executionPolicyService = new ExecutionPolicyService();
   const prediction = buildPredictionResponse("UP", "eth", "DOWN", "NEUTRAL");
   const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("eth"), prediction, null, buildMarketPerformanceSummary("eth"));
@@ -40,11 +47,11 @@ test("ExecutionPolicyService blocks ETH when BTC is clearly moving the other way
   if (executionDecision === null) {
     throw new Error("expected execution decision");
   }
-  assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.isEntryAllowed, true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), false);
 });
 
-test("ExecutionPolicyService blocks ETH UP when BTC UP token momentum is not supportive", () => {
+test("ExecutionPolicyService does not re-block ETH UP when BTC UP token momentum is not supportive", () => {
   const executionPolicyService = new ExecutionPolicyService();
   const prediction = buildPredictionResponse("UP", "eth", "UP", "UP", {
     btcUpTokenMomentum: 0.001,
@@ -54,11 +61,11 @@ test("ExecutionPolicyService blocks ETH UP when BTC UP token momentum is not sup
   if (executionDecision === null) {
     throw new Error("expected execution decision");
   }
-  assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.isEntryAllowed, true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), false);
 });
 
-test("ExecutionPolicyService blocks SOL when BTC and ETH align against it", () => {
+test("ExecutionPolicyService does not re-block SOL when BTC and ETH align against it", () => {
   const executionPolicyService = new ExecutionPolicyService();
   const prediction = buildPredictionResponse("UP", "sol", "DOWN", "DOWN");
   const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("sol"), prediction, null, buildMarketPerformanceSummary("sol"));
@@ -66,11 +73,11 @@ test("ExecutionPolicyService blocks SOL when BTC and ETH align against it", () =
   if (executionDecision === null) {
     throw new Error("expected execution decision");
   }
-  assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.isEntryAllowed, true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), false);
 });
 
-test("ExecutionPolicyService blocks XRP when BTC and ETH are not aligned", () => {
+test("ExecutionPolicyService does not re-block XRP when BTC and ETH are not aligned", () => {
   const executionPolicyService = new ExecutionPolicyService();
   const prediction = buildPredictionResponse("UP", "xrp", "UP", "NEUTRAL");
   const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("xrp"), prediction, null, buildMarketPerformanceSummary("xrp"));
@@ -78,8 +85,8 @@ test("ExecutionPolicyService blocks XRP when BTC and ETH are not aligned", () =>
   if (executionDecision === null) {
     throw new Error("expected execution decision");
   }
-  assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.isEntryAllowed, true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), false);
 });
 
 test("ExecutionPolicyService allows SOL only when BTC and ETH align with it", () => {
@@ -93,7 +100,7 @@ test("ExecutionPolicyService allows SOL only when BTC and ETH align with it", ()
   assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), false);
 });
 
-test("ExecutionPolicyService blocks SOL UP when BTC and ETH UP tokens do not both support it", () => {
+test("ExecutionPolicyService does not re-block SOL UP when BTC and ETH UP tokens do not both support it", () => {
   const executionPolicyService = new ExecutionPolicyService();
   const prediction = buildPredictionResponse("UP", "sol", "UP", "UP", {
     btcUpTokenMomentum: 0.02,
@@ -104,11 +111,11 @@ test("ExecutionPolicyService blocks SOL UP when BTC and ETH UP tokens do not bot
   if (executionDecision === null) {
     throw new Error("expected execution decision");
   }
-  assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), true);
+  assert.equal(executionDecision.isEntryAllowed, true);
+  assert.equal(executionDecision.blockingReasons.includes("cross_asset_regime_conflict"), false);
 });
 
-test("ExecutionPolicyService blocks entries when the historical market score is too low", () => {
+test("ExecutionPolicyService no longer blocks entries when only the historical market score is low", () => {
   const executionPolicyService = new ExecutionPolicyService();
   const prediction = buildPredictionResponse("UP", "btc", "UP", "UP");
   const executionDecision = executionPolicyService.buildEntryDecision(buildMarketSnapshotSlice("btc"), prediction, null, {
@@ -119,8 +126,40 @@ test("ExecutionPolicyService blocks entries when the historical market score is 
   if (executionDecision === null) {
     throw new Error("expected execution decision");
   }
+  assert.equal(executionDecision.isEntryAllowed, true);
+  assert.equal(executionDecision.blockingReasons.includes("market_score_too_low"), false);
+});
+
+test("ExecutionPolicyService no longer blocks entries when the market is already effectively decided upstream", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "btc", "UP", "UP");
+  const executionDecision = executionPolicyService.buildEntryDecision(
+    buildMarketSnapshotSlice("btc", buildBarrierState({ isEffectivelyDecided: true, dominantSide: "UP", decisionReason: "late decisive lead" })),
+    prediction,
+    null,
+    buildMarketPerformanceSummary("btc"),
+  );
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
+  assert.equal(executionDecision.isEntryAllowed, true);
+  assert.equal(executionDecision.blockingReasons.includes("market_effectively_decided"), false);
+});
+
+test("ExecutionPolicyService blocks entries when the entry token price is below the floor", () => {
+  const executionPolicyService = new ExecutionPolicyService();
+  const prediction = buildPredictionResponse("UP", "btc", "UP", "UP");
+  const marketSlice = buildMarketSnapshotSlice("btc");
+  marketSlice.up.price = 0.24;
+  marketSlice.up.midpoint = 0.24;
+  const executionDecision = executionPolicyService.buildEntryDecision(marketSlice, prediction, null, buildMarketPerformanceSummary("btc"));
+
+  if (executionDecision === null) {
+    throw new Error("expected execution decision");
+  }
   assert.equal(executionDecision.isEntryAllowed, false);
-  assert.equal(executionDecision.blockingReasons.includes("market_score_too_low"), true);
+  assert.equal(executionDecision.blockingReasons.includes("entry_token_price_too_low"), true);
 });
 
 test("ExecutionPolicyService keeps the position open at take profit when continuation still looks healthy", () => {
@@ -155,7 +194,7 @@ test("ExecutionPolicyService exits at take profit when continuation has degraded
   assert.notEqual(exitDecision.executionStyle, null);
 });
 
-function buildMarketSnapshotSlice(asset: "btc" | "eth" | "sol" | "xrp" = "btc"): MarketSnapshotSlice {
+function buildMarketSnapshotSlice(asset: "btc" | "eth" | "sol" | "xrp" = "btc", barrierState: MarketBarrierState = buildBarrierState()): MarketSnapshotSlice {
   const tokenMetrics = buildTokenMetrics(0.5);
   const marketQuality: MarketQuality = {
     score: 0.95,
@@ -192,7 +231,26 @@ function buildMarketSnapshotSlice(asset: "btc" | "eth" | "sol" | "xrp" = "btc"):
     spotDispersion: 0.001,
     chainlinkPrice: 60_001,
     chainlinkAgeMs: 0,
+    barrierState,
     quality: marketQuality,
+  };
+}
+
+function buildBarrierState(overrides: Partial<MarketBarrierState> = {}): MarketBarrierState {
+  return {
+    priceToBeat: 60_000,
+    chainlinkPrice: 60_001,
+    spotConsensusPrice: 60_000,
+    marketEnd: "2025-01-01T00:05:00.000Z",
+    timeRemainingMs: 180_000,
+    chainlinkDistanceRatio: 0.00002,
+    spotDistanceRatio: 0,
+    dominantSide: "UP",
+    isNearBarrier: true,
+    isEffectivelyDecided: false,
+    isBarrierDataUsable: true,
+    decisionReason: "near barrier",
+    ...overrides,
   };
 }
 
@@ -306,6 +364,7 @@ function buildPredictionResponse(
       isTradableGlobalContext: true,
       hasStrongBreadth: true,
     },
+    barrierState: buildBarrierState(),
     isExecutionEligible: false,
     executionBlockingReasons: [],
     wasExecuted: false,
@@ -336,6 +395,7 @@ function buildPredictionResponse(
       familyRedundancyPenalty: 0,
       semanticOverlapPenalty: 0,
       anchorFitScore: asset === "btc" ? 1 : asset === "eth" ? 0.95 : btcDirection === ethDirection && btcDirection === direction ? 1 : 0.2,
+      barrierAlignmentScore: 0.8,
       marketQualityScore: 0.95,
       affordabilityScore: 0.81,
       selectionReason: "research good agr 1.00 fit 1.00",

@@ -292,40 +292,15 @@ export class ExecutionPolicyService {
           if (referencePrice === null) {
             blockingReasons.push("no_reference_price");
           }
-          if (!this.hasBreadthAlignment(prediction)) {
-            blockingReasons.push("cross_asset_regime_conflict");
+          if (referencePrice !== null && referencePrice < config.MIN_ENTRY_TOKEN_PRICE) {
+            blockingReasons.push("entry_token_price_too_low");
           }
-          this.appendAnchorGateFailures(blockingReasons, prediction, marketSlice);
           if (!marketSlice.quality.hasLiveMarket) {
             blockingReasons.push("market_not_live");
-          }
-          if (marketSlice.quality.score < config.MIN_MARKET_QUALITY_FOR_ENTRY) {
-            blockingReasons.push("quality_too_low");
-          }
-          if (prediction.confidence < config.MIN_ENTRY_CONFIDENCE) {
-            blockingReasons.push("confidence_too_low");
-          }
-          if (prediction.selectedCombo.comboScore < 0.58) {
-            blockingReasons.push("combo_score_too_low");
-          }
-          if (prediction.selectedCombo.anchorFitScore < 0.9) {
-            blockingReasons.push("anchor_fit_too_low");
-          }
-          if (prediction.selectedCombo.affordabilityScore < 0.35) {
-            blockingReasons.push("combo_score_too_low");
-          }
-          if (referencePrice !== null && Math.abs(referencePrice - config.ENTRY_TARGET_PRICE) > config.ENTRY_BAND_HALF_WIDTH) {
-            blockingReasons.push("outside_entry_band");
           }
           const spread = this.resolveSpread(marketSlice, positionSide);
           if (spread > config.MAX_SPREAD_FOR_ENTRY) {
             blockingReasons.push("spread_too_wide");
-          }
-          if (marketPerformanceSummary !== null && marketPerformanceSummary.status === "warming_up") {
-            blockingReasons.push("market_warming_up");
-          }
-          if (marketPerformanceSummary !== null && marketPerformanceSummary.marketScore < config.MIN_MARKET_SCORE_FOR_ENTRY) {
-            blockingReasons.push("market_score_too_low");
           }
           const orderShareCount = referencePrice === null ? 0 : this.computeMinimumShareCount(referencePrice);
           const orderNotionalUsd = referencePrice === null ? null : this.computeOrderNotionalUsd(referencePrice, orderShareCount);
@@ -335,7 +310,7 @@ export class ExecutionPolicyService {
           if (orderShareCount < config.MIN_ORDER_SHARES) {
             blockingReasons.push("order_share_count_too_low");
           }
-          if (blockingReasons.length > 0 || referencePrice === null || marketPerformanceSummary === null) {
+          if (blockingReasons.length > 0 || referencePrice === null) {
             executionDecision = this.buildBlockedDecision(marketSlice, prediction, marketPerformanceSummary, blockingReasons);
           } else {
             const depth = this.resolveDepth(marketSlice, positionSide);
@@ -351,9 +326,9 @@ export class ExecutionPolicyService {
               asset: marketSlice.asset,
               window: marketSlice.window,
               isEntryAllowed: true,
-              marketScore: marketPerformanceSummary.marketScore,
-              marketTradeCount: marketPerformanceSummary.tradeCount,
-              hasSufficientMarketHistory: marketPerformanceSummary.hasSufficientHistory,
+              marketScore: marketPerformanceSummary?.marketScore ?? null,
+              marketTradeCount: marketPerformanceSummary?.tradeCount ?? 0,
+              hasSufficientMarketHistory: marketPerformanceSummary?.hasSufficientHistory ?? false,
               positionSide,
               predictionDirection: prediction.direction,
               entryReferencePrice: referencePrice,

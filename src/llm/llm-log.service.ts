@@ -18,8 +18,8 @@ import type {
   LlmComboSummary,
   LlmEvent,
   LlmMarketSummary,
-  LlmPredictionCreatedEvent,
-  LlmPredictionResolvedEvent,
+  LlmOpportunityCreatedEvent,
+  LlmOpportunityResolvedEvent,
   LlmRecentReference,
   LlmStrategySummary,
   LlmSummary,
@@ -72,8 +72,8 @@ export class LlmLogService {
   private buildEmptySummary(): LlmSummary {
     const emptySummary: LlmSummary = {
       counts: {
-        predictionsCreated: 0,
-        predictionsResolved: 0,
+        opportunitiesCreated: 0,
+        opportunitiesResolved: 0,
         wins: 0,
         losses: 0,
         tradesClosed: 0,
@@ -152,7 +152,7 @@ export class LlmLogService {
     if (llmMarketSummary === undefined) {
       llmMarketSummary = {
         marketKey,
-        predictionCount: 0,
+        opportunityCount: 0,
         resolvedCount: 0,
         winCount: 0,
         lossCount: 0,
@@ -198,8 +198,68 @@ export class LlmLogService {
     return llmStrategySummary;
   }
 
+  private resolveWindowPhase(predictionResponse: PredictionResponse): "opening" | "middle" | "late" | "final" {
+    let windowPhase: "opening" | "middle" | "late" | "final" = "middle";
+    const remainingMs = predictionResponse.barrierState.timeRemainingMs;
+    if (remainingMs !== null && remainingMs <= config.BARRIER_FORCE_DECIDED_TIME_MS) {
+      windowPhase = "final";
+    } else {
+      if (remainingMs !== null && remainingMs <= config.PREDICTION_HORIZON_MS) {
+        windowPhase = "late";
+      }
+    }
+    return windowPhase;
+  }
+
+  private resolveTargetSide(predictionResponse: PredictionResponse): "up" | "down" {
+    const targetSide: "up" | "down" = predictionResponse.direction === "UP" ? "up" : "down";
+    return targetSide;
+  }
+
+  private resolveReferencePrice(predictionResponse: PredictionResponse): number | null {
+    const referencePrice = predictionResponse.barrierState.chainlinkPrice ?? predictionResponse.barrierState.spotConsensusPrice;
+    return referencePrice;
+  }
+
+  private resolveBarrierDistanceRatio(predictionResponse: PredictionResponse): number | null {
+    const barrierDistanceRatio = predictionResponse.barrierState.chainlinkDistanceRatio ?? predictionResponse.barrierState.spotDistanceRatio ?? null;
+    return barrierDistanceRatio;
+  }
+
+  private computeContestabilityScore(predictionResponse: PredictionResponse): number {
+    const barrierDistanceRatio = this.resolveBarrierDistanceRatio(predictionResponse);
+    let contestabilityScore =
+      barrierDistanceRatio === null ? 0.5 : Math.max(0, Math.min(1, 1 - barrierDistanceRatio / Math.max(config.BARRIER_DECIDED_RATIO, 0.000_001)));
+    if (predictionResponse.barrierState.isNearBarrier) {
+      contestabilityScore = Math.max(contestabilityScore, 0.85);
+    }
+    if (predictionResponse.barrierState.isEffectivelyDecided) {
+      contestabilityScore = 0.05;
+    }
+    return contestabilityScore;
+  }
+
+  private computeTpBeforeSlScore(predictionResponse: PredictionResponse): number {
+    const tpBeforeSlScore = Math.max(
+      0,
+      Math.min(
+        1,
+        predictionResponse.confidence * 0.6 + Math.abs(predictionResponse.weightedScore) * 0.2 + this.computeContestabilityScore(predictionResponse) * 0.2,
+      ),
+    );
+    return tpBeforeSlScore;
+  }
+
+  private computeEntryQualityScore(predictionResponse: PredictionResponse): number {
+    const entryQualityScore = Math.max(
+      0,
+      Math.min(1, predictionResponse.selectedCombo.marketQualityScore * 0.7 + predictionResponse.selectedCombo.affordabilityScore * 0.3),
+    );
+    return entryQualityScore;
+  }
+
   private updateQuality(): void {
-    const resolvedCount = this.summary.counts.predictionsResolved;
+    const resolvedCount = this.summary.counts.opportunitiesResolved;
     const winCount = this.summary.counts.wins;
     const lossCount = this.summary.counts.losses;
     this.summary.quality.resolvedAccuracy = resolvedCount === 0 ? null : winCount / resolvedCount;
@@ -208,36 +268,36 @@ export class LlmLogService {
     this.summary.quality.averageLossConfidence = lossCount === 0 ? null : this.summary.confidenceTotals.losses / lossCount;
   }
 
-  private updatePredictionCreatedSummary(llmEvent: LlmPredictionCreatedEvent): void {
-    this.summary.counts.predictionsCreated += 1;
-    this.requireMarketSummary(llmEvent.marketKey).predictionCount += 1;
+  private updateOpportunityCreatedSummary(llmEvent: LlmOpportunityCreatedEvent): void {
+    this.summary.counts.opportunitiesCreated += 1;
+    this.requireMarketSummary(llmEvent.marketKey).opportunityCount += 1;
     if (llmEvent.blockingReason !== null) {
       this.summary.executionBlockers[llmEvent.blockingReason] = (this.summary.executionBlockers[llmEvent.blockingReason] ?? 0) + 1;
     }
     this.updateRecentReferences({
       eventType: llmEvent.eventType,
       timestamp: llmEvent.timestamp,
-      referenceId: llmEvent.predictionId,
+      referenceId: llmEvent.opportunityId,
       marketKey: llmEvent.marketKey,
     });
   }
 
-  private updatePredictionResolvedSummary(llmEvent: LlmPredictionResolvedEvent): void {
+  private updateOpportunityResolvedSummary(llmEvent: LlmOpportunityResolvedEvent): void {
     const llmMarketSummary = this.requireMarketSummary(llmEvent.marketKey);
     const llmComboSummary = this.requireComboSummary(llmEvent.selectedComboKey);
-    this.summary.counts.predictionsResolved += 1;
+    this.summary.counts.opportunitiesResolved += 1;
     llmMarketSummary.resolvedCount += 1;
     llmComboSummary.resolvedCount += 1;
-    this.summary.confidenceTotals.resolved += llmEvent.confidence;
+    this.summary.confidenceTotals.resolved += llmEvent.tpBeforeSlScore;
     if (llmEvent.outcomeStatus === "ok") {
       this.summary.counts.wins += 1;
-      this.summary.confidenceTotals.wins += llmEvent.confidence;
+      this.summary.confidenceTotals.wins += llmEvent.tpBeforeSlScore;
       llmMarketSummary.winCount += 1;
       llmComboSummary.wins += 1;
     }
     if (llmEvent.outcomeStatus === "ko") {
       this.summary.counts.losses += 1;
-      this.summary.confidenceTotals.losses += llmEvent.confidence;
+      this.summary.confidenceTotals.losses += llmEvent.tpBeforeSlScore;
       llmMarketSummary.lossCount += 1;
       llmComboSummary.losses += 1;
     }
@@ -264,7 +324,7 @@ export class LlmLogService {
     this.updateRecentReferences({
       eventType: llmEvent.eventType,
       timestamp: llmEvent.timestamp,
-      referenceId: llmEvent.predictionId,
+      referenceId: llmEvent.opportunityId,
       marketKey: llmEvent.marketKey,
     });
   }
@@ -285,11 +345,11 @@ export class LlmLogService {
   private recordEvent(llmEvent: LlmEvent): void {
     try {
       this.appendEvent(llmEvent);
-      if (llmEvent.eventType === "prediction_created") {
-        this.updatePredictionCreatedSummary(llmEvent);
+      if (llmEvent.eventType === "opportunity_created") {
+        this.updateOpportunityCreatedSummary(llmEvent);
       }
-      if (llmEvent.eventType === "prediction_resolved") {
-        this.updatePredictionResolvedSummary(llmEvent);
+      if (llmEvent.eventType === "opportunity_resolved") {
+        this.updateOpportunityResolvedSummary(llmEvent);
       }
       if (llmEvent.eventType === "trade_closed") {
         this.updateTradeClosedSummary(llmEvent);
@@ -305,23 +365,29 @@ export class LlmLogService {
    */
 
   public recordPredictionCreated(predictionResponse: PredictionResponse): void {
-    const llmEvent: LlmPredictionCreatedEvent = {
-      eventType: "prediction_created",
+    const llmEvent: LlmOpportunityCreatedEvent = {
+      eventType: "opportunity_created",
       timestamp: predictionResponse.timestamp,
-      predictionId: `${predictionResponse.marketKey}:${predictionResponse.timestamp}`,
+      opportunityId: `${predictionResponse.marketKey}:${predictionResponse.timestamp}`,
       marketKey: predictionResponse.marketKey,
       asset: predictionResponse.asset,
       window: predictionResponse.window,
       triggerType: predictionResponse.trigger.triggerType,
       triggeredToken: predictionResponse.trigger.triggeredToken,
-      direction: predictionResponse.direction,
-      confidence: predictionResponse.confidence,
-      weightedScore: predictionResponse.weightedScore,
+      targetSide: this.resolveTargetSide(predictionResponse),
+      windowPhase: this.resolveWindowPhase(predictionResponse),
+      remainingMs: predictionResponse.barrierState.timeRemainingMs,
+      priceToBeat: predictionResponse.barrierState.priceToBeat,
+      referencePrice: this.resolveReferencePrice(predictionResponse),
+      barrierDistanceRatio: this.resolveBarrierDistanceRatio(predictionResponse),
+      contestabilityScore: this.computeContestabilityScore(predictionResponse),
+      tpBeforeSlScore: this.computeTpBeforeSlScore(predictionResponse),
+      entryQualityScore: this.computeEntryQualityScore(predictionResponse),
       selectedComboKey: predictionResponse.selectedCombo.comboKey,
-      selectedComboScore: predictionResponse.selectedCombo.comboScore,
+      selectedComboEdgeScore: predictionResponse.selectedCombo.comboScore,
       selectedStrategyIds: predictionResponse.selectedCombo.memberStrategyIds,
       marketQualityScore: predictionResponse.selectedCombo.marketQualityScore,
-      regimeId: predictionResponse.crossAssetRegime.regimeId,
+      anchorConflictReason: predictionResponse.executionBlockingReasons.includes("cross_asset_regime_conflict") ? "cross_asset_regime_conflict" : null,
       isExecutionEligible: predictionResponse.isExecutionEligible,
       blockingReason: predictionResponse.executionBlockingReasons[0] ?? null,
     };
@@ -329,20 +395,26 @@ export class LlmLogService {
   }
 
   public recordPredictionResolved(predictionResponse: PredictionResponse): void {
-    const llmEvent: LlmPredictionResolvedEvent = {
-      eventType: "prediction_resolved",
+    const llmEvent: LlmOpportunityResolvedEvent = {
+      eventType: "opportunity_resolved",
       timestamp: predictionResponse.result.resolvedAt ?? predictionResponse.timestamp,
-      predictionId: `${predictionResponse.marketKey}:${predictionResponse.timestamp}`,
+      opportunityId: `${predictionResponse.marketKey}:${predictionResponse.timestamp}`,
       marketKey: predictionResponse.marketKey,
-      direction: predictionResponse.direction,
-      confidence: predictionResponse.confidence,
+      targetSide: this.resolveTargetSide(predictionResponse),
+      windowPhase: this.resolveWindowPhase(predictionResponse),
+      remainingMs: predictionResponse.barrierState.timeRemainingMs,
+      priceToBeat: predictionResponse.barrierState.priceToBeat,
+      referencePrice: this.resolveReferencePrice(predictionResponse),
+      barrierDistanceRatio: this.resolveBarrierDistanceRatio(predictionResponse),
+      contestabilityScore: this.computeContestabilityScore(predictionResponse),
+      tpBeforeSlScore: this.computeTpBeforeSlScore(predictionResponse),
+      entryQualityScore: this.computeEntryQualityScore(predictionResponse),
       selectedComboKey: predictionResponse.selectedCombo.comboKey,
       selectedStrategyIds: predictionResponse.selectedCombo.memberStrategyIds,
       outcomeStatus: predictionResponse.result.status,
       outcomeReason: predictionResponse.result.reason,
-      resolvedDirection: predictionResponse.result.resolvedDirection,
-      evaluationPrice: predictionResponse.result.evaluationPrice,
-      baselinePrice: predictionResponse.result.baselinePrice,
+      closeTokenPrice: predictionResponse.result.evaluationPrice,
+      entryTokenPrice: predictionResponse.entryReferencePrice,
       wasExecuted: predictionResponse.wasExecuted,
       strategies: predictionResponse.strategyBreakdown.map((strategy) => {
         return {

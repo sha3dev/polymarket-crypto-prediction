@@ -747,14 +747,14 @@ export class DashboardViewService {
             <div id="trade-proximity" class="loading panel-scroll">Loading trade proximity…</div>
           </article>
           <article class="panel panel-medium">
-            <h2><span class="panel-title"><span>Combo Board</span><button type="button" class="panel-info-button" data-full-label="Combo Board" data-description="Latest winning strategy combinations from the prediction layer. Each row shows which combo won, its score, and the short explanation for why that combination beat the alternatives." aria-label="Combo Board. Latest winning strategy combinations from the prediction layer. Each row shows which combo won, its score, and the short explanation for why that combination beat the alternatives.">i</button></span></h2>
-            <p class="tiny panel-intro">The prediction layer now works by selecting a combo of strategies. This panel shows that winning combo directly instead of an artificial narrative layer.</p>
-            <div id="winning-combinations" class="loading panel-scroll">Loading combo board…</div>
+            <h2><span class="panel-title"><span>Live Opportunities</span><button type="button" class="panel-info-button" data-full-label="Live Opportunities" data-description="Current token-first opportunity per market. Each row shows the recommended token side, current token price, contestability, tp-before-sl edge, and the combo currently backing that opportunity." aria-label="Live Opportunities. Current token-first opportunity per market. Each row shows the recommended token side, current token price, contestability, tp-before-sl edge, and the combo currently backing that opportunity.">i</button></span></h2>
+            <p class="tiny panel-intro">This is the token-first research layer. It summarizes which token currently has edge, how contestable the barrier still is, and which combo is backing that thesis.</p>
+            <div id="live-opportunities" class="loading panel-scroll">Loading live opportunities…</div>
           </article>
           <article class="panel panel-tall">
-            <h2><span class="panel-title"><span>Recent Predictions</span><button type="button" class="panel-info-button" data-full-label="Recent Predictions" data-description="Recent predictions from newest to oldest, including ideas still pending and ideas already resolved. Use this panel to follow the lifecycle from creation through TP or SL resolution, including which strategy combo created the idea." aria-label="Recent Predictions. Recent predictions from newest to oldest, including ideas still pending and ideas already resolved. Use this panel to follow the lifecycle from creation through TP or SL resolution, including which strategy combo created the idea.">i</button></span></h2>
-            <p class="tiny panel-intro">Recent predictions from creation onward, including pending ideas and resolved outcomes.</p>
-            <div id="predictions" class="loading panel-scroll">Loading recent predictions…</div>
+            <h2><span class="panel-title"><span>Recent Opportunities</span><button type="button" class="panel-info-button" data-full-label="Recent Opportunities" data-description="Recent token opportunities from newest to oldest, including ideas still pending and ideas already resolved. Use this panel to follow the lifecycle from opportunity creation through TP or SL resolution." aria-label="Recent Opportunities. Recent token opportunities from newest to oldest, including ideas still pending and ideas already resolved. Use this panel to follow the lifecycle from opportunity creation through TP or SL resolution.">i</button></span></h2>
+            <p class="tiny panel-intro">Recent token-first opportunities from creation onward, including pending ideas and resolved TP/SL outcomes.</p>
+            <div id="opportunities" class="loading panel-scroll">Loading recent opportunities…</div>
           </article>
           <article class="panel panel-medium">
             <h2><span class="panel-title"><span>Recent Trades</span><button type="button" class="panel-info-button" data-full-label="Recent Trades" data-description="Most recent closed trades from the active execution backend. This is the panel that tells you what the system actually executed, not just what it predicted." aria-label="Recent Trades. Most recent closed trades from the active execution backend. This is the panel that tells you what the system actually executed, not just what it predicted.">i</button></span></h2>
@@ -763,6 +763,11 @@ export class DashboardViewService {
           </article>
         </div>
         <div class="stack">
+          <article class="panel panel-medium">
+            <h2><span class="panel-title"><span>Factor Board</span><button type="button" class="panel-info-button" data-full-label="Factor Board" data-description="Live factor view grouped by opportunity scope. It shows which reachability, microstructure, pricing, anchor, and timing factors are currently active for the selected market." aria-label="Factor Board. Live factor view grouped by opportunity scope. It shows which reachability, microstructure, pricing, anchor, and timing factors are currently active for the selected market.">i</button></span></h2>
+            <p class="tiny panel-intro">Token-first factor breakdown for the live market states. This is the fastest way to see which parts of the state are really driving the current opportunity score.</p>
+            <div id="factor-board" class="loading panel-scroll">Loading factor board…</div>
+          </article>
           <article class="panel panel-tall">
             <h2><span class="panel-title"><span>Combo Search</span><button type="button" class="panel-info-button" data-full-label="Combo Search" data-description="Live exploration view for one market at a time. It shows how many pair and trio candidates were generated, which combo won the research layer, which combo is closest to execution, and what other candidates are being tested right now." aria-label="Combo Search. Live exploration view for one market at a time. It shows how many pair and trio candidates were generated, which combo won the research layer, which combo is closest to execution, and what other candidates are being tested right now.">i</button></span></h2>
             <p class="tiny panel-intro">This is the closest thing to the combo discovery process. Each tab shows one market's current search space: candidates generated from active strategies, the research winner, the execution gate decision, and the runners-up that are being evaluated right now.</p>
@@ -1172,6 +1177,12 @@ export class DashboardViewService {
         if (reasonCode === 'cross_asset_regime_conflict') {
           humanReason = 'cross-asset regime conflict';
         }
+        if (reasonCode === 'market_effectively_decided') {
+          humanReason = 'market effectively decided';
+        }
+        if (reasonCode === 'entry_token_price_too_low') {
+          humanReason = 'entry token price too low';
+        }
         if (reasonCode === 'live_mode_not_initialized') {
           humanReason = 'live mode not initialized';
         }
@@ -1312,6 +1323,106 @@ export class DashboardViewService {
         return triggerCode;
       }
 
+      function renderBarrierLabel(barrierState) {
+        let barrierLabel = '—';
+        if (barrierState && barrierState.isBarrierDataUsable) {
+          if (barrierState.isEffectivelyDecided) {
+            barrierLabel = 'DEC';
+          }
+          if (!barrierState.isEffectivelyDecided && barrierState.isNearBarrier) {
+            barrierLabel = 'NEAR';
+          }
+          if (!barrierState.isEffectivelyDecided && !barrierState.isNearBarrier && barrierState.dominantSide !== null) {
+            barrierLabel = barrierState.dominantSide;
+          }
+        }
+        return barrierLabel;
+      }
+
+      function formatTimeRemaining(timeRemainingMs) {
+        let timeRemainingLabel = '—';
+        if (typeof timeRemainingMs === 'number') {
+          const clampedMs = Math.max(0, timeRemainingMs);
+          if (clampedMs >= 60_000) {
+            timeRemainingLabel = formatNumber(clampedMs / 60_000, 1) + 'm';
+          }
+          if (clampedMs < 60_000) {
+            timeRemainingLabel = formatNumber(clampedMs / 1_000, 0) + 's';
+          }
+        }
+        return timeRemainingLabel;
+      }
+
+      function renderBarrierHover(barrierState) {
+        let barrierHover = 'barrier data unavailable';
+        if (barrierState && barrierState.isBarrierDataUsable) {
+          const referencePrice = barrierState.chainlinkPrice ?? barrierState.spotConsensusPrice;
+          const distanceRatio = barrierState.chainlinkDistanceRatio ?? barrierState.spotDistanceRatio;
+          barrierHover =
+            'priceToBeat ' + formatNumber(barrierState.priceToBeat) +
+            ' · ref ' + formatNumber(referencePrice) +
+            ' · dist ' + formatNumber(distanceRatio, 4) +
+            ' · ' + (barrierState.decisionReason ?? 'contestable');
+        }
+        return barrierHover;
+      }
+
+      function renderBarrierReachabilityLabel(barrierReachability) {
+        let barrierLabel = '—';
+        if (barrierReachability) {
+          if (barrierReachability.isEffectivelyDecided) {
+            barrierLabel = 'DEC';
+          } else {
+            if (barrierReachability.contestabilityScore >= 0.8) {
+              barrierLabel = 'NEAR';
+            } else {
+              if (barrierReachability.dominantResolutionSide !== null) {
+                barrierLabel = String(barrierReachability.dominantResolutionSide).toUpperCase();
+              }
+            }
+          }
+        }
+        return barrierLabel;
+      }
+
+      function renderBarrierReachabilityHover(barrierReachability) {
+        let barrierHover = 'barrier data unavailable';
+        if (barrierReachability) {
+          barrierHover =
+            'priceToBeat ' + formatNumber(barrierReachability.priceToBeat) +
+            ' · ref ' + formatNumber(barrierReachability.referencePrice) +
+            ' · dist ' + formatNumber(barrierReachability.barrierDistanceRatio, 4) +
+            ' · contest ' + formatNumber(barrierReachability.contestabilityScore, 2) +
+            ' · ' + barrierReachability.reason;
+        }
+        return barrierHover;
+      }
+
+      function renderAnchorStateLabel(anchorContext) {
+        let anchorStateLabel = 'BTC lead';
+        if (anchorContext && anchorContext.isHardConflict) {
+          anchorStateLabel = 'CFL';
+        } else {
+          if (anchorContext && anchorContext.btcSide !== null) {
+            anchorStateLabel = String(anchorContext.btcSide).toUpperCase();
+          }
+        }
+        return anchorStateLabel;
+      }
+
+      function renderAnchorStateHover(anchorContext) {
+        let anchorStateHover = 'no anchor context';
+        if (anchorContext) {
+          anchorStateHover =
+            'btc ' + String(anchorContext.btcSide ?? 'neutral') +
+            ' · eth ' + String(anchorContext.ethSide ?? 'neutral') +
+            ' · strength ' + formatNumber(anchorContext.anchorStrength, 2) +
+            ' · support ' + formatNumber(anchorContext.followerSupport, 2) +
+            (anchorContext.reason === null ? '' : ' · ' + anchorContext.reason);
+        }
+        return anchorStateHover;
+      }
+
       function renderExecutionStyleCode(executionStyle) {
         let executionStyleCode = '—';
         if (executionStyle === 'maker') {
@@ -1380,6 +1491,12 @@ export class DashboardViewService {
         }
         if (reasonCode === 'cross-asset regime conflict') {
           reasonShortCode = 'XRG';
+        }
+        if (reasonCode === 'market effectively decided') {
+          reasonShortCode = 'DEC';
+        }
+        if (reasonCode === 'entry token price too low') {
+          reasonShortCode = 'LOW';
         }
         if (reasonCode === 'live mode not initialized') {
           reasonShortCode = 'LNI';
@@ -1488,14 +1605,14 @@ export class DashboardViewService {
         return marketStatusCode;
       }
 
-      function buildLatestPredictionMap(summary) {
-        const latestPredictionMap = {};
-        for (const prediction of summary.latestPredictions) {
-          if (latestPredictionMap[prediction.marketKey] === undefined) {
-            latestPredictionMap[prediction.marketKey] = prediction;
+      function buildLatestOpportunityMap(summary) {
+        const latestOpportunityMap = {};
+        for (const opportunity of summary.latestOpportunities) {
+          if (latestOpportunityMap[opportunity.marketKey] === undefined) {
+            latestOpportunityMap[opportunity.marketKey] = opportunity;
           }
         }
-        return latestPredictionMap;
+        return latestOpportunityMap;
       }
 
       function createMarketPerformanceMap(summary) {
@@ -1610,11 +1727,11 @@ export class DashboardViewService {
 
       function renderResultBadge(result) {
         let resultBadge = '<span class="pill">' + result.status.toUpperCase() + '</span>';
-        if (result.status === "ok") {
-          resultBadge = '<span class="pill up">OK</span>';
+        if (result.status === "tp") {
+          resultBadge = '<span class="pill up">TP</span>';
         }
-        if (result.status === "ko") {
-          resultBadge = '<span class="pill down">KO</span>';
+        if (result.status === "sl") {
+          resultBadge = '<span class="pill down">SL</span>';
         }
         return resultBadge;
       }
@@ -1817,57 +1934,69 @@ export class DashboardViewService {
 
       function renderMarkets(summary) {
         const marketPerformanceMap = createMarketPerformanceMap(summary);
-        const executionDecisionMap = createExecutionDecisionMap(summary);
-        const latestPredictionMap = buildLatestPredictionMap(summary);
+        const liveOpportunityMap = {};
+        for (const liveOpportunity of summary.liveOpportunities) {
+          liveOpportunityMap[liveOpportunity.marketKey] = liveOpportunity;
+        }
         const rows = summary.markets.map((market) => {
           const qualityWidth = Math.max(0, Math.min(100, market.quality.score * 100));
           const qualityDetails = 'score ' + formatNumber(market.quality.score, 2) + (market.quality.issues.length === 0 ? ' · healthy' : ' · ' + market.quality.issues.join(', '));
           const marketPerformance = marketPerformanceMap[market.marketKey];
-          const executionDecision = executionDecisionMap[market.marketKey];
-          const latestPrediction = latestPredictionMap[market.marketKey];
+          const liveOpportunity = liveOpportunityMap[market.marketKey];
           const marketScore = marketPerformance ? formatNumber(marketPerformance.marketScore, 2) : '—';
           const marketStatus = marketPerformance ? marketPerformance.status.replace('_', ' ') : 'warming up';
-          const regimeLabel =
-            latestPrediction === undefined
-              ? '—'
-              : renderRegimeCode(latestPrediction.crossAssetRegime);
-          const regimeHover =
-            latestPrediction === undefined
-              ? 'no execution decision yet'
-              : renderCrossAssetHover(latestPrediction.crossAssetRegime);
-          const comboLabel = latestPrediction ? renderCodeListGroup('strategy', latestPrediction.selectedCombo.memberStrategyIds, 3) : '—';
-          const comboDirectionLabel = latestPrediction ? renderDirectionPill(latestPrediction.direction, "combo-direction-pill") : '—';
+          const phaseLabel = liveOpportunity === undefined ? '—' : String(liveOpportunity.windowState.phase).toUpperCase();
+          const barrierLabel = liveOpportunity === undefined ? renderBarrierLabel(market.barrierState) : renderBarrierReachabilityLabel(liveOpportunity.barrierReachability);
+          const barrierHover = liveOpportunity === undefined ? renderBarrierHover(market.barrierState) : renderBarrierReachabilityHover(liveOpportunity.barrierReachability);
+          const timeRemainingLabel = liveOpportunity === undefined ? formatTimeRemaining(market.barrierState.timeRemainingMs) : formatTimeRemaining(liveOpportunity.windowState.remainingMs);
+          const anchorLabel = liveOpportunity === undefined ? '—' : renderAnchorStateLabel(liveOpportunity.anchorContext);
+          const anchorHover = liveOpportunity === undefined ? 'no live opportunity state' : renderAnchorStateHover(liveOpportunity.anchorContext);
+          const comboLabel =
+            liveOpportunity && liveOpportunity.selectedOpportunityCombo
+              ? renderCodeListGroup('strategy', liveOpportunity.selectedOpportunityCombo.memberFactorIds, 3)
+              : '—';
+          const comboDirectionLabel =
+            liveOpportunity && liveOpportunity.recommendedSide !== null
+              ? renderDirectionPill(String(liveOpportunity.recommendedSide).toUpperCase(), "combo-direction-pill")
+              : '—';
           return '<tr>' +
             '<td><strong>' + market.asset.toUpperCase() + '</strong> <span class="tiny">' + market.window + '</span></td>' +
             '<td>' + formatNumber(market.latestUpMidpoint) + '</td>' +
             '<td>' + formatNumber(market.latestDownMidpoint) + '</td>' +
-            '<td>' + formatNumber(market.cooldownRemainingMs, 0) + '</td>' +
+            '<td>' + phaseLabel + '</td>' +
             '<td><span title="' + marketStatus + '">' + marketScore + '</span></td>' +
-            '<td><span title="' + regimeHover + '">' + regimeLabel + '</span></td>' +
+            '<td><span title="' + barrierHover + '">' + barrierLabel + '</span></td>' +
+            '<td><span title="' + barrierHover + '">' + timeRemainingLabel + '</span></td>' +
+            '<td><span title="' + anchorHover + '">' + anchorLabel + '</span></td>' +
             '<td><div class="stack-cell">' + comboDirectionLabel + comboLabel + '</div></td>' +
             '<td><span class="quality-cell" title="' + qualityDetails + '"><span>' + formatNumber(market.quality.score, 2) + '</span><div class="quality-bar"><span style="width:' + qualityWidth + '%"></span></div></span></td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("markets", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP', 'Current midpoint for the UP token. This panel shows the midpoint directly, without the longer mid suffix.') + '</th><th>' + renderHintLabel('DOWN', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Cooldown', 'Milliseconds remaining before this market can emit another prediction.') + '</th><th>' + renderHintLabel('Mkt score', 'Historical predictive score for this market only. It comes from resolved research ideas, not from execution PnL or entry gates.') + '</th><th>' + renderHintLabel('Regime', 'Cross-asset regime for this market or its latest resolved idea.') + '</th><th>' + renderHintLabel('Combo', 'Current best strategy combo for this market.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("markets", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for the monitored Polymarket contract.') + '</th><th>' + renderHintLabel('UP', 'Current midpoint for the UP token. This panel shows the midpoint directly, without the longer mid suffix.') + '</th><th>' + renderHintLabel('DOWN', 'Current midpoint for the DOWN token.') + '</th><th>' + renderHintLabel('Phase', 'Current phase of the market window from opening to final.') + '</th><th>' + renderHintLabel('Mkt score', 'Historical predictive score for this market only. It comes from resolved research ideas, not from execution PnL or entry gates.') + '</th><th>' + renderHintLabel('Barrier', 'Barrier state derived from price-to-beat, reference price, and time remaining. DEC means effectively decided. NEAR means still contestable.') + '</th><th>' + renderHintLabel('T left', 'Time remaining until the market end used by the token-first opportunity model.') + '</th><th>' + renderHintLabel('Anchor', 'Hard-prior anchor state. BTC leads, ETH follows BTC, and SOL/XRP follow BTC plus ETH.') + '</th><th>' + renderHintLabel('Combo', 'Current selected opportunity combo for this market.') + '</th><th>' + renderHintLabel('Quality', 'Continuous data quality score. It penalizes stale token timestamps, weak spot coverage, wide spreads, midpoint fallbacks, stale chainlink, and venue dispersion.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
-      function renderPredictions(summary) {
-        const rows = summary.latestPredictions.map((prediction) => {
-          const triggerLabel = humanizeReason(prediction.trigger.triggerType) === prediction.trigger.triggerType
-            ? prediction.trigger.triggerType.replace('_', ' ')
-            : humanizeReason(prediction.trigger.triggerType);
+      function renderOpportunities(summary) {
+        const rows = summary.latestOpportunities.map((opportunity) => {
+          const triggerLabel = humanizeReason(opportunity.trigger.triggerType) === opportunity.trigger.triggerType
+            ? opportunity.trigger.triggerType.replace('_', ' ')
+            : humanizeReason(opportunity.trigger.triggerType);
+          const closePriceLabel = opportunity.closeTokenPrice === null ? '—' : formatNumber(opportunity.closeTokenPrice);
+          const barrierLabel = renderBarrierReachabilityLabel(opportunity.barrierReachability);
+          const barrierHover = renderBarrierReachabilityHover(opportunity.barrierReachability) + ' · phase ' + opportunity.windowState.phase;
           return '<tr>' +
-            '<td><strong>' + prediction.asset.toUpperCase() + '</strong> <span class="tiny">' + prediction.window + '</span></td>' +
-            '<td>' + renderDirectionPill(prediction.direction) + '</td>' +
-            '<td>' + formatNumber(prediction.confidence) + '</td>' +
-            '<td><span title="' + triggerLabel + '">' + renderTriggerCode(prediction.trigger.triggerType) + '</span></td>' +
-            '<td>' + renderCodeListGroup('strategy', prediction.selectedCombo.memberStrategyIds, 3) + '</td>' +
-            '<td>' + formatNumber(prediction.selectedCombo.comboScore, 2) + '</td>' +
-            '<td>' + renderResultBadge(prediction.result) + '</td>' +
-            '<td>' + formatTimestamp(prediction.timestamp) + '</td>' +
+            '<td><strong>' + opportunity.asset.toUpperCase() + '</strong> <span class="tiny">' + opportunity.window + '</span></td>' +
+            '<td>' + renderDirectionPill(String(opportunity.targetSide).toUpperCase()) + '</td>' +
+            '<td><span title="' + triggerLabel + '">' + renderTriggerCode(opportunity.trigger.triggerType) + '</span></td>' +
+            '<td>' + (opportunity.selectedOpportunityCombo === null ? '—' : renderCodeListGroup('strategy', opportunity.selectedOpportunityCombo.memberFactorIds, 3)) + '</td>' +
+            '<td>' + formatNumber(opportunity.tpBeforeSlScore, 2) + '</td>' +
+            '<td>' + formatNumber(opportunity.entryTokenPrice) + '</td>' +
+            '<td>' + closePriceLabel + '</td>' +
+            '<td><span title="' + barrierHover + '">' + barrierLabel + '</span></td>' +
+            '<td>' + renderResultBadge(opportunity.result) + '</td>' +
+            '<td>' + formatTimestamp(opportunity.timestamp) + '</td>' +
             '</tr>';
         }).join("");
-        replacePanelContent("predictions", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this prediction.') + '</th><th>' + renderHintLabel('Dir', 'Final direction chosen by the selected combo.') + '</th><th>' + renderHintLabel('Conf', 'Normalized confidence attached to the selected combo. Real entry also expects confidence of at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = confirmed half cross, BTR = BTC trend reversal for followers, BLR = BTC local reversal, CSS = combo state shift, RSS = regime state shift.') + '</th><th>' + renderHintLabel('Combo', 'Selected strategy combo for this prediction.') + '</th><th>' + renderHintLabel('Score', 'Combo score used to rank the combo at prediction time. This is idea quality after anti-late-entry and anti-redundancy filtering, before hard entry gates.') + '</th><th>' + renderHintLabel('Result', 'OK means the trade hit take profit. KO means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Prediction creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent("opportunities", renderTableShell('<table><thead><tr><th>' + renderHintLabel('Market', 'Asset and resolution window for this opportunity.') + '</th><th>' + renderHintLabel('Side', 'Token side chosen by the opportunity engine.') + '</th><th>' + renderHintLabel('Trig', 'Compact trigger code. XH = confirmed half cross, BTR = BTC trend reversal for followers, BLR = BTC local reversal, CSS = combo state shift, RSS = regime state shift.') + '</th><th>' + renderHintLabel('Combo', 'Selected opportunity combo for this opportunity.') + '</th><th>' + renderHintLabel('TP>SL', 'Token-first edge score: how likely this token was to hit TP before SL inside the horizon.') + '</th><th>' + renderHintLabel('Entry px', 'Token price used as the opportunity entry reference when the idea was created.') + '</th><th>' + renderHintLabel('Close px', 'Token price used to resolve the idea. Pending opportunities still show no closing price.') + '</th><th>' + renderHintLabel('Barrier', 'Barrier label at creation time. Hover to inspect price-to-beat, reference price, barrier distance, and contestability.') + '</th><th>' + renderHintLabel('Result', 'TP means the token idea hit take profit. SL means it hit stop loss.') + '</th><th>' + renderHintLabel('At', 'Opportunity creation timestamp.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
       function renderExecution(summary) {
@@ -2112,22 +2241,46 @@ export class DashboardViewService {
         replacePanelContent('market-pnl', renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key.') + '</th><th>' + renderHintLabel('Trd', 'Number of recent closed paper trades in this market.') + '</th><th>' + renderHintLabel('Hit', 'Recent paper trade hit rate in this market.') + '</th><th>' + renderHintLabel('PnL', 'Cumulative recent paper net PnL for this market.') + '</th><th>' + renderHintLabel('Avg', 'Average net PnL per trade in this market.') + '</th><th>' + renderHintLabel('DD', 'Drawdown. This is the maximum rolling peak-to-trough loss seen in the recent PnL path for this market. High DD means the market has been painful or unstable even if the final PnL is positive.') + '</th><th>' + renderHintLabel('Scr', 'Historical market score based on resolved research ideas only. This is the main market score, and the system only allows trades once it reaches at least ' + formatNumber(${config.MIN_MARKET_SCORE_FOR_ENTRY}, 2) + '.') + '</th><th>' + renderHintLabel('St', 'Market status. WRM = warming up, RSC = research only, TRD = tradable, AVD = avoid.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
       }
 
-      function renderWinningCombinations(summary) {
-        const rows = summary.winningCombinations.map((prediction) => {
+      function renderLiveOpportunities(summary) {
+        const rows = summary.liveOpportunities.map((opportunity) => {
           return '<tr>' +
-            '<td><strong>' + prediction.marketKey.replace(':', ' ') + '</strong></td>' +
-            '<td>' + renderDirectionPill(prediction.direction) + '</td>' +
-            '<td>' + renderCodeListGroup('strategy', prediction.selectedCombo.memberStrategyIds, 3) + '</td>' +
-            '<td>' + formatNumber(prediction.selectedCombo.comboScore, 2) + '</td>' +
-            '<td>' + formatNumber(prediction.selectedCombo.affordabilityScore, 2) + '</td>' +
-            '<td>' + formatNumber(prediction.confidence, 2) + '</td>' +
-            '<td>' + renderRegimeCode(prediction.crossAssetRegime) + '</td>' +
-            '<td><span class="truncate-cell" title="' + prediction.selectedCombo.selectionReason + '">' + prediction.selectedCombo.selectionReason + '</span></td>' +
+            '<td><strong>' + opportunity.marketKey.replace(':', ' ') + '</strong></td>' +
+            '<td>' + (opportunity.recommendedSide === null ? '—' : renderDirectionPill(String(opportunity.recommendedSide).toUpperCase())) + '</td>' +
+            '<td>' + (opportunity.selectedOpportunityCombo === null ? '—' : renderCodeListGroup('strategy', opportunity.selectedOpportunityCombo.memberFactorIds, 3)) + '</td>' +
+            '<td>' + formatNumber(opportunity.contestabilityScore, 2) + '</td>' +
+            '<td>' + formatNumber(opportunity.entryQualityScore, 2) + '</td>' +
+            '<td>' + formatNumber(opportunity.tpBeforeSlScore, 2) + '</td>' +
+            '<td>' + renderAnchorStateLabel(opportunity.anchorContext) + '</td>' +
+            '<td><span class="truncate-cell" title="' + opportunity.reason + '">' + opportunity.reason + '</span></td>' +
             '</tr>';
         }).join('');
-        replacePanelContent('winning-combinations', summary.winningCombinations.length === 0
-          ? '<div class="tiny">No combo selections yet.</div>'
-          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the prediction.') + '</th><th>' + renderHintLabel('Dir', 'Direction chosen by the winning combo for this prediction.') + '</th><th>' + renderHintLabel('Combo', 'Winning strategy combo for the prediction.') + '</th><th>' + renderHintLabel('Score', 'Main combo score for the selected combination. Real execution expects at least ' + formatNumber(${config.MIN_COMBO_EXECUTION_SCORE}, 2) + '.') + '</th><th>' + renderHintLabel('Aff', 'Affordability score.') + '</th><th>' + renderHintLabel('Conf', 'Final confidence for the chosen combo. Real entry also needs at least ' + formatNumber(${config.MIN_ENTRY_CONFIDENCE}, 2) + '.') + '</th><th>' + renderHintLabel('Regime', 'Regime attached to the prediction when it was created.') + '</th><th>' + renderHintLabel('Why', 'Short reason for why this combination won.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+        replacePanelContent('live-opportunities', summary.liveOpportunities.length === 0
+          ? '<div class="tiny">No live opportunities yet.</div>'
+          : renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the current live opportunity.') + '</th><th>' + renderHintLabel('Side', 'Recommended token side right now.') + '</th><th>' + renderHintLabel('Combo', 'Current selected opportunity combo for the market.') + '</th><th>' + renderHintLabel('Cntst', 'Contestability score from barrier reachability and time remaining.') + '</th><th>' + renderHintLabel('Entry', 'Entry quality score for the current token.') + '</th><th>' + renderHintLabel('TP>SL', 'Current token-first edge score.') + '</th><th>' + renderHintLabel('Anchor', 'Hard-prior anchor state for the market.') + '</th><th>' + renderHintLabel('Why', 'Current reason attached to the live market opportunity.') + '</th></tr></thead><tbody>' + rows + '</tbody></table>'));
+      }
+
+      function renderFactorBoard(summary) {
+        const factorBoards = summary.factorBoards ?? [];
+        if (factorBoards.length === 0) {
+          replacePanelContent('factor-board', '<div class="tiny">No live factor state yet.</div>');
+        } else {
+          const topRows = factorBoards.flatMap((factorBoard) => {
+            return factorBoard.factors
+              .sort((leftFactor, rightFactor) => rightFactor.edgeScore - leftFactor.edgeScore)
+              .slice(0, 3)
+              .map((factor) => {
+                return '<tr>' +
+                  '<td><strong>' + factorBoard.marketKey.replace(':', ' ') + '</strong></td>' +
+                  '<td>' + factor.scope + '</td>' +
+                  '<td>' + factor.name + '</td>' +
+                  '<td>' + renderDirectionPill(String(factor.targetSide).toUpperCase()) + '</td>' +
+                  '<td>' + formatNumber(factor.edgeScore, 2) + '</td>' +
+                  '<td>' + formatNumber(factor.confidence, 2) + '</td>' +
+                  '</tr>';
+              });
+          }).join('');
+          replacePanelContent('factor-board', renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the live factor row.') + '</th><th>' + renderHintLabel('Scope', 'Which part of the token-first state this factor belongs to.') + '</th><th>' + renderHintLabel('Factor', 'Name of the active factor.') + '</th><th>' + renderHintLabel('Side', 'Token side favoured by the factor.') + '</th><th>' + renderHintLabel('Edge', 'Normalized edge score contributed by the factor.') + '</th><th>' + renderHintLabel('Conf', 'Current confidence for the factor signal.') + '</th></tr></thead><tbody>' + topRows + '</tbody></table>'));
+        }
       }
 
       function renderComboStatusPill(status, isExecutionEligible) {
@@ -2273,10 +2426,11 @@ export class DashboardViewService {
         renderKpis(summary);
         renderGlobalRegime(summary);
         renderMarkets(summary);
-        renderPredictions(summary);
+        renderOpportunities(summary);
         renderExecution(summary);
         renderTradeProximity(summary);
-        renderWinningCombinations(summary);
+        renderLiveOpportunities(summary);
+        renderFactorBoard(summary);
         renderComboSearch(summary);
         renderMarketPnl(summary);
         renderPositions(summary);
