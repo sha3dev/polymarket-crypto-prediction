@@ -37,7 +37,7 @@ test("ServiceRuntime serves the dashboard HTML", async () => {
   assert.match(html, /Combo Search/);
   assert.match(html, /Recent Opportunities/);
   assert.match(html, /Trade Candidates/);
-  assert.match(html, /factor-board-grid/);
+  assert.match(html, /factor-board-matrix/);
   assert.match(html, /panel-full-span/);
   assert.match(html, /Current token-first edge score/);
   assert.match(html, /No-Arb Consistency/);

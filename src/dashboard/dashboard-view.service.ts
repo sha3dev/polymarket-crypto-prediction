@@ -195,80 +195,48 @@ export class DashboardViewService {
         font-size: 12px;
         font-weight: 700;
       }
-      .factor-board-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 14px;
+      .factor-board-matrix th,
+      .factor-board-matrix td {
+        min-width: 120px;
+        vertical-align: top;
       }
-      .factor-market-card {
-        display: grid;
-        gap: 12px;
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 14px;
-        background: rgba(13, 27, 42, 0.03);
+      .factor-board-matrix th:first-child,
+      .factor-board-matrix td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        min-width: 96px;
+        background: #f1efe5;
       }
-      .factor-market-head {
+      .factor-board-matrix thead th:first-child {
+        z-index: 2;
+      }
+      .factor-board-matrix thead th {
+        background: rgba(241, 239, 229, 0.98);
+      }
+      .factor-matrix-cell {
+        display: grid;
+        gap: 6px;
+        min-height: 54px;
+      }
+      .factor-matrix-meta {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
+        gap: 6px;
       }
-      .factor-market-head strong {
-        font-size: 16px;
-      }
-      .factor-market-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 10px;
-      }
-      .factor-card {
-        display: grid;
-        gap: 8px;
-        padding: 12px;
-        border-radius: 14px;
-        border: 1px solid rgba(13, 27, 42, 0.1);
-        background: rgba(255, 255, 255, 0.78);
-      }
-      .factor-card-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-      }
-      .factor-scope-chip {
-        display: inline-flex;
-        align-items: center;
-        border-radius: 999px;
-        padding: 4px 8px;
-        background: rgba(13, 27, 42, 0.06);
-        color: var(--muted);
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-      }
-      .factor-card strong {
-        font-size: 14px;
-        line-height: 1.3;
-      }
-      .factor-card-metrics {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-      }
-      .factor-metric {
+      .factor-matrix-stats {
         display: grid;
         gap: 2px;
       }
-      .factor-metric span {
-        color: var(--muted);
+      .factor-matrix-stats span {
         font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
+        color: var(--muted);
+        line-height: 1.2;
       }
-      .factor-metric strong {
-        font-size: 15px;
+      .factor-matrix-empty {
+        color: var(--muted);
+        opacity: 0.6;
       }
       h2 {
         margin: 0 0 12px;
@@ -2342,37 +2310,62 @@ export class DashboardViewService {
         if (factorBoards.length === 0) {
           replacePanelContent('factor-board', '<div class="tiny">No live factor state yet.</div>');
         } else {
-          const factorCards = factorBoards
+          const factorCatalog = new Map();
+          for (const factorBoard of factorBoards) {
+            for (const factor of factorBoard.factors) {
+              if (!factorCatalog.has(factor.factorId)) {
+                factorCatalog.set(factor.factorId, factor);
+              }
+            }
+          }
+          const factorIds = [...factorCatalog.keys()].sort((leftFactorId, rightFactorId) => {
+            return leftFactorId.localeCompare(rightFactorId, undefined, { numeric: true });
+          });
+          const headerMarkup = factorIds.map((factorId) => {
+            const factorSummary = factorCatalog.get(factorId);
+            const fullLabel = factorSummary === undefined ? factorId : factorSummary.name + ' (' + factorSummary.scope + ')';
+            return '<th><span title="' + escapeHtml(fullLabel) + '">' + renderInfoCode('strategy', factorId, factorId.toUpperCase()) + '</span></th>';
+          }).join('');
+          const rowMarkup = factorBoards
             .slice()
             .sort((leftBoard, rightBoard) => leftBoard.marketKey.localeCompare(rightBoard.marketKey))
             .map((factorBoard) => {
-              const factorMarkup = factorBoard.factors
-                .slice()
-                .sort((leftFactor, rightFactor) => rightFactor.edgeScore - leftFactor.edgeScore)
-                .map((factor) => {
-                  return '<article class="factor-card">' +
-                    '<div class="factor-card-top">' +
-                      '<span class="factor-scope-chip">' + factor.scope + '</span>' +
-                      renderDirectionPill(String(factor.targetSide).toUpperCase()) +
-                    '</div>' +
-                    '<strong>' + factor.name + '</strong>' +
-                    '<div class="factor-card-metrics">' +
-                      '<div class="factor-metric"><span>Edge</span><strong>' + formatNumber(factor.edgeScore, 2) + '</strong></div>' +
-                      '<div class="factor-metric"><span>Conf</span><strong>' + formatNumber(factor.confidence, 2) + '</strong></div>' +
-                    '</div>' +
-                  '</article>';
+              const factorsById = new Map(factorBoard.factors.map((factor) => [factor.factorId, factor]));
+              const factorCellMarkup = factorIds
+                .map((factorId) => {
+                  const factor = factorsById.get(factorId);
+                  let factorCell = '<span class="factor-matrix-empty">—</span>';
+                  if (factor !== undefined) {
+                    factorCell =
+                      '<div class="factor-matrix-cell">' +
+                        '<div class="factor-matrix-meta">' +
+                          renderDirectionPill(String(factor.targetSide).toUpperCase()) +
+                          '<span class="tiny">' + factor.scope + '</span>' +
+                        '</div>' +
+                        '<div class="factor-matrix-stats">' +
+                          '<span>E ' + formatNumber(factor.edgeScore, 2) + '</span>' +
+                          '<span>C ' + formatNumber(factor.confidence, 2) + '</span>' +
+                        '</div>' +
+                      '</div>';
+                  }
+                  return '<td>' + factorCell + '</td>';
                 })
                 .join('');
-              return '<section class="factor-market-card">' +
-                '<div class="factor-market-head">' +
-                  '<strong>' + factorBoard.marketKey.replace(':', ' ') + '</strong>' +
-                  '<span class="pill">' + factorBoard.factors.length + ' factors</span>' +
-                '</div>' +
-                '<div class="factor-market-grid">' + factorMarkup + '</div>' +
-              '</section>';
+              return '<tr><td><strong>' + factorBoard.marketKey.replace(':', ' ') + '</strong></td>' + factorCellMarkup + '</tr>';
             })
             .join('');
-          replacePanelContent('factor-board', '<div class="factor-board-grid">' + factorCards + '</div>');
+          replacePanelContent(
+            'factor-board',
+            renderTableShell(
+              '<table class="factor-board-matrix"><thead><tr><th>' +
+                renderHintLabel('Mkt', 'Market key for the live factor row.') +
+                '</th>' +
+                headerMarkup +
+                '</tr></thead><tbody>' +
+                rowMarkup +
+                '</tbody></table>',
+            ),
+          );
         }
       }
 
