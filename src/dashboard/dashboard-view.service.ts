@@ -215,28 +215,33 @@ export class DashboardViewService {
         background: rgba(241, 239, 229, 0.98);
       }
       .factor-matrix-cell {
-        display: grid;
-        gap: 6px;
-        min-height: 54px;
-      }
-      .factor-matrix-meta {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 6px;
-      }
-      .factor-matrix-stats {
-        display: grid;
-        gap: 2px;
-      }
-      .factor-matrix-stats span {
-        font-size: 11px;
-        color: var(--muted);
-        line-height: 1.2;
+        justify-content: center;
+        min-height: 38px;
       }
       .factor-matrix-empty {
         color: var(--muted);
         opacity: 0.6;
+      }
+      .factor-matrix-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 34px;
+        min-height: 26px;
+        padding: 3px 8px;
+        border: 1px solid rgba(13, 27, 42, 0.14);
+        border-radius: 999px;
+        background: rgba(13, 27, 42, 0.04);
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+      }
+      .factor-matrix-pill:hover {
+        background: rgba(13, 27, 42, 0.08);
       }
       h2 {
         margin: 0 0 12px;
@@ -2336,16 +2341,17 @@ export class DashboardViewService {
                   const factor = factorsById.get(factorId);
                   let factorCell = '<span class="factor-matrix-empty">—</span>';
                   if (factor !== undefined) {
+                    const factorDescription =
+                      factor.name +
+                      '. Scope: ' + factor.scope +
+                      '. Edge: ' + formatNumber(factor.edgeScore, 2) +
+                      '. Confidence: ' + formatNumber(factor.confidence, 2) +
+                      (factor.reason === null ? '' : '. Reason: ' + factor.reason);
                     factorCell =
                       '<div class="factor-matrix-cell">' +
-                        '<div class="factor-matrix-meta">' +
-                          renderDirectionPill(String(factor.targetSide).toUpperCase()) +
-                          '<span class="tiny">' + factor.scope + '</span>' +
-                        '</div>' +
-                        '<div class="factor-matrix-stats">' +
-                          '<span>E ' + formatNumber(factor.edgeScore, 2) + '</span>' +
-                          '<span>C ' + formatNumber(factor.confidence, 2) + '</span>' +
-                        '</div>' +
+                        '<button type="button" class="factor-matrix-pill" data-full-label="' + escapeHtml(factor.name) + '" data-description="' + escapeHtml(factorDescription) + '" aria-label="' + escapeHtml(factor.name + '. ' + factorDescription) + '">' +
+                          escapeHtml(String(factor.targetSide).toUpperCase()) +
+                        '</button>' +
                       '</div>';
                   }
                   return '<td>' + factorCell + '</td>';
