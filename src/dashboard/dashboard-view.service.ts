@@ -111,6 +111,9 @@ export class DashboardViewService {
         background: var(--panel);
         padding: 18px;
       }
+      .panel-full-span {
+        grid-column: 1 / -1;
+      }
       .panel-tall { min-height: 300px; }
       .panel-medium { min-height: 220px; }
       .panel-compact { min-height: 132px; }
@@ -191,6 +194,81 @@ export class DashboardViewService {
         background: rgba(13, 27, 42, 0.04);
         font-size: 12px;
         font-weight: 700;
+      }
+      .factor-board-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 14px;
+      }
+      .factor-market-card {
+        display: grid;
+        gap: 12px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        background: rgba(13, 27, 42, 0.03);
+      }
+      .factor-market-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .factor-market-head strong {
+        font-size: 16px;
+      }
+      .factor-market-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+      }
+      .factor-card {
+        display: grid;
+        gap: 8px;
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(13, 27, 42, 0.1);
+        background: rgba(255, 255, 255, 0.78);
+      }
+      .factor-card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .factor-scope-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 4px 8px;
+        background: rgba(13, 27, 42, 0.06);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .factor-card strong {
+        font-size: 14px;
+        line-height: 1.3;
+      }
+      .factor-card-metrics {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .factor-metric {
+        display: grid;
+        gap: 2px;
+      }
+      .factor-metric span {
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .factor-metric strong {
+        font-size: 15px;
       }
       h2 {
         margin: 0 0 12px;
@@ -763,11 +841,6 @@ export class DashboardViewService {
           </article>
         </div>
         <div class="stack">
-          <article class="panel panel-medium">
-            <h2><span class="panel-title"><span>Factor Board</span><button type="button" class="panel-info-button" data-full-label="Factor Board" data-description="Live factor view grouped by opportunity scope. It shows which reachability, microstructure, pricing, anchor, and timing factors are currently active for the selected market." aria-label="Factor Board. Live factor view grouped by opportunity scope. It shows which reachability, microstructure, pricing, anchor, and timing factors are currently active for the selected market.">i</button></span></h2>
-            <p class="tiny panel-intro">Token-first factor breakdown for the live market states. This is the fastest way to see which parts of the state are really driving the current opportunity score.</p>
-            <div id="factor-board" class="loading panel-scroll">Loading factor board…</div>
-          </article>
           <article class="panel panel-tall">
             <h2><span class="panel-title"><span>Combo Search</span><button type="button" class="panel-info-button" data-full-label="Combo Search" data-description="Live exploration view for one market at a time. It shows how many pair and trio candidates were generated, which combo won the research layer, which combo is closest to execution, and what other candidates are being tested right now." aria-label="Combo Search. Live exploration view for one market at a time. It shows how many pair and trio candidates were generated, which combo won the research layer, which combo is closest to execution, and what other candidates are being tested right now.">i</button></span></h2>
             <p class="tiny panel-intro">This is the closest thing to the combo discovery process. Each tab shows one market's current search space: candidates generated from active strategies, the research winner, the execution gate decision, and the runners-up that are being evaluated right now.</p>
@@ -784,6 +857,11 @@ export class DashboardViewService {
             <div id="health" class="loading">Loading service health…</div>
           </article>
         </div>
+        <article class="panel panel-tall panel-full-span">
+          <h2><span class="panel-title"><span>Factor Board</span><button type="button" class="panel-info-button" data-full-label="Factor Board" data-description="Live factor view grouped by opportunity scope. It shows which reachability, microstructure, pricing, anchor, and timing factors are currently active for each market." aria-label="Factor Board. Live factor view grouped by opportunity scope. It shows which reachability, microstructure, pricing, anchor, and timing factors are currently active for each market.">i</button></span></h2>
+          <p class="tiny panel-intro">Token-first factor breakdown for all live market states. Each market gets its own card, and every active factor is rendered directly so you can scan the full state without drilling into a narrow table.</p>
+          <div id="factor-board" class="loading panel-scroll">Loading factor board…</div>
+        </article>
       </section>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
@@ -2264,22 +2342,37 @@ export class DashboardViewService {
         if (factorBoards.length === 0) {
           replacePanelContent('factor-board', '<div class="tiny">No live factor state yet.</div>');
         } else {
-          const topRows = factorBoards.flatMap((factorBoard) => {
-            return factorBoard.factors
-              .sort((leftFactor, rightFactor) => rightFactor.edgeScore - leftFactor.edgeScore)
-              .slice(0, 3)
-              .map((factor) => {
-                return '<tr>' +
-                  '<td><strong>' + factorBoard.marketKey.replace(':', ' ') + '</strong></td>' +
-                  '<td>' + factor.scope + '</td>' +
-                  '<td>' + factor.name + '</td>' +
-                  '<td>' + renderDirectionPill(String(factor.targetSide).toUpperCase()) + '</td>' +
-                  '<td>' + formatNumber(factor.edgeScore, 2) + '</td>' +
-                  '<td>' + formatNumber(factor.confidence, 2) + '</td>' +
-                  '</tr>';
-              });
-          }).join('');
-          replacePanelContent('factor-board', renderTableShell('<table><thead><tr><th>' + renderHintLabel('Mkt', 'Market key for the live factor row.') + '</th><th>' + renderHintLabel('Scope', 'Which part of the token-first state this factor belongs to.') + '</th><th>' + renderHintLabel('Factor', 'Name of the active factor.') + '</th><th>' + renderHintLabel('Side', 'Token side favoured by the factor.') + '</th><th>' + renderHintLabel('Edge', 'Normalized edge score contributed by the factor.') + '</th><th>' + renderHintLabel('Conf', 'Current confidence for the factor signal.') + '</th></tr></thead><tbody>' + topRows + '</tbody></table>'));
+          const factorCards = factorBoards
+            .slice()
+            .sort((leftBoard, rightBoard) => leftBoard.marketKey.localeCompare(rightBoard.marketKey))
+            .map((factorBoard) => {
+              const factorMarkup = factorBoard.factors
+                .slice()
+                .sort((leftFactor, rightFactor) => rightFactor.edgeScore - leftFactor.edgeScore)
+                .map((factor) => {
+                  return '<article class="factor-card">' +
+                    '<div class="factor-card-top">' +
+                      '<span class="factor-scope-chip">' + factor.scope + '</span>' +
+                      renderDirectionPill(String(factor.targetSide).toUpperCase()) +
+                    '</div>' +
+                    '<strong>' + factor.name + '</strong>' +
+                    '<div class="factor-card-metrics">' +
+                      '<div class="factor-metric"><span>Edge</span><strong>' + formatNumber(factor.edgeScore, 2) + '</strong></div>' +
+                      '<div class="factor-metric"><span>Conf</span><strong>' + formatNumber(factor.confidence, 2) + '</strong></div>' +
+                    '</div>' +
+                  '</article>';
+                })
+                .join('');
+              return '<section class="factor-market-card">' +
+                '<div class="factor-market-head">' +
+                  '<strong>' + factorBoard.marketKey.replace(':', ' ') + '</strong>' +
+                  '<span class="pill">' + factorBoard.factors.length + ' factors</span>' +
+                '</div>' +
+                '<div class="factor-market-grid">' + factorMarkup + '</div>' +
+              '</section>';
+            })
+            .join('');
+          replacePanelContent('factor-board', '<div class="factor-board-grid">' + factorCards + '</div>');
         }
       }
 
