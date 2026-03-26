@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { ComboMetricsService } from "../src/combo/combo-metrics.service.ts";
 import type { SelectedStrategyCombo } from "../src/combo/combo.types.ts";
+import config from "../src/config.ts";
 import type { MarketStateService } from "../src/market/market-state.service.ts";
 import type { CrossAssetRegimeId, MarketBarrierState, MarketTrigger, PredictionContext } from "../src/market/market.types.ts";
 import { PredictionEngineService } from "../src/prediction/prediction-engine.service.ts";
@@ -115,6 +116,51 @@ test("PredictionEngineService blocks directions that fight the dominant barrier 
 
   assert.equal(hasContestableBarrierState.call(predictionEngineService, conflictedMarketSlice, "DOWN"), false);
   assert.equal(hasContestableBarrierState.call(predictionEngineService, conflictedMarketSlice, "UP"), true);
+});
+
+test("PredictionEngineService widens take profit materially in strong aligned contexts", () => {
+  const predictionEngineService = new PredictionEngineService(
+    {} as MarketStateService,
+    {} as StrategyEngineService,
+    {} as StrategyMetricsService,
+    new PredictionStoreService(),
+    new ComboMetricsService(),
+  );
+  const computeAdaptiveTakeProfitDelta = Reflect.get(predictionEngineService, "computeAdaptiveTakeProfitDelta") as
+    | ((confidence: number, comboScore: number, regimeClass: string) => number)
+    | undefined;
+
+  if (computeAdaptiveTakeProfitDelta === undefined) {
+    throw new Error("expected adaptive take-profit helper");
+  }
+
+  const takeProfitDelta = computeAdaptiveTakeProfitDelta.call(predictionEngineService, 0.84, 0.81, "aligned");
+
+  assert.equal(takeProfitDelta > config.TAKE_PROFIT_DELTA * 1.2, true);
+  assert.equal(takeProfitDelta <= config.TAKE_PROFIT_DELTA * 1.6, true);
+});
+
+test("PredictionEngineService keeps stop loss materially wider than the old micro-stop profile", () => {
+  const predictionEngineService = new PredictionEngineService(
+    {} as MarketStateService,
+    {} as StrategyEngineService,
+    {} as StrategyMetricsService,
+    new PredictionStoreService(),
+    new ComboMetricsService(),
+  );
+  const computeAdaptiveStopLossDelta = Reflect.get(predictionEngineService, "computeAdaptiveStopLossDelta") as
+    | ((confidence: number, comboScore: number, regimeClass: string) => number)
+    | undefined;
+
+  if (computeAdaptiveStopLossDelta === undefined) {
+    throw new Error("expected adaptive stop-loss helper");
+  }
+
+  const stopLossDelta = computeAdaptiveStopLossDelta.call(predictionEngineService, 0.78, 0.76, "aligned");
+
+  assert.equal(stopLossDelta >= config.STOP_LOSS_DELTA, true);
+  assert.equal(stopLossDelta > 0.07, true);
+  assert.equal(stopLossDelta <= config.STOP_LOSS_DELTA * 1.4, true);
 });
 
 function buildModelEvaluationSnapshot(
